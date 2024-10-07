@@ -163,3 +163,5 @@ cython_debug/
 
 .sesskey
 .python-version
+fastHTML_docs.md
+cache/
