@@ -1,6 +1,7 @@
 import logging
 
 from fasthtml.common import Div, H1, P, fast_app, serve, Iframe
+from fasthtml.xtend import Favicon
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 import folium
@@ -13,7 +14,9 @@ logger = logging.getLogger(__name__)
 # Initialize disk cache
 cache = Cache("./cache")
 
-app, rt = fast_app()
+app, rt = fast_app(
+    hdrs=(Favicon(light_icon="./static/favicon.ico", dark_icon="./static/favicon.ico"))
+)
 
 DEBUG_COORDS = (27.95053694962414, -82.4585769277307)
 DEBUG_MODE = True
@@ -58,14 +61,16 @@ def create_map(latitude, longitude):
     cache.set(cache_key, map_html, expire=86400)  # Cache for 24 hours
     return map_html
 
-@rt('/')
+
+@rt("/")
 def get():
+    logger.info("==== Running route / ====")
     # Get location information
     city, state, country = get_location_info(DEBUG_COORDS[0], DEBUG_COORDS[1])
-    
+
     # Create map
     map_html = create_map(DEBUG_COORDS[0], DEBUG_COORDS[1])
-    
+
     # Display coordinates, location info, and map
     content = Div(
         H1("User Location"),
@@ -74,8 +79,9 @@ def get():
         P(f"City: {city}"),
         P(f"State: {state}"),
         P(f"Country: {country}"),
-        Iframe(srcdoc=map_html, width="100%", height="400px")
+        Iframe(srcdoc=map_html, width="100%", height="400px"),
     )
     return content
+
 
 serve()
