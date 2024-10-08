@@ -6,8 +6,8 @@ import os
 from fasthtml.common import Div, H1, P, fast_app, serve, Iframe
 from fasthtml.xtend import Favicon
 
-# from geopy.geocoders import Nominatim
-# from geopy.exc import GeocoderTimedOut
+import numpy as np
+from scipy.interpolate import griddata
 import folium
 from diskcache import Cache
 from dotenv import load_dotenv
@@ -71,6 +71,29 @@ def get_elevation(latitude, longitude):
     return None
 
 
+def get_elevation_data(center_lat, center_lng, radius=5000, samples=20):
+    cache_key = f"elevation_data_{center_lat}_{center_lng}_{radius}_{samples}"
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return cached_data
+
+    # Generate a grid of points
+    lat_range = np.linspace(center_lat - 0.05, center_lat + 0.05, samples)
+    lng_range = np.linspace(center_lng - 0.05, center_lng + 0.05, samples)
+    grid_lat, grid_lng = np.meshgrid(lat_range, lng_range)
+
+    points = [(lat, lng) for lat, lng in zip(grid_lat.flatten(), grid_lng.flatten())]
+
+    # Get elevations for all points
+    elevations = gmaps.elevation(points)
+    result = [
+        (p["location"]["lat"], p["location"]["lng"], p["elevation"]) for p in elevations
+    ]
+
+    cache.set(cache_key, result, expire=86400 * 7)  # Cache for a week
+    return result
+
+
 def get_location_info(ip_address):
     if DEBUG_MODE:
         return "Tampa", "Florida", "United States", DEBUG_COORDS[0], DEBUG_COORDS[1]
@@ -95,47 +118,133 @@ def get_location_info(ip_address):
 
 
 def generate_gmaps_html(latitude, longitude, elevation):
+    elevation_data = get_elevation_data(latitude, longitude)
+
+    # Prepare data for contour lines and heatmap
+    lats, lngs, elevs = zip(*elevation_data)
+    grid_lat = np.linspace(min(lats), max(lats), 100)
+    grid_lng = np.linspace(min(lngs), max(lngs), 100)
+    grid_lat, grid_lng = np.meshgrid(grid_lat, grid_lng)
+    grid_elev = griddata((lats, lngs), elevs, (grid_lat, grid_lng), method="cubic")
+
+    contour_levels = np.linspace(np.min(elevs), np.max(elevs), 10)
+
+    # Convert grid data to a format suitable for Google Maps
+    heatmap_data = [
+        {"lat": lat, "lng": lng, "elevation": elev}
+        for lat, lng, elev in zip(
+            grid_lat.flatten(), grid_lng.flatten(), grid_elev.flatten()
+        )
+        if not np.isnan(elev)
+    ]
+
+    if DEBUG_MODE:
+        elevations = [elev[2] for elev in elevation_data]
+        logger.info(
+            f"Elevation data - Min: {min(elevations)}, Max: {max(elevations)}, Mean: {np.mean(elevations)}, Std: {np.std(elevations)}"
+        )
+
     return f"""
-       <div id="map" style="height: 400px; width: 100%;"></div>
-       <script src="https://maps.googleapis.com/maps/api/js?key={gmaps_api_key}"></script>
-       <script>
-           function initMap() {{
-               const map = new google.maps.Map(document.getElementById("map"), {{
-                   center: {{ lat: {latitude}, lng: {longitude} }},
-                   zoom: 13,
-                   mapTypeId: "terrain"
-               }});
+    <div id="map" style="height: 400px; width: 100%;"></div>
+    <script src="https://maps.googleapis.com/maps/api/js?key={gmaps_api_key}&libraries=visualization"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script>
+        function initMap() {{
+            const map = new google.maps.Map(document.getElementById("map"), {{
+                center: {{ lat: {latitude}, lng: {longitude} }},
+                zoom: 13,
+                mapTypeId: "terrain"
+            }});
 
-               const marker = new google.maps.Marker({{
-                   position: {{ lat: {latitude}, lng: {longitude} }},
-                   map: map,
-                   title: "Your location"
-               }});
+            const marker = new google.maps.Marker({{
+                position: {{ lat: {latitude}, lng: {longitude} }},
+                map: map,
+                title: "Your location"
+            }});
 
-               const infowindow = new google.maps.InfoWindow({{
-                   content: "Lat: {latitude}, Lon: {longitude}<br>Elevation: {elevation} m"
-               }});
+            const infowindow = new google.maps.InfoWindow({{
+                content: "Lat: {latitude}, Lon: {longitude}<br>Elevation: {elevation} m"
+            }});
 
-               marker.addListener("click", () => {{
-                   infowindow.open(map, marker);
-               }});
-           }}
-       </script>
-       <script>initMap();</script>
-       """
+            marker.addListener("click", () => {{
+                infowindow.open(map, marker);
+            }});
+
+            // Add heatmap layer
+            const heatmapData = {heatmap_data};
+            const heatmap = new google.maps.visualization.HeatmapLayer({{
+                data: heatmapData.map(point => ({{
+                    location: new google.maps.LatLng(point.lat, point.lng),
+                    weight: point.elevation
+                }})),
+                map: map,
+                radius: 20,
+                opacity: 0.7,
+                gradient: [
+                    "rgba(0, 255, 255, 0)",
+                    "rgba(0, 255, 255, 1)",
+                    "rgba(0, 191, 255, 1)",
+                    "rgba(0, 127, 255, 1)",
+                    "rgba(0, 63, 255, 1)",
+                    "rgba(0, 0, 255, 1)",
+                    "rgba(0, 0, 223, 1)",
+                    "rgba(0, 0, 191, 1)",
+                    "rgba(0, 0, 159, 1)",
+                    "rgba(0, 0, 127, 1)",
+                    "rgba(63, 0, 91, 1)",
+                    "rgba(127, 0, 63, 1)",
+                    "rgba(191, 0, 31, 1)",
+                    "rgba(255, 0, 0, 1)"
+                ]
+            }});
+
+            // Add contour lines
+            const elevationData = {elevation_data};
+            const contourLevels = {contour_levels.tolist()};
+            
+            const points = turf.points(elevationData.map(p => [p[1], p[0], p[2]]));
+            const bbox = turf.bbox(points);
+            const grid = turf.interpolate(points, 100, {{
+                gridType: "point",
+                property: "elevation",
+                units: "kilometers"
+            }});
+
+            contourLevels.forEach(level => {{
+                const contours = turf.isolines(grid, level, {{zProperty: "elevation"}});
+                contours.features.forEach(feature => {{
+                    const path = feature.geometry.coordinates[0].map(coord => ({{
+                        lat: coord[1],
+                        lng: coord[0]
+                    }}));
+                    
+                    new google.maps.Polyline({{
+                        path: path,
+                        geodesic: true,
+                        strokeColor: "#FF0000",
+                        strokeOpacity: 0.5,
+                        strokeWeight: 2,
+                        map: map
+                    }});
+                }});
+            }});
+        }}
+    </script>
+    <script>initMap();</script>
+    """
 
 
 def create_map(latitude, longitude):
-    cache_key = f"map_{latitude}_{longitude}"
-    cached_map = cache.get(cache_key)
-    if cached_map:
-        logger.info(f"Cache hit for map: {cache_key}")
-        return cached_map
+    # cache_key = f"map_{latitude}_{longitude}"
+    # cached_map = cache.get(cache_key)
+    # if cached_map:
+    #     logger.info(f"Cache hit for map: {cache_key}")
+    #     return cached_map
 
-    logger.info(f"Cache miss for map: {cache_key}")
+    # logger.info(f"Cache miss for map: {cache_key}")
     elevation = get_elevation(latitude, longitude)
     map_html = generate_gmaps_html(latitude, longitude, elevation)
-    cache.set(cache_key, map_html, expire=86400)  # Cache for 24 hours
+    # cache.set(cache_key, map_html, expire=86400)  # Cache for 24 hours
     return map_html
 
 
