@@ -166,3 +166,5 @@ cython_debug/
 fastHTML_docs.md
 cache/
 scratch/
+data/
+.DS_Store

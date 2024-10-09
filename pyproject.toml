@@ -9,7 +9,10 @@ dependencies = [
     "folium>=0.17.0",
     "geopy>=2.4.1",
     "googlemaps>=4.10.0",
+    "ipykernel>=6.29.5",
     "numpy>=2.1.2",
+    "pyproj>=3.7.0",
     "python-fasthtml>=0.6.9",
+    "rasterio>=1.4.1",
     "scipy>=1.14.1",
 ]
