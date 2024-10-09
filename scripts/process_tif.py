@@ -1,10 +1,11 @@
 import os
 import subprocess
-import signal
-from concurrent.futures import ProcessPoolExecutor, as_completed
-import tqdm
+import numpy as np
+from osgeo import gdal
 import configparser
 import logging
+
+gdal.UseExceptions()
 
 # Set up logging
 logging.basicConfig(
@@ -18,41 +19,126 @@ config.read("config.ini")
 INPUT_DIR = config.get("Paths", "input_dir", fallback="./data")
 OUTPUT_DIR = config.get("Paths", "output_dir", fallback="./processed_data")
 COLOR_RAMP = config.get("Files", "color_ramp", fallback="./scripts/color_ramp.txt")
-MIN_ZOOM = config.getint("Tiles", "min_zoom", fallback=8)
-MAX_ZOOM = config.getint("Tiles", "max_zoom", fallback=14)
+# Update these constants
+ZOOM_RANGE = (11, 12)  # This will generate tiles for zoom levels 11, 12, and 13
+
+NUM_CORES = 10
+
+
+def merge_tif_files(input_files, output_file):
+    """Merge multiple TIF files into a single file."""
+    logging.info(f"Merging {len(input_files)} TIF files into {output_file}")
+    merge_command = ["gdal_merge.py", "-o", output_file, "-of", "GTiff"]
+    merge_command.extend(input_files)
+    subprocess.run(merge_command, check=True, capture_output=True, text=True)
+    logging.info("Merge complete")
+
+def elevation_to_color(elevation, min_elevation, max_elevation):
+    """Generate a color based on elevation."""
+    normalized = (elevation - min_elevation) / (max_elevation - min_elevation)
+    if normalized < 0.5:
+        r = int(0 + 510 * normalized)
+        g = int(255 * normalized)
+        b = int(255 * (0.5 - normalized) / 0.5)
+    else:
+        r = 255
+        g = int(255 * (1 - normalized) / 0.5)
+        b = 0
+    return r, g, b
+
+def create_dynamic_color_ramp(min_elevation, max_elevation, num_steps=256):
+    """Create a color ramp based on the elevation range."""
+    elevations = np.linspace(min_elevation, max_elevation, num_steps)
+    colors = [elevation_to_color(e, min_elevation, max_elevation) for e in elevations]
+    return list(zip(elevations, colors))
+
+
+def write_color_ramp_file(color_ramp, output_file):
+    """Write the color ramp to a file."""
+    with open(output_file, "w") as f:
+        for elevation, (r, g, b) in color_ramp:
+            f.write(f"{elevation} {r} {g} {b} 255\n")
 
 
 def process_tif_file(input_file, output_dir):
     try:
         base_name = os.path.splitext(os.path.basename(input_file))[0]
         output_file = os.path.join(output_dir, f"{base_name}_colored.tif")
-        tiles_dir = os.path.join(output_dir, "tiles", base_name)
+        tiles_dir = os.path.join(output_dir, "tiles")
 
-        # Generate color relief
+        # Get elevation range and geotransform
+        ds = gdal.Open(input_file)
+        band = ds.GetRasterBand(1)
+        min_elevation, max_elevation = band.ComputeRasterMinMax()
+        geotransform = ds.GetGeoTransform()
+        
+        # Calculate and log the bounding box
+        width = ds.RasterXSize
+        height = ds.RasterYSize
+        lon_min = geotransform[0]
+        lat_max = geotransform[3]
+        lon_max = lon_min + width * geotransform[1]
+        lat_min = lat_max + height * geotransform[5]
+        
+        logging.info(f"File: {base_name}")
+        logging.info(f"Bounding Box: ({lat_min}, {lon_min}) to ({lat_max}, {lon_max})")
+        logging.info(f"Elevation range: {min_elevation} to {max_elevation}")
+
+        # Create dynamic color ramp
+        color_ramp = create_dynamic_color_ramp(min_elevation, max_elevation)
+        dynamic_ramp_file = os.path.join(output_dir, f"{base_name}_color_ramp.txt")
+        write_color_ramp_file(color_ramp, dynamic_ramp_file)
+
+        os.environ["GDAL_NUM_THREADS"] = str(NUM_CORES)
+
+        # Generate color relief using the dynamic color ramp
         subprocess.run(
-            ["gdaldem", "color-relief", input_file, COLOR_RAMP, output_file],
+            ["gdaldem", "color-relief", 
+             "-co", "TILED=YES", 
+             "-co", "COMPRESS=LZW",
+             "-co", "BIGTIFF=YES",
+             input_file, dynamic_ramp_file, output_file],
             check=True,
             capture_output=True,
         )
 
-        # Generate tiles
-        subprocess.run(
-            [
+        for zoom in range(ZOOM_RANGE[0], ZOOM_RANGE[1] + 1):
+            zoom_dir = os.path.join(tiles_dir, str(zoom))
+            os.makedirs(zoom_dir, exist_ok=True)
+            cmd = [
                 "gdal2tiles.py",
-                "-z",
-                f"{MIN_ZOOM}-{MAX_ZOOM}",
                 "--xyz",
+                "-z", f"{zoom}-{zoom}",
+                "-w", "none",
+                "--processes", str(NUM_CORES),  # Use all available cores
+                "-r", "average",  # Use average resampling for better quality
                 output_file,
-                tiles_dir,
-            ],
-            check=True,
-            capture_output=True,
-        )
+                tiles_dir
+            ]
+            logging.info(f"Running command: {' '.join(cmd)}")
+            result = subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            logging.info(f"Command output: {result.stdout}")
+            
+            # Log generated tiles
+            generated_tiles = []
+            for root, dirs, files in os.walk(zoom_dir):
+                for file in files:
+                    if file.endswith('.png'):
+                        tile_path = os.path.relpath(os.path.join(root, file), zoom_dir)
+                        generated_tiles.append(tile_path)
 
         logging.info(f"Processed {base_name}")
+
         return True
     except subprocess.CalledProcessError as e:
         logging.error(f"Error processing {input_file}: {e}")
+        logging.error(f"Command output: {e.stdout}")
+        logging.error(f"Command error: {e.stderr}")
         return False
     except Exception as e:
         logging.error(f"Unexpected error processing {input_file}: {e}")
@@ -70,35 +156,12 @@ def main():
         logging.warning(f"No .tif files found in {INPUT_DIR}")
         return
 
-    logging.info(f"Found {len(files_to_process)} .tif files to process")
+    # Merge all input files
+    merged_file = os.path.join(OUTPUT_DIR, "merged_input.tif")
+    merge_tif_files(files_to_process, merged_file)
 
-    # Set up signal handling
-    original_sigint_handler = signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    with ProcessPoolExecutor() as executor:
-        signal.signal(signal.SIGINT, original_sigint_handler)
-        try:
-            with tqdm.tqdm(
-                total=len(files_to_process), desc="Processing TIF files"
-            ) as pbar:
-                futures = {
-                    executor.submit(process_tif_file, f, OUTPUT_DIR): f
-                    for f in files_to_process
-                }
-                for future in as_completed(futures):
-                    if future.result():
-                        pbar.update(1)
-                    else:
-                        pbar.total -= 1
-        except KeyboardInterrupt:
-            logging.warning("Caught KeyboardInterrupt, cancelling tasks...")
-            for future in futures:
-                future.cancel()
-            executor.shutdown(wait=False)
-            logging.info("All tasks cancelled")
-            return
-
-    logging.info("Processing complete")
+    # Process the merged file
+    process_tif_file(merged_file, OUTPUT_DIR)
 
 
 if __name__ == "__main__":

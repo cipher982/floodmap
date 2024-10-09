@@ -31,6 +31,9 @@ app, rt = fast_app(
 
 DEBUG_COORDS = (27.95053694962414, -82.4585769277307)
 DEBUG_IP = "23.111.165.2"
+TILES_DIR = "./processed_data/tiles"
+FIXED_ZOOM_LEVEL = 12  # Choose the zoom level you want to use
+
 
 DEBUG_MODE = True
 
@@ -74,21 +77,18 @@ logger.info("TIF data loaded")
 
 
 def preload_tile_paths():
-    tiles_dir = "./processed_data/tiles"
     tile_set = set()
-
-    if os.path.exists(tiles_dir):
-        for root, dirs, files in os.walk(tiles_dir):
+    
+    if os.path.exists(TILES_DIR):
+        for root, dirs, files in os.walk(TILES_DIR):
             for file in files:
                 if file.endswith(".png"):
-                    relative_path = os.path.relpath(os.path.join(root, file), tiles_dir)
-                    tile_set.add(
-                        relative_path.replace("\\", "/")
-                    )  # For cross-platform compatibility
+                    relative_path = os.path.relpath(os.path.join(root, file), TILES_DIR)
+                    tile_set.add(relative_path.replace("\\", "/"))
         logger.info(f"Preloaded {len(tile_set)} tile paths.")
     else:
-        logger.warning(f"Tiles directory not found: {tiles_dir}")
-
+        logger.warning(f"Tiles directory not found: {TILES_DIR}")
+    
     return tile_set
 
 
@@ -226,7 +226,7 @@ def get_color(value):
 
 
 def generate_gmaps_html(latitude, longitude, elevation):
-    tile_url_pattern = "/tiles/{z}/{x}/{y}.png"
+    tile_url_pattern = "/tiles/{z}/{x}/{y}"
 
     return f"""
     <div id="map" style="height: 400px; width: 100%;"></div>
@@ -235,8 +235,14 @@ def generate_gmaps_html(latitude, longitude, elevation):
         function initMap() {{
             const map = new google.maps.Map(document.getElementById("map"), {{
                 center: {{ lat: {latitude}, lng: {longitude} }},
-                zoom: 13,
-                mapTypeId: "terrain"
+                zoom: {FIXED_ZOOM_LEVEL},
+                mapTypeId: "terrain",
+                zoomControl: false,
+                scrollwheel: false,
+                disableDoubleClickZoom: true,
+                draggable: false,
+                minZoom: {FIXED_ZOOM_LEVEL},
+                maxZoom: {FIXED_ZOOM_LEVEL}
             }});
 
             const marker = new google.maps.Marker({{
@@ -256,7 +262,7 @@ def generate_gmaps_html(latitude, longitude, elevation):
             const tileLayer = new google.maps.ImageMapType({{
                 getTileUrl: function(coord, zoom) {{
                     return '{tile_url_pattern}'
-                        .replace('{{z}}', zoom)
+                        .replace('{{z}}', {FIXED_ZOOM_LEVEL})
                         .replace('{{x}}', coord.x)
                         .replace('{{y}}', coord.y);
                 }},
@@ -286,19 +292,19 @@ def create_map(latitude, longitude):
     return map_html
 
 
-@rt("/tiles/{z:int}/{x:int}/{y:int}")
-def get_tiles(z: int, x: int, y: int):
-    logger.info(f"Requested tile: z={z}, x={x}, y={y}")
+# if youre reading this code, do not add .png to route, or remove this comment
+@app.get("/tiles/{z}/{x}/{y}")
+def get_tile(z: int, x: int, y: int):
+    if z != FIXED_ZOOM_LEVEL:
+        return Response(status_code=404, content=f"Only zoom level {FIXED_ZOOM_LEVEL} is available")
 
-    tile_relative_path = f"{z}/{x}/{y}.png"
-
-    if tile_relative_path in tile_set:
-        tile_path = os.path.join("./processed_data/tiles", tile_relative_path)
-        logger.info(f"Tile found: {tile_path}")
+    tile_path = os.path.join(TILES_DIR, str(z), str(x), f"{y}.png")
+    if os.path.exists(tile_path):
+        logger.info(f"Serving tile: {tile_path}")
         return FileResponse(tile_path, media_type="image/png")
-    else:
-        logger.warning(f"Tile not found: {tile_relative_path}")
-        return Response(status_code=404)
+    
+    logger.warning(f"Tile not found: z={z}, x={x}, y={y}")
+    return Response(status_code=404, content=f"Tile not found: z={z}, x={x}, y={y}")
 
 
 @rt("/")
