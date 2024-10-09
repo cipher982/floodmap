@@ -10,6 +10,7 @@ dependencies = [
     "geopy>=2.4.1",
     "googlemaps>=4.10.0",
     "ipykernel>=6.29.5",
+    "matplotlib>=3.9.2",
     "numpy>=2.1.2",
     "pyproj>=3.7.0",
     "python-fasthtml>=0.6.9",

@@ -1,21 +1,18 @@
 import requests
 import logging
 import os
-
+import json
+import colorsys
 
 from fasthtml.common import Div, H1, P, fast_app, serve, Iframe
 from fasthtml.xtend import Favicon
 
 import numpy as np
-from scipy.interpolate import griddata
-import folium
 from diskcache import Cache
 from dotenv import load_dotenv
 from googlemaps import Client as GoogleMaps
 
 import rasterio
-from rasterio.warp import transform_bounds
-from pyproj import Transformer
 
 
 load_dotenv()
@@ -130,29 +127,50 @@ def get_elevation(latitude, longitude):
     return elevation
 
 
-def get_elevation_data(center_lat, center_lng, radius=5000, samples=20):
-    cache_key = f"elevation_data_{center_lat}_{center_lng}_{radius}_{samples}"
-    cached_data = cache.get(cache_key)
-    if cached_data:
-        # return cached_data
-        pass
+def get_elevation_data(center_lat, center_lng, radius=0.05):
+    """Get elevation data for a region around the center coordinates."""
+    for i, bounds in enumerate(tif_bounds):
+        if (
+            bounds.left <= center_lng <= bounds.right
+            and bounds.bottom <= center_lat <= bounds.top
+        ):
+            # Calculate the region of interest
+            min_lat, max_lat = center_lat - radius, center_lat + radius
+            min_lng, max_lng = center_lng - radius, center_lng + radius
 
-    # Generate a grid of points
-    lat_range = np.linspace(center_lat - 0.05, center_lat + 0.05, samples)
-    lng_range = np.linspace(center_lng - 0.05, center_lng + 0.05, samples)
-    grid_lat, grid_lng = np.meshgrid(lat_range, lng_range)
+            # Convert lat/lon to row/col
+            row_min, col_min = map(
+                int, rasterio.transform.rowcol(tif_transform[i], min_lng, max_lat)
+            )
+            row_max, col_max = map(
+                int, rasterio.transform.rowcol(tif_transform[i], max_lng, min_lat)
+            )
 
-    points = [(lat, lng) for lat, lng in zip(grid_lat.flatten(), grid_lng.flatten())]
+            # Ensure we're within bounds
+            row_min, row_max = max(0, row_min), min(tif_data[i].shape[0], row_max)
+            col_min, col_max = max(0, col_min), min(tif_data[i].shape[1], col_max)
 
-    # Get elevations for all points
-    result = []
-    for lat, lng in points:
-        elevation = get_elevation_from_memory(lat, lng)
-        if elevation is not None:
-            result.append((lat, lng, elevation))
+            # Extract the data subset
+            data_subset = tif_data[i][row_min:row_max, col_min:col_max]
 
-    cache.set(cache_key, result, expire=86400 * 7)  # Cache for a week
-    return result
+            # Log statistics about the data subset
+            logger.info(
+                f"Elevation data stats: min={np.nanmin(data_subset):.2f}, "
+                f"max={np.nanmax(data_subset):.2f}, mean={np.nanmean(data_subset):.2f}, "
+                f"median={np.nanmedian(data_subset):.2f}"
+            )
+            logger.info(f"Data shape: {data_subset.shape}")
+
+            # Create lat/lon arrays for the subset
+            lats = np.linspace(max_lat, min_lat, data_subset.shape[0])
+            lons = np.linspace(min_lng, max_lng, data_subset.shape[1])
+            lons, lats = np.meshgrid(lons, lats)
+
+            # Flatten and combine the data
+            result = list(zip(lats.flatten(), lons.flatten(), data_subset.flatten()))
+            return [point for point in result if not np.isnan(point[2])]
+
+    return []  # Return empty list if no matching TIF file found
 
 
 def get_location_info(ip_address):
@@ -178,42 +196,51 @@ def get_location_info(ip_address):
     return "Unknown", "Unknown", "Unknown", None, None
 
 
+
+def get_color(value):
+    """Convert a value between -1 and 1 to an RGB color."""
+    hue = (1 - (value + 1) / 2) * 240 / 360  # Map -1..1 to hue 240..0 (blue to red)
+    rgb = colorsys.hsv_to_rgb(hue, 1, 1)
+    return f"rgb({int(rgb[0]*255)}, {int(rgb[1]*255)}, {int(rgb[2]*255)})"
+
+
+
 def generate_gmaps_html(latitude, longitude, elevation):
     elevation_data = get_elevation_data(latitude, longitude)
+    
+    if not elevation_data:
+        return "<p>No elevation data available for this location.</p>"
 
-    # Prepare data for contour lines and heatmap
     lats, lngs, elevs = zip(*elevation_data)
-    grid_lat = np.linspace(min(lats), max(lats), 100)
-    grid_lng = np.linspace(min(lngs), max(lngs), 100)
-    grid_lat, grid_lng = np.meshgrid(grid_lat, grid_lng)
-    grid_elev = griddata((lats, lngs), elevs, (grid_lat, grid_lng), method="cubic")
+    min_elev, max_elev = np.min(elevs), np.max(elevs)
+    mean_elev = np.mean(elevs)
 
-    # Calculate min and max elevation for color scaling
-    min_elev = np.min(elevs)
-    max_elev = np.max(elevs)
+    logger.info(f"Elevation data stats: min={min_elev:.2f}, max={max_elev:.2f}, "
+                f"mean={mean_elev:.2f}, range={max_elev - min_elev:.2f}")
+    logger.info(f"Data shape: {len(lats)}x{len(lngs)}")
 
-    contour_levels = np.linspace(min_elev, max_elev, 20).tolist()
-    contour_levels = [float(level) for level in contour_levels]
+    # Non-linear normalization
+    normalized_elevs = np.clip((np.array(elevs) - mean_elev) / (max_elev - mean_elev), -1, 1)
+    normalized_elevs = np.sign(normalized_elevs) * np.abs(normalized_elevs) ** 0.5
 
-    # Convert Python lists to JSON strings for JavaScript
-    import json
+    # Reduce the number of points (e.g., take every 10th point)
+    step = 10
+    heatmap_data = [
+        {
+            "lat": float(lat),
+            "lng": float(lng),
+            "color": get_color(norm_elev)
+        }
+        for lat, lng, norm_elev in zip(lats[::step], lngs[::step], normalized_elevs[::step])
+    ]
 
-    heatmap_data_json = json.dumps(
-        [
-            {"lat": float(lat), "lng": float(lng), "elevation": float(elev)}
-            for lat, lng, elev in zip(
-                grid_lat.flatten(), grid_lng.flatten(), grid_elev.flatten()
-            )
-            if not np.isnan(elev)
-        ]
-    )
-    elevation_data_json = json.dumps(elevation_data)
-    contour_levels_json = json.dumps(contour_levels)
+    logger.info(f"Generated {len(heatmap_data)} heatmap points")
+
+    heatmap_data_json = json.dumps(heatmap_data)
 
     return f"""
     <div id="map" style="height: 400px; width: 100%;"></div>
-    <script src="https://maps.googleapis.com/maps/api/js?key={gmaps_api_key}&libraries=visualization"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={gmaps_api_key}"></script>
     <script>
         function initMap() {{
             const map = new google.maps.Map(document.getElementById("map"), {{
@@ -236,49 +263,18 @@ def generate_gmaps_html(latitude, longitude, elevation):
                 infowindow.open(map, marker);
             }});
 
-            // Add heatmap layer
             const heatmapData = {heatmap_data_json};
-            const minElevation = {min_elev};
-            const maxElevation = {max_elev};
-
-            const heatmap = new google.maps.visualization.HeatmapLayer({{
-                data: heatmapData.map(point => ({{
-                    location: new google.maps.LatLng(point.lat, point.lng),
-                    weight: (point.elevation - minElevation) / (maxElevation - minElevation)
-                }})),
-                map: map,
-                radius: 30,
-                opacity: 0.8
-            }});
-
-            // Add contour lines
-            const elevationData = {elevation_data_json};
-            const contourLevels = {contour_levels_json};
             
-            const points = turf.points(elevationData.map(p => [p[1], p[0], p[2]]));
-            const bbox = turf.bbox(points);
-            const grid = turf.interpolate(points, 100, {{
-                gridType: "point",
-                property: "elevation",
-                units: "kilometers"
-            }});
-
-            contourLevels.forEach((level, index) => {{
-                const contours = turf.isolines(grid, level, {{zProperty: "elevation"}});
-                contours.features.forEach(feature => {{
-                    const path = feature.geometry.coordinates[0].map(coord => ({{
-                        lat: coord[1],
-                        lng: coord[0]
-                    }}));
-                    
-                    new google.maps.Polyline({{
-                        path: path,
-                        geodesic: true,
-                        strokeColor: `hsl(${{index * 360 / contourLevels.length}}, 100%, 50%)`,
-                        strokeOpacity: 0.7,
-                        strokeWeight: 2,
-                        map: map
-                    }});
+            heatmapData.forEach(point => {{
+                new google.maps.Circle({{
+                    strokeColor: point.color,
+                    strokeOpacity: 0.8,
+                    strokeWeight: 1,
+                    fillColor: point.color,
+                    fillOpacity: 0.35,
+                    map,
+                    center: {{ lat: point.lat, lng: point.lng }},
+                    radius: 50,
                 }});
             }});
         }}
