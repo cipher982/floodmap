@@ -167,4 +167,6 @@ fastHTML_docs.md
 cache/
 scratch/
 data/
+processed_data/
 .DS_Store
+debug.py
