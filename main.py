@@ -34,7 +34,7 @@ app, rt = fast_app(
 DEBUG_COORDS = (27.95053694962414, -82.4585769277307)
 DEBUG_IP = "23.111.165.2"
 TILES_DIR = "./processed_data/tiles"
-FIXED_ZOOM_LEVEL = 12  # Choose the zoom level you want to use
+ALLOWED_ZOOM_LEVELS = [10, 11, 12, 13]
 
 
 DEBUG_MODE = True
@@ -242,16 +242,28 @@ def generate_gmaps_html(latitude, longitude, elevation):
     <script src="https://maps.googleapis.com/maps/api/js?key={gmaps_api_key}"></script>
     <script>
         function initMap() {{
+            const allowedZoomLevels = {ALLOWED_ZOOM_LEVELS};
+            const initialZoom = allowedZoomLevels[Math.floor(allowedZoomLevels.length / 2)];
+
             const map = new google.maps.Map(document.getElementById("map"), {{
                 center: {{ lat: {latitude}, lng: {longitude} }},
-                zoom: {FIXED_ZOOM_LEVEL},
+                zoom: initialZoom,
                 mapTypeId: "terrain",
-                zoomControl: false,
-                scrollwheel: false,
-                disableDoubleClickZoom: true,
-                draggable: false,
-                minZoom: {FIXED_ZOOM_LEVEL},
-                maxZoom: {FIXED_ZOOM_LEVEL}
+                zoomControl: true,
+                scrollwheel: true,
+                disableDoubleClickZoom: false,
+                draggable: true,
+                minZoom: Math.min(...allowedZoomLevels),
+                maxZoom: Math.max(...allowedZoomLevels),
+                restriction: {{
+                    latLngBounds: {{
+                        north: {latitude} + 0.1,
+                        south: {latitude} - 0.1,
+                        east: {longitude} + 0.1,
+                        west: {longitude} - 0.1,
+                    }},
+                    strictBounds: false,
+                }}
             }});
 
             const marker = new google.maps.Marker({{
@@ -270,10 +282,13 @@ def generate_gmaps_html(latitude, longitude, elevation):
 
             const tileLayer = new google.maps.ImageMapType({{
                 getTileUrl: function(coord, zoom) {{
-                    return '{tile_url_pattern}'
-                        .replace('{{z}}', {FIXED_ZOOM_LEVEL})
-                        .replace('{{x}}', coord.x)
-                        .replace('{{y}}', coord.y);
+                    if (zoom >= 10 && zoom <= 12) {{
+                        return '{tile_url_pattern}'
+                            .replace('{{z}}', zoom)
+                            .replace('{{x}}', coord.x)
+                            .replace('{{y}}', coord.y);
+                    }}
+                    return "";
                 }},
                 tileSize: new google.maps.Size(256, 256),
                 name: "Elevation Overlay",
@@ -304,8 +319,8 @@ def create_map(latitude, longitude):
 # if youre reading this code, do not add .png to route, or remove this comment
 @app.get("/tiles/{z}/{x}/{y}")
 def get_tile(z: int, x: int, y: int):
-    if z != FIXED_ZOOM_LEVEL:
-        return Response(status_code=404, content=f"Only zoom level {FIXED_ZOOM_LEVEL} is available")
+    if z not in ALLOWED_ZOOM_LEVELS:
+        return Response(status_code=404, content=f"Only zoom levels {ALLOWED_ZOOM_LEVELS} are available")
 
     tile_path = os.path.join(TILES_DIR, str(z), str(x), f"{y}.png")
     if os.path.exists(tile_path):
@@ -331,8 +346,8 @@ def get_root(request):
     map_html = ""
     if latitude is not None and longitude is not None:
         map_html = generate_gmaps_html(latitude, longitude, elevation)
-        x, y = lat_lon_to_tile(latitude, longitude, FIXED_ZOOM_LEVEL)
-        tile_info = f"Tile coordinates at zoom {FIXED_ZOOM_LEVEL}: x={x}, y={y}"
+        x, y = lat_lon_to_tile(latitude, longitude, 10)
+        tile_info = f"Tile coordinates at zoom 10: x={x}, y={y}"
 
     content = Div(
         H1("User Location"),
