@@ -3,6 +3,8 @@ import logging
 import os
 import json
 import colorsys
+from math import floor
+import math
 
 from fasthtml.common import Div, H1, P, fast_app, serve, Iframe, FileResponse, Response
 from fasthtml.xtend import Favicon
@@ -94,6 +96,13 @@ def preload_tile_paths():
 
 tile_set = preload_tile_paths()
 
+
+
+def lat_lon_to_tile(lat, lon, zoom):
+    n = 2.0 ** zoom
+    xtile = floor((lon + 180.0) / 360.0 * n)
+    ytile = floor((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n)
+    return xtile, ytile
 
 def get_elevation_from_memory(latitude, longitude):
     # logger.info(f"Getting elevation for lat={latitude}, lon={longitude}")
@@ -322,6 +331,8 @@ def get_root(request):
     map_html = ""
     if latitude is not None and longitude is not None:
         map_html = generate_gmaps_html(latitude, longitude, elevation)
+        x, y = lat_lon_to_tile(latitude, longitude, FIXED_ZOOM_LEVEL)
+        tile_info = f"Tile coordinates at zoom {FIXED_ZOOM_LEVEL}: x={x}, y={y}"
 
     content = Div(
         H1("User Location"),
@@ -331,9 +342,8 @@ def get_root(request):
         P(f"Country: {country}"),
         P(f"Latitude: {latitude}°") if latitude else P("Latitude: Unknown"),
         P(f"Longitude: {longitude}°") if longitude else P("Longitude: Unknown"),
-        P(f"Elevation: {elevation} m")
-        if latitude and longitude
-        else P("Elevation: Unknown"),
+        P(f"Elevation: {elevation} m") if elevation else P("Elevation: Unknown"),
+        P(tile_info) if tile_info else P("Tile coordinates: Unknown"),
         Iframe(srcdoc=map_html, width="100%", height="400px")
         if map_html
         else P("Map not available"),
