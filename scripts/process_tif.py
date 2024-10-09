@@ -20,7 +20,10 @@ INPUT_DIR = config.get("Paths", "input_dir", fallback="./data")
 OUTPUT_DIR = config.get("Paths", "output_dir", fallback="./processed_data")
 COLOR_RAMP = config.get("Files", "color_ramp", fallback="./scripts/color_ramp.txt")
 # Update these constants
-ZOOM_RANGE = (11, 12)  # This will generate tiles for zoom levels 11, 12, and 13
+ZOOM_RANGE = (10, 15)
+
+MIN_ELEVATION = 0
+MAX_ELEVATION = 20  # feet
 
 NUM_CORES = 10
 
@@ -33,9 +36,10 @@ def merge_tif_files(input_files, output_file):
     subprocess.run(merge_command, check=True, capture_output=True, text=True)
     logging.info("Merge complete")
 
-def elevation_to_color(elevation, min_elevation, max_elevation):
-    """Generate a color based on elevation."""
-    normalized = (elevation - min_elevation) / (max_elevation - min_elevation)
+
+def elevation_to_color(elevation):
+    """Generate a color based on elevation (0-20 feet scale)."""
+    normalized = min(max(elevation, MIN_ELEVATION), MAX_ELEVATION) / MAX_ELEVATION
     if normalized < 0.5:
         r = int(0 + 510 * normalized)
         g = int(255 * normalized)
@@ -46,10 +50,18 @@ def elevation_to_color(elevation, min_elevation, max_elevation):
         b = 0
     return r, g, b
 
+
 def create_dynamic_color_ramp(min_elevation, max_elevation, num_steps=256):
     """Create a color ramp based on the elevation range."""
     elevations = np.linspace(min_elevation, max_elevation, num_steps)
     colors = [elevation_to_color(e, min_elevation, max_elevation) for e in elevations]
+    return list(zip(elevations, colors))
+
+
+def create_fixed_color_ramp(num_steps=256):
+    """Create a color ramp based on the fixed elevation range (0-20 feet)."""
+    elevations = np.linspace(MIN_ELEVATION, MAX_ELEVATION, num_steps)
+    colors = [elevation_to_color(e) for e in elevations]
     return list(zip(elevations, colors))
 
 
@@ -71,7 +83,7 @@ def process_tif_file(input_file, output_dir):
         band = ds.GetRasterBand(1)
         min_elevation, max_elevation = band.ComputeRasterMinMax()
         geotransform = ds.GetGeoTransform()
-        
+
         # Calculate and log the bounding box
         width = ds.RasterXSize
         height = ds.RasterYSize
@@ -79,25 +91,34 @@ def process_tif_file(input_file, output_dir):
         lat_max = geotransform[3]
         lon_max = lon_min + width * geotransform[1]
         lat_min = lat_max + height * geotransform[5]
-        
+
         logging.info(f"File: {base_name}")
         logging.info(f"Bounding Box: ({lat_min}, {lon_min}) to ({lat_max}, {lon_max})")
         logging.info(f"Elevation range: {min_elevation} to {max_elevation}")
 
         # Create dynamic color ramp
-        color_ramp = create_dynamic_color_ramp(min_elevation, max_elevation)
-        dynamic_ramp_file = os.path.join(output_dir, f"{base_name}_color_ramp.txt")
-        write_color_ramp_file(color_ramp, dynamic_ramp_file)
+        # color_ramp = create_dynamic_color_ramp(min_elevation, max_elevation)
+        color_ramp = create_fixed_color_ramp()
+        fixed_ramp_file = os.path.join(output_dir, f"{base_name}_color_ramp.txt")
+        write_color_ramp_file(color_ramp, fixed_ramp_file)
 
         os.environ["GDAL_NUM_THREADS"] = str(NUM_CORES)
 
         # Generate color relief using the dynamic color ramp
         subprocess.run(
-            ["gdaldem", "color-relief", 
-             "-co", "TILED=YES", 
-             "-co", "COMPRESS=LZW",
-             "-co", "BIGTIFF=YES",
-             input_file, dynamic_ramp_file, output_file],
+            [
+                "gdaldem",
+                "color-relief",
+                "-co",
+                "TILED=YES",
+                "-co",
+                "COMPRESS=LZW",
+                "-co",
+                "BIGTIFF=YES",
+                input_file,
+                fixed_ramp_file,
+                output_file,
+            ],
             check=True,
             capture_output=True,
         )
@@ -108,27 +129,26 @@ def process_tif_file(input_file, output_dir):
             cmd = [
                 "gdal2tiles.py",
                 "--xyz",
-                "-z", f"{zoom}-{zoom}",
-                "-w", "none",
-                "--processes", str(NUM_CORES),  # Use all available cores
-                "-r", "average",  # Use average resampling for better quality
+                "-z",
+                f"{zoom}",  # Changed to process one zoom level at a time
+                "-w",
+                "none",
+                "--processes",
+                str(NUM_CORES),  # Use all available cores
+                "-r",
+                "average",  # Use average resampling for better quality
                 output_file,
-                tiles_dir
+                tiles_dir,
             ]
             logging.info(f"Running command: {' '.join(cmd)}")
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True
-            )
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
             logging.info(f"Command output: {result.stdout}")
-            
+
             # Log generated tiles
             generated_tiles = []
             for root, dirs, files in os.walk(zoom_dir):
                 for file in files:
-                    if file.endswith('.png'):
+                    if file.endswith(".png"):
                         tile_path = os.path.relpath(os.path.join(root, file), zoom_dir)
                         generated_tiles.append(tile_path)
 
