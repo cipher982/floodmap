@@ -4,7 +4,7 @@ import os
 import json
 import colorsys
 
-from fasthtml.common import Div, H1, P, fast_app, serve, Iframe
+from fasthtml.common import Div, H1, P, fast_app, serve, Iframe, FileResponse, Response
 from fasthtml.xtend import Favicon
 
 import numpy as np
@@ -71,6 +71,28 @@ def load_tif_data():
 logger.info("Loading TIF data...")
 load_tif_data()
 logger.info("TIF data loaded")
+
+
+def preload_tile_paths():
+    tiles_dir = "./processed_data/tiles"
+    tile_set = set()
+
+    if os.path.exists(tiles_dir):
+        for root, dirs, files in os.walk(tiles_dir):
+            for file in files:
+                if file.endswith(".png"):
+                    relative_path = os.path.relpath(os.path.join(root, file), tiles_dir)
+                    tile_set.add(
+                        relative_path.replace("\\", "/")
+                    )  # For cross-platform compatibility
+        logger.info(f"Preloaded {len(tile_set)} tile paths.")
+    else:
+        logger.warning(f"Tiles directory not found: {tiles_dir}")
+
+    return tile_set
+
+
+tile_set = preload_tile_paths()
 
 
 def get_elevation_from_memory(latitude, longitude):
@@ -196,7 +218,6 @@ def get_location_info(ip_address):
     return "Unknown", "Unknown", "Unknown", None, None
 
 
-
 def get_color(value):
     """Convert a value between -1 and 1 to an RGB color."""
     hue = (1 - (value + 1) / 2) * 240 / 360  # Map -1..1 to hue 240..0 (blue to red)
@@ -204,39 +225,8 @@ def get_color(value):
     return f"rgb({int(rgb[0]*255)}, {int(rgb[1]*255)}, {int(rgb[2]*255)})"
 
 
-
 def generate_gmaps_html(latitude, longitude, elevation):
-    elevation_data = get_elevation_data(latitude, longitude)
-    
-    if not elevation_data:
-        return "<p>No elevation data available for this location.</p>"
-
-    lats, lngs, elevs = zip(*elevation_data)
-    min_elev, max_elev = np.min(elevs), np.max(elevs)
-    mean_elev = np.mean(elevs)
-
-    logger.info(f"Elevation data stats: min={min_elev:.2f}, max={max_elev:.2f}, "
-                f"mean={mean_elev:.2f}, range={max_elev - min_elev:.2f}")
-    logger.info(f"Data shape: {len(lats)}x{len(lngs)}")
-
-    # Non-linear normalization
-    normalized_elevs = np.clip((np.array(elevs) - mean_elev) / (max_elev - mean_elev), -1, 1)
-    normalized_elevs = np.sign(normalized_elevs) * np.abs(normalized_elevs) ** 0.5
-
-    # Reduce the number of points (e.g., take every 10th point)
-    step = 10
-    heatmap_data = [
-        {
-            "lat": float(lat),
-            "lng": float(lng),
-            "color": get_color(norm_elev)
-        }
-        for lat, lng, norm_elev in zip(lats[::step], lngs[::step], normalized_elevs[::step])
-    ]
-
-    logger.info(f"Generated {len(heatmap_data)} heatmap points")
-
-    heatmap_data_json = json.dumps(heatmap_data)
+    tile_url_pattern = "/tiles/{z}/{x}/{y}.png"
 
     return f"""
     <div id="map" style="height: 400px; width: 100%;"></div>
@@ -263,20 +253,19 @@ def generate_gmaps_html(latitude, longitude, elevation):
                 infowindow.open(map, marker);
             }});
 
-            const heatmapData = {heatmap_data_json};
-            
-            heatmapData.forEach(point => {{
-                new google.maps.Circle({{
-                    strokeColor: point.color,
-                    strokeOpacity: 0.8,
-                    strokeWeight: 1,
-                    fillColor: point.color,
-                    fillOpacity: 0.35,
-                    map,
-                    center: {{ lat: point.lat, lng: point.lng }},
-                    radius: 50,
-                }});
+            const tileLayer = new google.maps.ImageMapType({{
+                getTileUrl: function(coord, zoom) {{
+                    return '{tile_url_pattern}'
+                        .replace('{{z}}', zoom)
+                        .replace('{{x}}', coord.x)
+                        .replace('{{y}}', coord.y);
+                }},
+                tileSize: new google.maps.Size(256, 256),
+                name: "Elevation Overlay",
+                opacity: 0.6
             }});
+
+            map.overlayMapTypes.insertAt(0, tileLayer);
         }}
     </script>
     <script>initMap();</script>
@@ -297,8 +286,23 @@ def create_map(latitude, longitude):
     return map_html
 
 
+@rt("/tiles/{z:int}/{x:int}/{y:int}")
+def get_tiles(z: int, x: int, y: int):
+    logger.info(f"Requested tile: z={z}, x={x}, y={y}")
+
+    tile_relative_path = f"{z}/{x}/{y}.png"
+
+    if tile_relative_path in tile_set:
+        tile_path = os.path.join("./processed_data/tiles", tile_relative_path)
+        logger.info(f"Tile found: {tile_path}")
+        return FileResponse(tile_path, media_type="image/png")
+    else:
+        logger.warning(f"Tile not found: {tile_relative_path}")
+        return Response(status_code=404)
+
+
 @rt("/")
-def get(request):
+def get_root(request):
     logger.info("==== Running route / ====")
 
     if DEBUG_MODE:
@@ -307,13 +311,12 @@ def get(request):
         user_ip = request.client.host if request.client else "Unknown"
 
     city, state, country, latitude, longitude = get_location_info(user_ip)
+    elevation = get_elevation(latitude, longitude)
 
-    # Create map
     map_html = ""
     if latitude is not None and longitude is not None:
-        map_html = create_map(latitude, longitude)
+        map_html = generate_gmaps_html(latitude, longitude, elevation)
 
-    # Display coordinates, location info, and map
     content = Div(
         H1("User Location"),
         P(f"IP Address: {user_ip}"),
@@ -322,7 +325,7 @@ def get(request):
         P(f"Country: {country}"),
         P(f"Latitude: {latitude}°") if latitude else P("Latitude: Unknown"),
         P(f"Longitude: {longitude}°") if longitude else P("Longitude: Unknown"),
-        P(f"Elevation: {get_elevation(latitude, longitude)} m")
+        P(f"Elevation: {elevation} m")
         if latitude and longitude
         else P("Elevation: Unknown"),
         Iframe(srcdoc=map_html, width="100%", height="400px")
