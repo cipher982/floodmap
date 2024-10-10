@@ -13,7 +13,6 @@ from fasthtml.common import Iframe
 from fasthtml.common import FileResponse
 from fasthtml.common import Response
 from fasthtml.common import Titled
-from fasthtml.common import H1
 from fasthtml.common import Container
 from fasthtml.common import Card
 from fasthtml.common import H2
