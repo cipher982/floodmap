@@ -34,7 +34,7 @@ app, rt = fast_app(
 DEBUG_COORDS = (27.95053694962414, -82.4585769277307)
 DEBUG_IP = "23.111.165.2"
 TILES_DIR = "./processed_data/tiles"
-ALLOWED_ZOOM_LEVELS = [10, 11, 12, 13]
+ALLOWED_ZOOM_LEVELS = [10, 11, 12, 13, 14, 15]
 
 
 DEBUG_MODE = True
@@ -243,7 +243,8 @@ def generate_gmaps_html(latitude, longitude, elevation):
     <script>
         function initMap() {{
             const allowedZoomLevels = {ALLOWED_ZOOM_LEVELS};
-            const initialZoom = allowedZoomLevels[Math.floor(allowedZoomLevels.length / 2)];
+            // const initialZoom = allowedZoomLevels[Math.floor(allowedZoomLevels.length / 2)];
+            const initialZoom = 13;
 
             const map = new google.maps.Map(document.getElementById("map"), {{
                 center: {{ lat: {latitude}, lng: {longitude} }},
@@ -282,7 +283,7 @@ def generate_gmaps_html(latitude, longitude, elevation):
 
             const tileLayer = new google.maps.ImageMapType({{
                 getTileUrl: function(coord, zoom) {{
-                    if (zoom >= 10 && zoom <= 12) {{
+                    if (allowedZoomLevels.includes(zoom)) {{
                         return '{tile_url_pattern}'
                             .replace('{{z}}', zoom)
                             .replace('{{x}}', coord.x)
