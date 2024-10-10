@@ -1,12 +1,23 @@
 import requests
 import logging
 import os
-import json
 import colorsys
 from math import floor
 import math
 
-from fasthtml.common import Div, H1, P, fast_app, serve, Iframe, FileResponse, Response
+from fasthtml.common import Div
+from fasthtml.common import P
+from fasthtml.common import fast_app
+from fasthtml.common import serve
+from fasthtml.common import Iframe
+from fasthtml.common import FileResponse
+from fasthtml.common import Response
+from fasthtml.common import Titled
+from fasthtml.common import H1
+from fasthtml.common import Container
+from fasthtml.common import Card
+from fasthtml.common import H2
+from fasthtml.common import Grid
 from fasthtml.xtend import Favicon
 
 import numpy as np
@@ -35,6 +46,7 @@ DEBUG_COORDS = (27.95053694962414, -82.4585769277307)
 DEBUG_IP = "23.111.165.2"
 TILES_DIR = "./processed_data/tiles"
 ALLOWED_ZOOM_LEVELS = [10, 11, 12, 13, 14, 15]
+MAP_HEIGHT = "600px"
 
 
 DEBUG_MODE = True
@@ -80,7 +92,7 @@ logger.info("TIF data loaded")
 
 def preload_tile_paths():
     tile_set = set()
-    
+
     if os.path.exists(TILES_DIR):
         for root, dirs, files in os.walk(TILES_DIR):
             for file in files:
@@ -90,19 +102,19 @@ def preload_tile_paths():
         logger.info(f"Preloaded {len(tile_set)} tile paths.")
     else:
         logger.warning(f"Tiles directory not found: {TILES_DIR}")
-    
+
     return tile_set
 
 
 tile_set = preload_tile_paths()
 
 
-
 def lat_lon_to_tile(lat, lon, zoom):
-    n = 2.0 ** zoom
+    n = 2.0**zoom
     xtile = floor((lon + 180.0) / 360.0 * n)
     ytile = floor((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n)
     return xtile, ytile
+
 
 def get_elevation_from_memory(latitude, longitude):
     # logger.info(f"Getting elevation for lat={latitude}, lon={longitude}")
@@ -238,7 +250,7 @@ def generate_gmaps_html(latitude, longitude, elevation):
     tile_url_pattern = "/tiles/{z}/{x}/{y}"
 
     return f"""
-    <div id="map" style="height: 400px; width: 100%;"></div>
+    <div id="map" style="height: {MAP_HEIGHT}; width: 100%;"></div>
     <script src="https://maps.googleapis.com/maps/api/js?key={gmaps_api_key}"></script>
     <script>
         function initMap() {{
@@ -320,13 +332,16 @@ def create_map(latitude, longitude):
 @app.get("/tiles/{z}/{x}/{y}")
 def get_tile(z: int, x: int, y: int):
     if z not in ALLOWED_ZOOM_LEVELS:
-        return Response(status_code=404, content=f"Only zoom levels {ALLOWED_ZOOM_LEVELS} are available")
+        return Response(
+            status_code=404,
+            content=f"Only zoom levels {ALLOWED_ZOOM_LEVELS} are available",
+        )
 
     tile_path = os.path.join(TILES_DIR, str(z), str(x), f"{y}.png")
     if os.path.exists(tile_path):
         logger.info(f"Serving tile: {tile_path}")
         return FileResponse(tile_path, media_type="image/png")
-    
+
     logger.warning(f"Tile not found: z={z}, x={x}, y={y}")
     return Response(status_code=404, content=f"Tile not found: z={z}, x={x}, y={y}")
 
@@ -347,21 +362,36 @@ def get_root(request):
     if latitude is not None and longitude is not None:
         map_html = generate_gmaps_html(latitude, longitude, elevation)
         x, y = lat_lon_to_tile(latitude, longitude, 10)
-        tile_info = f"Tile coordinates at zoom 10: x={x}, y={y}"
+        # tile_info = f"Tile coordinates at zoom 10: x={x}, y={y}"
 
-    content = Div(
-        H1("User Location"),
-        P(f"IP Address: {user_ip}"),
-        P(f"City: {city}"),
-        P(f"State/Region: {state}"),
-        P(f"Country: {country}"),
-        P(f"Latitude: {latitude}°") if latitude else P("Latitude: Unknown"),
-        P(f"Longitude: {longitude}°") if longitude else P("Longitude: Unknown"),
-        P(f"Elevation: {elevation} m") if elevation else P("Elevation: Unknown"),
-        P(tile_info) if tile_info else P("Tile coordinates: Unknown"),
-        Iframe(srcdoc=map_html, width="100%", height="400px")
-        if map_html
-        else P("Map not available"),
+    if latitude is None:
+        latitude = "Unknown"
+    if longitude is None:
+        longitude = "Unknown"
+    if elevation is None:
+        elevation = "Unknown"
+
+    content = Titled(
+        "Flood Buddy",
+        Container(
+            Card(
+                H2("Location Information"),
+                Grid(
+                    Div(
+                        P(f"IP Address: {user_ip}"),
+                        P(f"City: {city}"),
+                        P(f"State/Region: {state}"),
+                        P(f"Country: {country}"),
+                    ),
+                    Div(
+                        P(f"Latitude: {latitude}°"),
+                        P(f"Longitude: {longitude}°"),
+                        P(f"Elevation: {elevation} m"),
+                    ),
+                ),
+            ),
+            Card(H2("Map"), Iframe(srcdoc=map_html, width="100%", height=MAP_HEIGHT)),
+        ),
     )
     return content
 
