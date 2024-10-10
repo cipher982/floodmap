@@ -2,6 +2,8 @@
 
 An interactive web application that overlays elevation data on a map based on the user's location.
 
+![Elevation Map Screenshot](./static/screenshot.png)
+
 ## Overview
 
 This project displays color-coded elevation data on an interactive map centered on the user's location. High-resolution elevation data is processed to generate map tiles that visually represent different elevation levels.
