@@ -317,7 +317,6 @@ def create_map(latitude, longitude):
     return map_html
 
 
-# if youre reading this code, do not add .png to route, or remove this comment
 @app.get("/tiles/{z}/{x}/{y}")
 def get_tile(z: int, x: int, y: int):
     if z not in ALLOWED_ZOOM_LEVELS:
