@@ -3,7 +3,9 @@ import requests
 import json
 from pathlib import Path
 
-from usgs_api.downloader import download_scenes
+from downloader import download_scenes
+from filters import Filter
+
 
 M2M_ENDPOINT = "https://m2m.cr.usgs.gov/api/api/json/stable/"
 logging.getLogger("requests").setLevel(logging.WARNING)
@@ -93,6 +95,10 @@ class M2M:
 
         return result["data"]
 
+    def datasetFilters(self, **args):
+        """Create dataset filters from metadata info"""
+        return {"metadataFilter": args.get("metadataInfo", [])}
+
     def download_scenes(
         self, dataset_name, spatial_filter, max_results=100, download_path="downloads"
     ):
@@ -176,6 +182,53 @@ class M2M:
             logging.info("All downloads completed successfully.")
 
         return [d for d in downloads if str(d.get("entityId")) not in failed]
+
+    def downloadSearch(self, label=None):
+        if label is not None:
+            params = {"label": label}
+            return self._send_request("download-search", params)
+        return self._send_request("download-search")
+
+    def searchScenes(self, datasetName, spatial_filter=None, max_results=100, **args):
+        if datasetName not in self.datasets:
+            raise M2MError(
+                "Dataset {} not one of the available datasets {}".format(
+                    datasetName, list(self.datasets.keys())
+                )
+            )
+
+        # Construct request parameters with proper scene filter structure
+        params = {
+            "datasetName": datasetName,
+            "maxResults": max_results,
+            "sceneFilter": {},  # Add sceneFilter object
+        }
+
+        if spatial_filter:
+            params["sceneFilter"]["spatialFilter"] = (
+                spatial_filter  # Nest spatialFilter inside sceneFilter
+            )
+
+        scenes = self._send_request("scene-search", params)
+
+        if scenes["totalHits"] > scenes["recordsReturned"]:
+            logging.info(
+                f"Found {scenes['totalHits']} total scenes, returning first {scenes['recordsReturned']}"
+            )
+
+        return scenes
+
+    def downloadOrderRemove(self, label):
+        """Remove a download order and verify removal"""
+        params = {"label": label}
+        response = self._send_request("download-order-remove", params)
+
+        # Verify removal by checking if downloads with this label still exist
+        remaining = self._send_request("download-search", {"label": label})
+        if remaining:
+            raise M2MError(f"Failed to remove downloads for label {label}")
+
+        return response
 
     def logout(self):
         """Logout from the API"""
