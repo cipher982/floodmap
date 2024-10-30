@@ -24,7 +24,7 @@ INPUT_DIR = str(os.getenv("INPUT_DIR"))
 PROCESSED_DIR = str(os.getenv("PROCESSED_DIR"))
 COLOR_RAMP = str(os.getenv("COLOR_RAMP"))
 # Update these constants
-ZOOM_RANGE = (10, 12)
+ZOOM_RANGE = (10, 11)
 
 MIN_ELEVATION = 0
 MAX_ELEVATION = 20  # feet
@@ -38,66 +38,90 @@ def merge_tif_files(input_files, output_file):
     total_files = len(input_files)
     logging.info(f"Merging {total_files} TIF files into {output_file}")
 
-    batch_size = 50
-    batched_files = [
-        input_files[i : i + batch_size] for i in range(0, total_files, batch_size)
-    ]
+    # Log bounds of first and last files for debugging
+    for idx, f in enumerate([input_files[0], input_files[-1]]):
+        ds = gdal.Open(f)
+        gt = ds.GetGeoTransform()
+        width = ds.RasterXSize
+        height = ds.RasterYSize
+        lon_min = gt[0]
+        lat_max = gt[3]
+        lon_max = lon_min + width * gt[1]
+        lat_min = lat_max + height * gt[5]
+        logging.info(f"{'First' if idx == 0 else 'Last'} file bounds:")
+        logging.info(f"  Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
+        logging.info(f"  Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
 
     temp_vrt = output_file.replace(".tif", "_temp.vrt")
 
-    base_command = ["gdalbuildvrt", "-resolution", "highest", "-r", "nearest", temp_vrt]
+    merge_command = [
+        "gdalbuildvrt",
+        "-resolution",
+        "highest",
+        "-r",
+        "nearest",
+        "-separate",
+        "-overwrite",
+        temp_vrt,
+    ] + sorted(input_files)
 
-    with tqdm(total=total_files, desc="Merging TIF files") as pbar:
-        for i, batch in enumerate(batched_files):
-            merge_command = base_command + batch
+    try:
+        logging.info("Creating VRT file...")
+        result = subprocess.run(merge_command, capture_output=True, text=True)
+        if result.returncode != 0:
+            logging.error(f"Error creating VRT: {result.stderr}")
+            raise subprocess.CalledProcessError(
+                result.returncode, merge_command, result.stdout, result.stderr
+            )
 
-            try:
-                result = subprocess.run(merge_command, capture_output=True, text=True)
-                if result.returncode != 0:
-                    logging.error(f"Error in merge batch {i+1}: {result.stderr}")
-                    raise subprocess.CalledProcessError(
-                        result.returncode, merge_command, result.stdout, result.stderr
-                    )
-                pbar.update(len(batch))
-            except subprocess.CalledProcessError as e:
-                logging.error(f"Error in merge batch {i+1}: {e.stderr}")
-                raise
+        # Check VRT bounds
+        ds = gdal.Open(temp_vrt)
+        gt = ds.GetGeoTransform()
+        width = ds.RasterXSize
+        height = ds.RasterYSize
+        lon_min = gt[0]
+        lat_max = gt[3]
+        lon_max = lon_min + width * gt[1]
+        lat_min = lat_max + height * gt[5]
+        logging.info("VRT file bounds:")
+        logging.info(f"  Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
+        logging.info(f"  Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
 
-        # Convert final VRT to GeoTIFF
+        # Convert VRT to GeoTIFF
         logging.info("Converting VRT to GeoTIFF...")
         translate_command = [
             "gdal_translate",
-            "-of",
-            "GTiff",
-            "--config",
-            "GDAL_NUM_THREADS",
-            str(NUM_CORES),
-            "--config",
-            "GDAL_CACHEMAX",
-            str(MEMORY_LIMIT),
+            "-of", "GTiff",
+            "-co", "COMPRESS=LZW",  # Add compression
+            "-co", "BIGTIFF=YES",   # Enable large file support
+            "-co", "TILED=YES",     # Enable tiling
+            "--config", "GDAL_NUM_THREADS", str(NUM_CORES),
+            "--config", "GDAL_CACHEMAX", str(MEMORY_LIMIT),
+            # Disable disk space check since it seems incorrect
+            "--config", "CHECK_DISK_FREE_SPACE", "FALSE",
             temp_vrt,
             output_file,
         ]
 
         subprocess.run(translate_command, check=True)
-        os.remove(temp_vrt)  # Clean up temporary VRT file
+        os.remove(temp_vrt)
 
-    logging.info("Merge complete")
+        # Log final merged file bounds
+        ds = gdal.Open(output_file)
+        gt = ds.GetGeoTransform()
+        width = ds.RasterXSize
+        height = ds.RasterYSize
+        lon_min = gt[0]
+        lat_max = gt[3]
+        lon_max = lon_min + width * gt[1]
+        lat_min = lat_max + height * gt[5]
+        logging.info("Merged file bounds:")
+        logging.info(f"  Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
+        logging.info(f"  Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
 
-    # After merge is complete, log the bounds of merged file
-    ds = gdal.Open(output_file)
-    geotransform = ds.GetGeoTransform()
-    width = ds.RasterXSize
-    height = ds.RasterYSize
-    
-    lon_min = geotransform[0]
-    lat_max = geotransform[3]
-    lon_max = lon_min + width * geotransform[1]
-    lat_min = lat_max + height * geotransform[5]
-    
-    logging.info("Merged file bounds:")
-    logging.info(f"Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
-    logging.info(f"Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
+    except Exception as e:
+        logging.error(f"Error in merge process: {str(e)}")
+        raise
 
 
 def elevation_to_color(elevation):
@@ -137,45 +161,47 @@ def write_color_ramp_file(color_ramp, output_file):
 
 def analyze_tif_files(input_dir):
     """Analyze all TIF files in directory to determine coverage."""
-    files = [f for f in os.listdir(input_dir) if f.endswith('.tif')]
-    
+    files = [f for f in os.listdir(input_dir) if f.endswith(".tif")]
+
     all_bounds = []
-    lat_min_global = float('inf')
-    lat_max_global = float('-inf')
-    lon_min_global = float('inf')
-    lon_max_global = float('-inf')
-    
+    lat_min_global = float("inf")
+    lat_max_global = float("-inf")
+    lon_min_global = float("inf")
+    lon_max_global = float("-inf")
+
     logging.info(f"Analyzing {len(files)} TIF files...")
-    
+
     for file in tqdm(files, desc="Analyzing files"):
         filepath = os.path.join(input_dir, file)
         ds = gdal.Open(filepath)
         geotransform = ds.GetGeoTransform()
         width = ds.RasterXSize
         height = ds.RasterYSize
-        
+
         lon_min = geotransform[0]
         lat_max = geotransform[3]
         lon_max = lon_min + width * geotransform[1]
         lat_min = lat_max + height * geotransform[5]
-        
-        all_bounds.append({
-            'file': file,
-            'lat_min': lat_min,
-            'lat_max': lat_max,
-            'lon_min': lon_min,
-            'lon_max': lon_max
-        })
-        
+
+        all_bounds.append(
+            {
+                "file": file,
+                "lat_min": lat_min,
+                "lat_max": lat_max,
+                "lon_min": lon_min,
+                "lon_max": lon_max,
+            }
+        )
+
         # Update global bounds
         lat_min_global = min(lat_min_global, lat_min)
         lat_max_global = max(lat_max_global, lat_max)
         lon_min_global = min(lon_min_global, lon_min)
         lon_max_global = max(lon_max_global, lon_max)
-    
+
     # Sort by latitude and longitude for better organization
-    all_bounds.sort(key=lambda x: (-x['lat_max'], x['lon_min']))
-    
+    all_bounds.sort(key=lambda x: (-x["lat_max"], x["lon_min"]))
+
     logging.info("\nOverall Coverage:")
     logging.info(f"Latitude:  {lat_min_global:.4f}°N to {lat_max_global:.4f}°N")
     logging.info(f"Longitude: {lon_min_global:.4f}°W to {lon_max_global:.4f}°W")
@@ -183,22 +209,22 @@ def analyze_tif_files(input_dir):
     # Modify the range calculation section
     lat_ranges = []
     lon_ranges = []
-    
+
     for bound in all_bounds:
         # Round to nearest degree for better grouping
         lat_min_round = round(bound["lat_min"])
         lat_max_round = round(bound["lat_max"])
         lon_min_round = round(bound["lon_min"])
         lon_max_round = round(bound["lon_max"])
-        
+
         # Store as tuples for easier sorting
         lat_ranges.append((lat_min_round, lat_max_round))
         lon_ranges.append((lon_min_round, lon_max_round))
-    
+
     # Remove duplicates and sort
     lat_ranges = sorted(set(lat_ranges), key=lambda x: x[0], reverse=True)
     lon_ranges = sorted(set(lon_ranges), key=lambda x: x[0])
-    
+
     logging.info("\nCoverage Summary:")
     logging.info(f"Total files: {len(files)}")
     logging.info(f"Latitude ranges: {len(lat_ranges)} unique ranges")
@@ -207,12 +233,16 @@ def analyze_tif_files(input_dir):
     logging.info(f"Longitude ranges: {len(lon_ranges)} unique ranges")
     logging.info(f"Westernmost: {lon_min_global:.4f}°W")
     logging.info(f"Easternmost: {lon_max_global:.4f}°W")
-    
+
     # Print some example ranges for verification
     logging.info("\nExample ranges:")
-    logging.info(f"First 3 latitude ranges: {[f'{x[0]}-{x[1]}N' for x in lat_ranges[:3]]}")
-    logging.info(f"First 3 longitude ranges: {[f'{x[0]}-{x[1]}W' for x in lon_ranges[:3]]}")
-    
+    logging.info(
+        f"First 3 latitude ranges: {[f'{x[0]}-{x[1]}N' for x in lat_ranges[:3]]}"
+    )
+    logging.info(
+        f"First 3 longitude ranges: {[f'{x[0]}-{x[1]}W' for x in lon_ranges[:3]]}"
+    )
+
     return all_bounds
 
 
@@ -225,17 +255,20 @@ def process_tif_file(input_file, output_dir):
         # Get elevation range and geotransform
         ds = gdal.Open(input_file)
         logging.info(f"Input projection: {ds.GetProjection()}")
-        
+
         # First, reproject to Web Mercator (EPSG:3857)
         reprojected_file = os.path.join(output_dir, f"{base_name}_mercator.tif")
         logging.info("Reprojecting to Web Mercator...")
         cmd = [
             "gdalwarp",
-            "-s_srs", "EPSG:4326",
-            "-t_srs", "EPSG:3857",
-            "-r", "bilinear",
+            "-s_srs",
+            "EPSG:4326",
+            "-t_srs",
+            "EPSG:3857",
+            "-r",
+            "bilinear",
             input_file,
-            reprojected_file
+            reprojected_file,
         ]
         subprocess.run(cmd, check=True)
 
@@ -244,20 +277,20 @@ def process_tif_file(input_file, output_dir):
         color_ramp = create_fixed_color_ramp()
         fixed_ramp_file = os.path.join(output_dir, f"{base_name}_color_ramp.txt")
         write_color_ramp_file(color_ramp, fixed_ramp_file)
-        
+
         cmd = [
             "gdaldem",
             "color-relief",
             "-alpha",
             reprojected_file,
             fixed_ramp_file,
-            output_file
+            output_file,
         ]
         subprocess.run(cmd, check=True)
 
         # Generate tiles from the reprojected and colored file
         os.environ["GDAL_NUM_THREADS"] = str(NUM_CORES)
-        
+
         with tqdm(desc="Generating tiles") as pbar:
             for zoom in range(ZOOM_RANGE[0], ZOOM_RANGE[1] + 1):
                 zoom_dir = os.path.join(tiles_dir, str(zoom))
@@ -267,15 +300,20 @@ def process_tif_file(input_file, output_dir):
                 cmd = [
                     "gdal2tiles.py",
                     "--xyz",
-                    "-z", f"{zoom}",
-                    "-w", "none",
-                    "--processes", str(NUM_CORES),
-                    "-r", "average",
-                    "--profile", "mercator",
+                    "-z",
+                    f"{zoom}",
+                    "-w",
+                    "none",
+                    "--processes",
+                    str(NUM_CORES),
+                    "-r",
+                    "average",
+                    "--profile",
+                    "mercator",
                     output_file,
                     tiles_dir,
                 ]
-                
+
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode != 0:
                     logging.error(f"Tile generation error: {result.stderr}")
@@ -304,7 +342,7 @@ def main():
 
     # Ask for confirmation before proceeding
     response = input("\nProceed with processing? (y/n): ")
-    if response.lower() != 'y':
+    if response.lower() != "y":
         logging.info("Processing cancelled")
         return
 
