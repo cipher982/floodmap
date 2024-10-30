@@ -1,5 +1,7 @@
 import logging
 import os
+import signal
+
 import dotenv
 from tqdm import tqdm
 import concurrent.futures
@@ -74,14 +76,34 @@ def clear_pending_downloads(m2m, max_workers):
     except Exception as e:
         logging.error(f"Error in clear_pending_downloads: {str(e)}")
 
+class DownloadManager:
+    def __init__(self):
+        self.m2m: M2M | None = None
+
+    def signal_handler(self, signum, frame):
+        """Handle interrupt signal"""
+        logging.info("\nReceived interrupt signal. Cleaning up...")
+        if self.m2m and hasattr(self.m2m, "_interrupted"):
+            self.m2m._interrupted = True
+        raise KeyboardInterrupt
 
 def main():
-    m2m = M2M(username=os.getenv("USGS_USER"), token=os.getenv("USGS_TOKEN"))
     logger = logging.getLogger(__name__)
 
+    manager = DownloadManager()
+    signal.signal(signal.SIGINT, manager.signal_handler)
+
+    manager.m2m = M2M(username=os.getenv("USGS_USER"), token=os.getenv("USGS_TOKEN"))
+    if not manager.m2m:
+        logger.error("Failed to initialize M2M client")
+        return
+
+
     try:
+        _ = manager.m2m.get_rate_limits()
+
         # Clear any pending downloads first
-        clear_pending_downloads(m2m, 10)
+        clear_pending_downloads(manager.m2m, 10)
 
         # SF Bay Area
         spatial_filter = {
@@ -98,23 +120,27 @@ def main():
         }
 
         # 1. Search for scenes in the area
-        scenes = m2m.searchScenes("srtm_v3", spatial_filter=spatial_filter)
+        scenes = manager.m2m.searchScenes("srtm_v3", spatial_filter=spatial_filter)
         logger.info(f"Found {len(scenes.get('results', [])):,} scenes")
 
-        downloaded = m2m.download_scenes(
+        downloaded = manager.m2m.download_scenes(
             dataset_name="srtm_v3",
             spatial_filter=spatial_filter,
+            max_results=100,
             download_path="/Volumes/T9/srtm",
+            max_workers=10,
         )
         if downloaded:
             logger.info(f"Successfully downloaded {len(downloaded):,} scenes")
         else:
             logger.warning("No scenes were downloaded")
 
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user. Shutting down gracefully...")
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
     finally:
-        m2m.logout()
+        manager.m2m.logout()
         logger.info("Logged out")
 
 
