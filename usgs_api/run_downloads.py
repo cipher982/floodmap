@@ -16,34 +16,40 @@ logging.basicConfig(level=logging.INFO)
 def remove_download(m2m, order):
     """Helper function to remove a single download"""
     try:
-        if "downloadId" in order:
-            # Check download status before removal
-            status = order.get("status", "").lower()
-            if status in ["failed", "expired"]:
-                logging.info(f"Skipping removal of {status} download: {order['downloadId']}")
-                return True, order["downloadId"]
-                
-            response = m2m._send_request(
-                "download-remove", {"downloadId": order["downloadId"]}
-            )
-            if response:
-                return True, order["downloadId"]
-            logging.error(f"Failed to remove download ID: {order['downloadId']}")
-        return False, f"No downloadId found for order with label {order.get('label')}"
+        if "downloadId" not in order:
+            return False, "No downloadId found"
+
+        # Only attempt to remove active downloads
+        status = order.get("statusText", "").lower()
+        if status in ["removed", "failed", "expired"]:
+            return True, f"Already {status}: {order['downloadId']}"
+
+        response = m2m._send_request(
+            "download-remove", {"downloadId": order["downloadId"]}
+        )
+        if response:
+            return True, order["downloadId"]
+        return False, f"Failed to remove {order['downloadId']}"
     except Exception as e:
-        return False, f"Error clearing download {order.get('downloadId')}: {str(e)}"
+        return False, f"Error: {str(e)}"
 
 
 def clear_pending_downloads(m2m, max_workers):
     """Clear pending downloads concurrently with progress tracking"""
     logging.info("Fetching pending downloads...")
 
-    download_orders = m2m.downloadSearch()
+    # Only get active downloads
+    download_orders = [
+        order
+        for order in m2m.downloadSearch()
+        if order.get("statusText", "").lower() not in ["removed", "failed", "expired"]
+    ]
+
     initial_count = len(download_orders)
-    logging.info(f"Found {initial_count} pending downloads")
+    logging.info(f"Found {initial_count} active pending downloads")
 
     if not download_orders:
-        logging.info("No pending download orders found")
+        logging.info("No active pending downloads found")
         return
 
     try:
