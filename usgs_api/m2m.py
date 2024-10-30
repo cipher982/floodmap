@@ -1,15 +1,18 @@
 import logging
+import os
 import requests
 import json
 import time
 from pathlib import Path
+from tqdm import tqdm
 
-from downloader import download_scenes
-from filters import Filter
+# from downloader import download_scenes
+# from filters import Filter
 
 
 M2M_ENDPOINT = "https://m2m.cr.usgs.gov/api/api/json/stable/"
 logging.getLogger("requests").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
 
 class M2MError(Exception):
@@ -118,7 +121,7 @@ class M2M:
             )
 
         # Search for scenes
-        logging.info(f"Searching for scenes in {dataset_name}...")
+        logger.info(f"Searching for scenes in {dataset_name}...")
         scenes = self._send_request(
             "scene-search",
             {
@@ -129,10 +132,10 @@ class M2M:
         )
 
         if not scenes["results"]:
-            logging.info("No scenes found.")
+            logger.info("No scenes found.")
             return []
 
-        logging.info(f"Found {len(scenes['results']):,} scenes.")
+        logger.info(f"Found {len(scenes['results']):,} scenes.")
 
         # Prepare download request
         entity_ids = [scene["entityId"] for scene in scenes["results"]]
@@ -148,12 +151,12 @@ class M2M:
         download_options = self._send_request(
             "download-options", {"datasetName": dataset_name, "listId": list_id}
         )
-        logging.info(
+        logger.info(
             f"Download options received: {json.dumps(download_options, indent=2)}"
         )
 
         if not download_options:
-            logging.info("No download options available.")
+            logger.info("No download options available.")
             return []
 
         # Request downloads
@@ -162,17 +165,17 @@ class M2M:
             downloads.append(
                 {"entityId": product["entityId"], "productId": product["id"]}
             )
-        logging.info(f"Requesting downloads for: {json.dumps(downloads, indent=2)}")
+        logger.info(f"Requesting downloads for: {json.dumps(downloads, indent=2)}")
 
         download_request = self._send_request(
             "download-request", {"downloads": downloads, "label": list_id}
         )
         json_response = json.dumps(download_request, indent=2)
-        logging.info(f"Download request response: {json_response}")
+        logger.info(f"Download request response: {json_response}")
 
         # In the download_scenes method, modify where we handle the preparingDownloads:
         if download_request.get("preparingDownloads"):
-            logging.info(
+            logger.info(
                 "Downloads are being prepared. Waiting for them to be ready..."
             )
             max_attempts = 10
@@ -193,7 +196,7 @@ class M2M:
                     ]
 
                     if not relevant_downloads:
-                        logging.error("No active downloads found")
+                        logger.error("No active downloads found")
                         return []
 
                     all_ready = all(
@@ -217,7 +220,7 @@ class M2M:
                             if matching_prep:
                                 download["url"] = matching_prep["url"]
                         downloads = relevant_downloads
-                        logging.info(
+                        logger.info(
                             f"All downloads are ready after {attempt + 1} attempts"
                         )
                         break
@@ -227,34 +230,52 @@ class M2M:
                             for d in relevant_downloads
                             if d.get("statusText", "").lower() == "available"
                         )
-                        logging.info(
+                        logger.info(
                             f"{ready_count}/{len(relevant_downloads)} downloads ready..."
                         )
                         time.sleep(wait_time)
 
-        logging.info(f"Available downloads: {json.dumps(downloads, indent=2)}")
+        logger.info(f"Available downloads: {json.dumps(downloads, indent=2)}")
 
-        # Get download metadata
-        download_meta = {}
-        search_result = self._send_request("download-search", {"label": list_id})
-        logging.info(f"Download search result: {json.dumps(search_result, indent=2)}")
-        if search_result:
-            for item in search_result:
-                download_meta[str(item["downloadId"])] = item
+        # Extract direct URLs for GeoTIFF downloads
+        geotiff_urls = [
+            download["url"] 
+            for download in downloads 
+            if download["productCode"] == "D539"
+        ]
+        
+        # Log URLs for manual download
+        for url in geotiff_urls:
+            logger.info(f"GeoTIFF direct download URL: {url}")
 
-        # Download files
-        logging.info(f"Starting download of {len(downloads):,} files...")
-        failed = download_scenes(downloads, download_meta, download_path)
+        # Download the URLs with tqdm and status tracking
+        failed_downloads = []
 
-        # Cleanup
-        self._send_request("download-order-remove", {"label": list_id})
+        for url in geotiff_urls:
+            local_filename = os.path.join(download_path, url.split("/")[-1])
+            try:
+                with requests.get(url, stream=True) as response:
+                    response.raise_for_status()
+                    total_size = int(response.headers.get("content-length", 0))
+                    with open(local_filename, "wb") as f, tqdm(
+                        total=total_size,
+                        unit="iB",
+                        unit_scale=True,
+                        desc=os.path.basename(local_filename),
+                    ) as pbar:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            size = f.write(chunk)
+                            pbar.update(size)
+                logger.info(f"Successfully downloaded {local_filename}")
+            except Exception as e:
+                logger.error(f"Failed to download {url}: {e}")
+                failed_downloads.append(url)
 
-        if failed:
-            logging.warning(f"Failed to download {len(failed)} scenes: {failed}")
+        if failed_downloads:
+            logger.warning(f"Failed to download {len(failed_downloads)} files: {failed_downloads}")
         else:
-            logging.info("All downloads completed successfully.")
+            logger.info("All downloads completed successfully.")
 
-        return [d for d in downloads if str(d.get("entityId")) not in failed]
 
     def downloadSearch(self, label=None):
         """Search downloads, filtering out inactive ones by default"""
@@ -293,23 +314,27 @@ class M2M:
         scenes = self._send_request("scene-search", params)
 
         if scenes["totalHits"] > scenes["recordsReturned"]:
-            logging.info(
+            logger.info(
                 f"Found {scenes['totalHits']} total scenes, returning first {scenes['recordsReturned']}"
             )
 
         return scenes
 
     def downloadOrderRemove(self, label):
-        """Remove a download order and verify removal"""
-        params = {"label": label}
-        response = self._send_request("download-order-remove", params)
-
-        # Verify removal by checking if downloads with this label still exist
-        remaining = self._send_request("download-search", {"label": label})
-        if remaining:
-            raise M2MError(f"Failed to remove downloads for label {label}")
-
-        return response
+        """Permanently remove all downloads (including historical) for a label"""
+        try:
+            # Remove all downloads with this label, regardless of status
+            self._send_request("download-order-remove", {"label": label})
+            
+            # Verify removal
+            remaining = self._send_request("download-search", {"label": label})
+            if remaining:
+                logger.warning(f"Failed to fully remove downloads for label {label}")
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"Error removing downloads: {e}")
+            return False
 
     def logout(self):
         """Logout from the API"""
