@@ -1,6 +1,7 @@
 import logging
 import requests
 import json
+import time
 from pathlib import Path
 
 from downloader import download_scenes
@@ -48,7 +49,7 @@ class M2M:
         config_file = Path.home() / ".config" / "m2m_api" / "config.json"
         try:
             return json.load(open(config_file))
-        except:
+        except (FileNotFoundError, json.JSONDecodeError):
             return {}
 
     def _store_credentials(self, username, token):
@@ -147,30 +148,70 @@ class M2M:
         download_options = self._send_request(
             "download-options", {"datasetName": dataset_name, "listId": list_id}
         )
+        logging.info(
+            f"Download options received: {json.dumps(download_options, indent=2)}"
+        )
 
         if not download_options:
             logging.info("No download options available.")
             return []
 
         # Request downloads
-        downloads = [
-            {"entityId": product["entityId"], "productId": product["id"]}
-            for product in download_options
-        ]
+        downloads = []
+        for product in download_options:
+            downloads.append(
+                {"entityId": product["entityId"], "productId": product["id"]}
+            )
+        logging.info(f"Requesting downloads for: {json.dumps(downloads, indent=2)}")
 
-        _ = self._send_request(
+        download_request = self._send_request(
             "download-request", {"downloads": downloads, "label": list_id}
         )
+        json_response = json.dumps(download_request, indent=2)
+        logging.info(f"Download request response: {json_response}")
+
+        # Enhanced download preparation handling
+        if download_request.get("preparingDownloads"):
+            logging.info("Downloads are being prepared. Waiting for them to be ready...")
+            max_attempts = 20  # Increased from 10
+            wait_time = 60  # Increased from 30
+            
+            for attempt in range(max_attempts):
+                search_result = self._send_request("download-search", {"label": list_id})
+                
+                if search_result:
+                    # Check if all downloads are actually ready
+                    all_ready = all(
+                        download.get("status", "").lower() == "available" 
+                        for download in search_result
+                    )
+                    
+                    if all_ready:
+                        downloads = search_result
+                        logging.info(f"All downloads are ready after {attempt + 1} attempts")
+                        break
+                    else:
+                        logging.info("Some downloads still preparing...")
+                
+                if attempt < max_attempts - 1:
+                    logging.info(f"Downloads not ready, waiting {wait_time} seconds...")
+                    time.sleep(wait_time)
+            else:
+                logging.error("Downloads failed to prepare after maximum attempts")
+                return []
+
+        logging.info(f"Available downloads: {json.dumps(downloads, indent=2)}")
 
         # Get download metadata
         download_meta = {}
         search_result = self._send_request("download-search", {"label": list_id})
+        logging.info(f"Download search result: {json.dumps(search_result, indent=2)}")
         if search_result:
             for item in search_result:
                 download_meta[str(item["downloadId"])] = item
 
         # Download files
-        logging.info(f"Starting download of {len(downloads)} files...")
+        logging.info(f"Starting download of {len(downloads):,} files...")
         failed = download_scenes(downloads, download_meta, download_path)
 
         # Cleanup
