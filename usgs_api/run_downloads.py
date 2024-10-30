@@ -150,7 +150,14 @@ def main():
             spatial_filter=spatial_filter,
             download_path="/Volumes/T9/srtm",
         )
-        logger.info(f"Successfully downloaded {len(downloaded):,} scenes")
+        if downloaded:
+            logger.info(f"Successfully downloaded {len(downloaded):,} scenes")
+        else:
+            logger.warning("No scenes were downloaded")
+
+        # After successful download, purge the download history
+        if m2m.downloadOrderRemove(list_id):
+            logging.info("Successfully cleaned up download history")
 
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
