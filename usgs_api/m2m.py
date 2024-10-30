@@ -1,10 +1,13 @@
 import logging
-import os
 import requests
 import json
 import time
 from pathlib import Path
 from tqdm import tqdm
+import concurrent.futures
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from concurrent.futures import ThreadPoolExecutor
 
 
 M2M_ENDPOINT = "https://m2m.cr.usgs.gov/api/api/json/stable/"
@@ -96,12 +99,67 @@ class M2M:
 
         return result["data"]
 
+    def _create_session(self):
+        """Create a requests session with retry strategy"""
+        session = requests.Session()
+        retries = Retry(
+            total=3, backoff_factor=0.5, status_forcelist=[500, 502, 503, 504]
+        )
+        adapter = HTTPAdapter(max_retries=retries, pool_connections=10, pool_maxsize=10)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        return session
+
     def datasetFilters(self, **args):
         """Create dataset filters from metadata info"""
         return {"metadataFilter": args.get("metadataInfo", [])}
 
+    def _download_file(self, download, download_dir, session):
+        """Download a single file with progress bar"""
+        try:
+            filename = download["url"].split("/")[-1]
+            file_path = download_dir / filename
+
+            # Skip if file already exists and has content
+            if file_path.exists() and file_path.stat().st_size > 0:
+                logger.info(f"Skipping existing file: {filename}")
+                return file_path, None
+
+            response = session.get(download["url"], stream=True)
+            response.raise_for_status()
+
+            filename = (
+                response.headers["content-disposition"]
+                .split("filename=")[-1]
+                .strip('"')
+            )
+            file_path = download_dir / filename
+
+            total_size = int(response.headers.get("content-length", 0))
+            if total_size == 0:
+                raise Exception("Content length is 0")
+
+            with open(file_path, "wb") as f:
+                with tqdm(
+                    total=total_size, unit="iB", unit_scale=True, desc=filename
+                ) as pbar:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        size = f.write(chunk)
+                        pbar.update(size)
+
+            return file_path, None
+        except Exception as e:
+            if file_path.exists():
+                file_path.unlink()
+            return download["url"], str(e)
+
     def download_scenes(
-        self, dataset_name, spatial_filter, max_results=100, download_path="downloads"
+        self,
+        dataset_name,
+        spatial_filter,
+        max_results=100,
+        download_path="downloads",
+        max_workers=5,
     ):
         """Download scenes for a given dataset and spatial filter."""
         if dataset_name not in self.datasets:
@@ -140,25 +198,20 @@ class M2M:
         if not download_options:
             logger.info("No download options available.")
             return []
-        # logger.info(f"Download options: {json.dumps(download_options, indent=2)}")
 
-        # Replace this block
         downloads = [
             {"entityId": product["entityId"], "productId": product["id"]}
             for product in download_options
             if product["productCode"] == "D539"  # Only GeoTIFF format
         ]
-        # logger.info(f"Downloads: {json.dumps(downloads, indent=2)}")
 
         # Request downloads
         download_request = self._send_request(
-            "download-request", {"downloads": downloads, "label": list_id}
+            "download-request", {"downloads": downloads[:max_results], "label": list_id}
         )
         if not download_request.get("preparingDownloads"):
             logger.info("No downloads are being prepared.")
             return []
-
-        # logger.info(f"Download request: {json.dumps(download_request, indent=2)}")
 
         # Wait for downloads to become available
         available_downloads = []
@@ -175,23 +228,44 @@ class M2M:
         # Create download directory
         download_dir = Path(download_path)
         download_dir.mkdir(parents=True, exist_ok=True)
+        session = self._create_session()
 
-        # Download available files
+        self._interrupted = False
         downloaded_files = []
-        for download in available_downloads:
-            # Get the actual filename from the download URL
-            response = requests.head(download["url"], allow_redirects=True)
-            content_disposition = response.headers.get("content-disposition", "")
-            filename = content_disposition.split("filename=")[-1].strip('"')
+        failed_downloads = []
+        skipped_files = []
 
-            # Download the file
-            response = requests.get(download["url"], stream=True)
-            file_path = download_dir / filename
-            with open(file_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            downloaded_files.append(file_path)
-            logger.info(f"Downloaded {file_path}")
+        # Main download loop
+        try:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [
+                    executor.submit(
+                        self._download_file, download, download_dir, session
+                    )
+                    for download in available_downloads
+                ]
+
+                for future in concurrent.futures.as_completed(futures):
+                    if self._interrupted:
+                        executor.shutdown(wait=False)
+                        break
+                    result, error = future.result()
+                    if error:
+                        failed_downloads.append((result, error))
+                        logger.error(f"Failed to download {result}: {error}")
+                    elif isinstance(result, Path) and result.exists():
+                        if result not in downloaded_files:
+                            downloaded_files.append(result)
+
+            logger.info(
+                f"Downloaded: {len(downloaded_files)}, Skipped: {len(skipped_files)}, Failed: {len(failed_downloads)}"
+            )
+            return downloaded_files
+
+        except KeyboardInterrupt:
+            self._interrupted = True
+            logger.info("Interrupting downloads...")
+            return downloaded_files
 
         return downloaded_files
 
@@ -253,6 +327,36 @@ class M2M:
         except Exception as e:
             logger.error(f"Error removing downloads: {e}")
             return False
+
+    def get_rate_limits(self):
+        try:
+            response = self._send_request("rate-limit-summary")
+
+            # Extract and format the response data for readability
+            formatted_response = (
+                "Rate Limits Full Response:\n"
+                "Initial Limits:\n"
+                f"  - Recent Download Count: {response['initialLimits'][0]['recentDownloadCount']}\n"
+                f"  - Pending Download Count: {response['initialLimits'][0]['pendingDownloadCount']}\n"
+                f"  - Unattempted Download Count: {response['initialLimits'][0]['unattemptedDownloadCount']}\n\n"
+                "Remaining Limits:\n"
+                "  - User Limits:\n"
+                f"      - Username: {response['remainingLimits'][0]['username']}\n"
+                f"      - Recent Download Count: {response['remainingLimits'][0]['recentDownloadCount']}\n"
+                f"      - Pending Download Count: {response['remainingLimits'][0]['pendingDownloadCount']}\n"
+                f"      - Unattempted Download Count: {response['remainingLimits'][0]['unattemptedDownloadCount']}\n"
+                "  - IP Limits:\n"
+                f"      - IP Address: {response['remainingLimits'][1]['ipAddress']}\n"
+                f"      - Recent Download Count: {response['remainingLimits'][1]['recentDownloadCount']}\n"
+                f"      - Pending Download Count: {response['remainingLimits'][1]['pendingDownloadCount']}\n"
+                f"      - Unattempted Download Count: {response['remainingLimits'][1]['unattemptedDownloadCount']}\n\n"
+                f"Recent Download Counts: {response.get('recentDownloadCounts', [])}\n"
+            )
+
+            return formatted_response
+
+        except Exception as e:
+            raise M2MError(f"Failed to get rate limits: {str(e)}")
 
     def logout(self):
         """Logout from the API"""
