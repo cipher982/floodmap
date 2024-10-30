@@ -58,53 +58,41 @@ def download_file(url, local_path, expected_size=None):
 
 
 def download_scenes(downloads, download_meta, download_path, max_workers=5):
+    """Download multiple scenes concurrently with proper progress tracking.
     """
-    Download multiple scenes concurrently with proper progress tracking.
-
-    Args:
-        downloads: List of download information dictionaries
-        download_meta: Dictionary containing metadata for downloads
-        download_path: Base path for downloads
-        max_workers: Maximum number of concurrent downloads
-
-    Returns:
-        List of failed download IDs
-    """
-    failed_downloads = []
-
     def download_with_retry(download):
-        download_id = str(download.get("downloadId", download.get("entityId")))
+        # Get download identifiers
+        download_id = str(download.get("downloadId"))
         meta = download_meta.get(download_id, {})
+        url = download.get("url") or meta.get("url")
+        
+        if not url:
+            logging.error(f"No URL found for download {download_id}")
+            return download_id
+            
+        # Create unique filename
+        display_id = meta.get("displayId") or download.get("displayId") or download_id
+        local_path = osp.join(download_path, f"{display_id}_{download_id}.tar")
+        expected_size = meta.get("filesize") or download.get("filesize")
 
-        url = meta.get("url") or download.get("url")
-        display_id = meta.get("displayId", download_id)
-        local_path = osp.join(download_path, f"{display_id}.tar")
-        expected_size = meta.get("fileSize")
-
-        max_retries = 3
-        for attempt in range(max_retries):
+        # Attempt download with retries
+        for attempt in range(3):
             try:
                 download_file(url, local_path, expected_size)
                 return None
             except DownloadError as e:
                 logging.warning(
-                    f"Download attempt {attempt + 1}/{max_retries} failed for {display_id}: {e}"
+                    f"Download attempt {attempt + 1}/3 failed for {display_id}: {e}"
                 )
-                if attempt == max_retries - 1:
+                if attempt == 2:  # Last attempt failed
                     return download_id
 
+    # Execute downloads in parallel
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
-        for download in downloads:
-            if not available_locally(download, download_meta, download_path):
-                futures.append(executor.submit(download_with_retry, download))
-
-        for future in futures:
-            result = future.result()
-            if result:
-                failed_downloads.append(result)
-
-    return failed_downloads
+        results = list(executor.map(download_with_retry, downloads))
+        
+    # Return list of failed download IDs
+    return [r for r in results if r is not None]
 
 
 def available_locally(download, download_meta, download_path):

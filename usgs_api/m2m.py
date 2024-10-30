@@ -170,35 +170,67 @@ class M2M:
         json_response = json.dumps(download_request, indent=2)
         logging.info(f"Download request response: {json_response}")
 
-        # Enhanced download preparation handling
+        # In the download_scenes method, modify where we handle the preparingDownloads:
         if download_request.get("preparingDownloads"):
-            logging.info("Downloads are being prepared. Waiting for them to be ready...")
-            max_attempts = 20  # Increased from 10
-            wait_time = 60  # Increased from 30
-            
+            logging.info(
+                "Downloads are being prepared. Waiting for them to be ready..."
+            )
+            max_attempts = 10
+            wait_time = 30
+
             for attempt in range(max_attempts):
-                search_result = self._send_request("download-search", {"label": list_id})
-                
+                search_result = self._send_request(
+                    "download-search", {"label": list_id}
+                )
+
                 if search_result:
-                    # Check if all downloads are actually ready
+                    # Filter for only relevant downloads and check their status
+                    relevant_downloads = [
+                        d
+                        for d in search_result
+                        if d.get("statusText", "").lower()
+                        not in ["removed", "failed", "expired"]
+                    ]
+
+                    if not relevant_downloads:
+                        logging.error("No active downloads found")
+                        return []
+
                     all_ready = all(
-                        download.get("status", "").lower() == "available" 
-                        for download in search_result
+                        d.get("statusText", "").lower() == "available"
+                        for d in relevant_downloads
                     )
-                    
+
                     if all_ready:
-                        downloads = search_result
-                        logging.info(f"All downloads are ready after {attempt + 1} attempts")
+                        # Get the download URLs for each download
+                        for download in relevant_downloads:
+                            download_id = str(download["downloadId"])
+                            # Get the URL from the preparingDownloads list
+                            matching_prep = next(
+                                (
+                                    d
+                                    for d in download_request["preparingDownloads"]
+                                    if str(d["downloadId"]) == download_id
+                                ),
+                                None,
+                            )
+                            if matching_prep:
+                                download["url"] = matching_prep["url"]
+                        downloads = relevant_downloads
+                        logging.info(
+                            f"All downloads are ready after {attempt + 1} attempts"
+                        )
                         break
                     else:
-                        logging.info("Some downloads still preparing...")
-                
-                if attempt < max_attempts - 1:
-                    logging.info(f"Downloads not ready, waiting {wait_time} seconds...")
-                    time.sleep(wait_time)
-            else:
-                logging.error("Downloads failed to prepare after maximum attempts")
-                return []
+                        ready_count = sum(
+                            1
+                            for d in relevant_downloads
+                            if d.get("statusText", "").lower() == "available"
+                        )
+                        logging.info(
+                            f"{ready_count}/{len(relevant_downloads)} downloads ready..."
+                        )
+                        time.sleep(wait_time)
 
         logging.info(f"Available downloads: {json.dumps(downloads, indent=2)}")
 
@@ -225,10 +257,18 @@ class M2M:
         return [d for d in downloads if str(d.get("entityId")) not in failed]
 
     def downloadSearch(self, label=None):
-        if label is not None:
-            params = {"label": label}
-            return self._send_request("download-search", params)
-        return self._send_request("download-search")
+        """Search downloads, filtering out inactive ones by default"""
+        params = {"label": label} if label else {}
+        results = self._send_request("download-search", params)
+
+        # Filter out inactive downloads
+        active_downloads = [
+            download
+            for download in results
+            if download.get("statusText", "").lower()
+            not in ["removed", "failed", "expired"]
+        ]
+        return active_downloads
 
     def searchScenes(self, datasetName, spatial_filter=None, max_results=100, **args):
         if datasetName not in self.datasets:
