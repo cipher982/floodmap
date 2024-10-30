@@ -18,7 +18,9 @@ def remove_download(m2m, order):
     try:
         if "downloadId" in order:
             # logging.info(f"Attempting to remove download ID: {order['downloadId']}")
-            response = m2m._send_request("download-remove", {"downloadId": order["downloadId"]})
+            response = m2m._send_request(
+                "download-remove", {"downloadId": order["downloadId"]}
+            )
             if response:
                 return True, order["downloadId"]
             else:
@@ -27,50 +29,42 @@ def remove_download(m2m, order):
     except Exception as e:
         return False, f"Error clearing download {order.get('downloadId')}: {str(e)}"
 
-def clear_pending_downloads(m2m, max_workers=5):
+
+def clear_pending_downloads(m2m, max_workers):
     """Clear pending downloads concurrently with progress tracking"""
     logging.info("Fetching pending downloads...")
+
+    download_orders = m2m.downloadSearch()
+    initial_count = len(download_orders)
+    logging.info(f"Found {initial_count} pending downloads")
+
+    if not download_orders:
+        logging.info("No pending download orders found")
+        return
+
     try:
-        download_orders = m2m.downloadSearch()
-        initial_count = len(download_orders)
-        logging.info(f"Found {initial_count} pending downloads")
-
-        if not download_orders:
-            logging.info("No pending download orders found")
-            return
-        
-        # Store initial download IDs
-        initial_ids = {order["downloadId"] for order in download_orders if "downloadId" in order}
-        logging.info(f"Initial download IDs (first 5): {list(initial_ids)[:5]}")
-
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Create partial function with m2m argument fixed
             fn = partial(remove_download, m2m)
-            
-            # Process downloads with progress bar
-            futures = list(tqdm(
-                executor.map(fn, download_orders),
-                total=len(download_orders),
-                desc="Clearing downloads"
-            ))
+            futures = list(
+                tqdm(
+                    executor.map(fn, download_orders),
+                    total=len(download_orders),
+                    desc="Clearing downloads",
+                )
+            )
 
-            # Log results
-            for success, msg in futures:
-                if success:
-                    logging.info(f"Successfully removed download ID: {msg}")
-                else:
-                    logging.error(msg)
-    
-        # Verify specific removals
+        # Count actual successful removals
+        successful_removals = sum(1 for success, _ in futures if success)
+        logging.info(f"Successfully removed {successful_removals} downloads")
+
+        # Verify remaining downloads
         remaining_downloads = m2m.downloadSearch()
-        remaining_ids = {order["downloadId"] for order in remaining_downloads if "downloadId" in order}
-        
-        removed_ids = initial_ids - remaining_ids
-        logging.info(f"Successfully removed {len(removed_ids)} downloads")
-        logging.info(f"Failed to remove {len(initial_ids - removed_ids)} downloads")
+        if remaining_downloads:
+            logging.warning(f"Still have {len(remaining_downloads)} pending downloads")
 
     except Exception as e:
         logging.error(f"Error in clear_pending_downloads: {str(e)}")
+
 
 # Example usage
 # spatial_filter = {
@@ -85,7 +79,7 @@ def main():
     logger = logging.getLogger(__name__)
 
     try:
-        clear_pending_downloads(m2m)
+        clear_pending_downloads(m2m, 10)
 
         spatial_filter = {
             "filterType": "mbr",
@@ -146,13 +140,13 @@ def main():
                 for download in download_response["preparingDownloads"]:
                     logger.info(f"Preparing download URL: {download.get('url')}")
 
-        # # Proceed with bulk download
-        # downloaded = m2m.download_scenes(
-        #     dataset_name="srtm_v3",
-        #     spatial_filter=spatial_filter,
-        #     download_path="/Volumes/T9/srtm",
-        # )
-        # logger.info(f"Successfully downloaded {len(downloaded):,} scenes")
+        # Proceed with bulk download
+        downloaded = m2m.download_scenes(
+            dataset_name="srtm_v3",
+            spatial_filter=spatial_filter,
+            download_path="/Volumes/T9/srtm",
+        )
+        logger.info(f"Successfully downloaded {len(downloaded):,} scenes")
 
     except Exception as e:
         logger.info(f"Unexpected error: {e}")
