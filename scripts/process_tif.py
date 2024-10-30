@@ -1,9 +1,16 @@
 import os
 import subprocess
 import numpy as np
-from osgeo import gdal
-import configparser
+from osgeo import gdal  # type: ignore
+from tqdm import tqdm
 import logging
+import dotenv
+
+os.environ["GDAL_LIBRARY_PATH"] = "/opt/homebrew/lib/libgdal.dylib"
+os.environ["PROJ_LIB"] = "/opt/homebrew/share/proj"
+
+dotenv.load_dotenv()
+
 
 gdal.UseExceptions()
 
@@ -12,28 +19,69 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Read configuration
-config = configparser.ConfigParser()
-config.read("config.ini")
 
-INPUT_DIR = config.get("Paths", "input_dir", fallback="./data")
-OUTPUT_DIR = config.get("Paths", "output_dir", fallback="./processed_data")
-COLOR_RAMP = config.get("Files", "color_ramp", fallback="./scripts/color_ramp.txt")
+INPUT_DIR = os.getenv("INPUT_DIR")
+OUTPUT_DIR = os.getenv("OUTPUT_DIR")
+COLOR_RAMP = os.getenv("COLOR_RAMP")
 # Update these constants
-ZOOM_RANGE = (10, 15)
+ZOOM_RANGE = (10, 12)
 
 MIN_ELEVATION = 0
 MAX_ELEVATION = 20  # feet
 
-NUM_CORES = 10
+NUM_CORES = 12
+MEMORY_LIMIT = 32768  # 32GB RAM allocation for GDAL
 
 
 def merge_tif_files(input_files, output_file):
-    """Merge multiple TIF files into a single file."""
-    logging.info(f"Merging {len(input_files)} TIF files into {output_file}")
-    merge_command = ["gdal_merge.py", "-o", output_file, "-of", "GTiff"]
-    merge_command.extend(input_files)
-    subprocess.run(merge_command, check=True, capture_output=True, text=True)
+    """Merge multiple TIF files into a single file using batches."""
+    total_files = len(input_files)
+    logging.info(f"Merging {total_files} TIF files into {output_file}")
+
+    batch_size = 50
+    batched_files = [
+        input_files[i : i + batch_size] for i in range(0, total_files, batch_size)
+    ]
+
+    temp_vrt = output_file.replace(".tif", "_temp.vrt")
+
+    base_command = ["gdalbuildvrt", "-resolution", "highest", "-r", "nearest", temp_vrt]
+
+    with tqdm(total=total_files, desc="Merging TIF files") as pbar:
+        for i, batch in enumerate(batched_files):
+            merge_command = base_command + batch
+
+            try:
+                result = subprocess.run(merge_command, capture_output=True, text=True)
+                if result.returncode != 0:
+                    logging.error(f"Error in merge batch {i+1}: {result.stderr}")
+                    raise subprocess.CalledProcessError(
+                        result.returncode, merge_command, result.stdout, result.stderr
+                    )
+                pbar.update(len(batch))
+            except subprocess.CalledProcessError as e:
+                logging.error(f"Error in merge batch {i+1}: {e.stderr}")
+                raise
+
+        # Convert final VRT to GeoTIFF
+        logging.info("Converting VRT to GeoTIFF...")
+        translate_command = [
+            "gdal_translate",
+            "-of",
+            "GTiff",
+            "--config",
+            "GDAL_NUM_THREADS",
+            str(NUM_CORES),
+            "--config",
+            "GDAL_CACHEMAX",
+            str(MEMORY_LIMIT),
+            temp_vrt,
+            output_file,
+        ]
+
+        subprocess.run(translate_command, check=True)
+        os.remove(temp_vrt)  # Clean up temporary VRT file
+
     logging.info("Merge complete")
 
 
@@ -54,7 +102,7 @@ def elevation_to_color(elevation):
 def create_dynamic_color_ramp(min_elevation, max_elevation, num_steps=256):
     """Create a color ramp based on the elevation range."""
     elevations = np.linspace(min_elevation, max_elevation, num_steps)
-    colors = [elevation_to_color(e, min_elevation, max_elevation) for e in elevations]
+    colors = [elevation_to_color(e) for e in elevations]
     return list(zip(elevations, colors))
 
 
@@ -91,70 +139,62 @@ def process_tif_file(input_file, output_dir):
         lat_max = geotransform[3]
         lon_max = lon_min + width * geotransform[1]
         lat_min = lat_max + height * geotransform[5]
-
         logging.info(f"File: {base_name}")
         logging.info(f"Bounding Box: ({lat_min}, {lon_min}) to ({lat_max}, {lon_max})")
         logging.info(f"Elevation range: {min_elevation} to {max_elevation}")
 
-        # Create dynamic color ramp
-        # color_ramp = create_dynamic_color_ramp(min_elevation, max_elevation)
+        # Create color ramp
         color_ramp = create_fixed_color_ramp()
         fixed_ramp_file = os.path.join(output_dir, f"{base_name}_color_ramp.txt")
         write_color_ramp_file(color_ramp, fixed_ramp_file)
 
+        # Add this section here - before the tile generation
+        logging.info("Applying color ramp...")
+        cmd = [
+            "gdaldem",
+            "color-relief",
+            "-alpha",
+            input_file,
+            fixed_ramp_file,
+            output_file
+        ]
+        subprocess.run(cmd, check=True)
+
         os.environ["GDAL_NUM_THREADS"] = str(NUM_CORES)
 
-        # Generate color relief using the dynamic color ramp
-        subprocess.run(
-            [
-                "gdaldem",
-                "color-relief",
-                "-co",
-                "TILED=YES",
-                "-co",
-                "COMPRESS=LZW",
-                "-co",
-                "BIGTIFF=YES",
-                input_file,
-                fixed_ramp_file,
-                output_file,
-            ],
-            check=True,
-            capture_output=True,
-        )
+        with tqdm(desc="Generating tiles") as pbar:
+            for zoom in range(ZOOM_RANGE[0], ZOOM_RANGE[1] + 1):
+                zoom_dir = os.path.join(tiles_dir, str(zoom))
+                os.makedirs(zoom_dir, exist_ok=True)
 
-        for zoom in range(ZOOM_RANGE[0], ZOOM_RANGE[1] + 1):
-            zoom_dir = os.path.join(tiles_dir, str(zoom))
-            os.makedirs(zoom_dir, exist_ok=True)
-            cmd = [
-                "gdal2tiles.py",
-                "--xyz",
-                "-z",
-                f"{zoom}",  # Changed to process one zoom level at a time
-                "-w",
-                "none",
-                "--processes",
-                str(NUM_CORES),  # Use all available cores
-                "-r",
-                "average",  # Use average resampling for better quality
-                output_file,
-                tiles_dir,
-            ]
-            logging.info(f"Running command: {' '.join(cmd)}")
-            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-            logging.info(f"Command output: {result.stdout}")
+                logging.info(f"Processing zoom level {zoom}")
+                cmd = [
+                    "gdal2tiles.py",
+                    "--xyz",
+                    "-z",
+                    f"{zoom}",
+                    "-w",
+                    "none",
+                    "--processes",
+                    str(NUM_CORES),
+                    "-r",
+                    "average",
+                    output_file,
+                    tiles_dir,
+                ]
 
-            # Log generated tiles
-            generated_tiles = []
-            for root, dirs, files in os.walk(zoom_dir):
-                for file in files:
-                    if file.endswith(".png"):
-                        tile_path = os.path.relpath(os.path.join(root, file), zoom_dir)
-                        generated_tiles.append(tile_path)
+                _ = subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+                # Count actual tiles generated
+                tiles_count = 0
+                for root, _, files in os.walk(zoom_dir):
+                    tiles_count += sum(1 for f in files if f.endswith(".png"))
+                pbar.update(tiles_count)
+                logging.info(f"Generated {tiles_count} tiles at zoom level {zoom}")
 
         logging.info(f"Processed {base_name}")
-
         return True
+
     except subprocess.CalledProcessError as e:
         logging.error(f"Error processing {input_file}: {e}")
         logging.error(f"Command output: {e.stdout}")
