@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import dotenv
@@ -76,14 +75,6 @@ def clear_pending_downloads(m2m, max_workers):
         logging.error(f"Error in clear_pending_downloads: {str(e)}")
 
 
-# Example usage
-# spatial_filter = {
-#     "filterType": "mbr",
-#     "lowerLeft": {"latitude": 9.4491, "longitude": -153.9844},
-#     "upperRight": {"latitude": 58.9500, "longitude": -40.2539},
-# }
-
-
 def main():
     m2m = M2M(username=os.getenv("USGS_USER"), token=os.getenv("USGS_TOKEN"))
     logger = logging.getLogger(__name__)
@@ -92,58 +83,23 @@ def main():
         # Clear any pending downloads first
         clear_pending_downloads(m2m, 10)
 
-        # Define area of interest (San Francisco Bay Area)
+        # SF Bay Area
         spatial_filter = {
             "filterType": "mbr",
             "lowerLeft": {"latitude": 37.5, "longitude": -122.5},
             "upperRight": {"latitude": 37.8, "longitude": -122.2},
         }
 
+        # USA
+        spatial_filter = {
+            "filterType": "mbr",
+            "lowerLeft": {"latitude": 9.4491, "longitude": -153.9844},
+            "upperRight": {"latitude": 58.9500, "longitude": -40.2539},
+        }
+
         # 1. Search for scenes in the area
         scenes = m2m.searchScenes("srtm_v3", spatial_filter=spatial_filter)
         logger.info(f"Found {len(scenes.get('results', [])):,} scenes")
-
-        # 2. Get download options first to filter for GeoTIFF
-        download_options = m2m._send_request(
-            "download-options",
-            {
-                "datasetName": "srtm_v3",
-                "entityIds": [scene["entityId"] for scene in scenes.get("results", [])],
-            },
-        )
-
-        # Filter for GeoTIFF only
-        geotiff_downloads = [
-            product["entityId"]
-            for product in download_options
-            if product["productCode"] == "D539"  # GeoTIFF format
-        ]
-
-        # 3. Create list with only GeoTIFF scenes
-        list_id = "download_srtm_batch"
-        m2m._send_request(
-            "scene-list-add",
-            {
-                "listId": list_id,
-                "datasetName": "srtm_v3",
-                "entityIds": geotiff_downloads,
-            },
-        )
-
-        # 4. Request the downloads
-        downloads = [
-            {"entityId": entity_id, "productId": "D539"}
-            for entity_id in geotiff_downloads
-        ]
-
-        download_response = m2m._send_request(
-            "download-request", {"downloads": downloads, "label": list_id}
-        )
-
-        # Log and start downloads
-        if download_response.get("availableDownloads"):
-            for download in download_response["availableDownloads"]:
-                logger.info(f"Available download URL: {download.get('url')}")
 
         downloaded = m2m.download_scenes(
             dataset_name="srtm_v3",
@@ -154,10 +110,6 @@ def main():
             logger.info(f"Successfully downloaded {len(downloaded):,} scenes")
         else:
             logger.warning("No scenes were downloaded")
-
-        # After successful download, purge the download history
-        if m2m.downloadOrderRemove(list_id):
-            logging.info("Successfully cleaned up download history")
 
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
