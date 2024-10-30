@@ -20,9 +20,9 @@ logging.basicConfig(
 )
 
 
-INPUT_DIR = os.getenv("INPUT_DIR")
-OUTPUT_DIR = os.getenv("OUTPUT_DIR")
-COLOR_RAMP = os.getenv("COLOR_RAMP")
+INPUT_DIR = str(os.getenv("INPUT_DIR"))
+PROCESSED_DIR = str(os.getenv("PROCESSED_DIR"))
+COLOR_RAMP = str(os.getenv("COLOR_RAMP"))
 # Update these constants
 ZOOM_RANGE = (10, 12)
 
@@ -84,6 +84,21 @@ def merge_tif_files(input_files, output_file):
 
     logging.info("Merge complete")
 
+    # After merge is complete, log the bounds of merged file
+    ds = gdal.Open(output_file)
+    geotransform = ds.GetGeoTransform()
+    width = ds.RasterXSize
+    height = ds.RasterYSize
+    
+    lon_min = geotransform[0]
+    lat_max = geotransform[3]
+    lon_max = lon_min + width * geotransform[1]
+    lat_min = lat_max + height * geotransform[5]
+    
+    logging.info("Merged file bounds:")
+    logging.info(f"Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
+    logging.info(f"Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
+
 
 def elevation_to_color(elevation):
     """Generate a color based on elevation (0-20 feet scale)."""
@@ -120,6 +135,87 @@ def write_color_ramp_file(color_ramp, output_file):
             f.write(f"{elevation} {r} {g} {b} 255\n")
 
 
+def analyze_tif_files(input_dir):
+    """Analyze all TIF files in directory to determine coverage."""
+    files = [f for f in os.listdir(input_dir) if f.endswith('.tif')]
+    
+    all_bounds = []
+    lat_min_global = float('inf')
+    lat_max_global = float('-inf')
+    lon_min_global = float('inf')
+    lon_max_global = float('-inf')
+    
+    logging.info(f"Analyzing {len(files)} TIF files...")
+    
+    for file in tqdm(files, desc="Analyzing files"):
+        filepath = os.path.join(input_dir, file)
+        ds = gdal.Open(filepath)
+        geotransform = ds.GetGeoTransform()
+        width = ds.RasterXSize
+        height = ds.RasterYSize
+        
+        lon_min = geotransform[0]
+        lat_max = geotransform[3]
+        lon_max = lon_min + width * geotransform[1]
+        lat_min = lat_max + height * geotransform[5]
+        
+        all_bounds.append({
+            'file': file,
+            'lat_min': lat_min,
+            'lat_max': lat_max,
+            'lon_min': lon_min,
+            'lon_max': lon_max
+        })
+        
+        # Update global bounds
+        lat_min_global = min(lat_min_global, lat_min)
+        lat_max_global = max(lat_max_global, lat_max)
+        lon_min_global = min(lon_min_global, lon_min)
+        lon_max_global = max(lon_max_global, lon_max)
+    
+    # Sort by latitude and longitude for better organization
+    all_bounds.sort(key=lambda x: (-x['lat_max'], x['lon_min']))
+    
+    logging.info("\nOverall Coverage:")
+    logging.info(f"Latitude:  {lat_min_global:.4f}°N to {lat_max_global:.4f}°N")
+    logging.info(f"Longitude: {lon_min_global:.4f}°W to {lon_max_global:.4f}°W")
+
+    # Modify the range calculation section
+    lat_ranges = []
+    lon_ranges = []
+    
+    for bound in all_bounds:
+        # Round to nearest degree for better grouping
+        lat_min_round = round(bound["lat_min"])
+        lat_max_round = round(bound["lat_max"])
+        lon_min_round = round(bound["lon_min"])
+        lon_max_round = round(bound["lon_max"])
+        
+        # Store as tuples for easier sorting
+        lat_ranges.append((lat_min_round, lat_max_round))
+        lon_ranges.append((lon_min_round, lon_max_round))
+    
+    # Remove duplicates and sort
+    lat_ranges = sorted(set(lat_ranges), key=lambda x: x[0], reverse=True)
+    lon_ranges = sorted(set(lon_ranges), key=lambda x: x[0])
+    
+    logging.info("\nCoverage Summary:")
+    logging.info(f"Total files: {len(files)}")
+    logging.info(f"Latitude ranges: {len(lat_ranges)} unique ranges")
+    logging.info(f"Northernmost: {lat_max_global:.4f}°N")
+    logging.info(f"Southernmost: {lat_min_global:.4f}°N")
+    logging.info(f"Longitude ranges: {len(lon_ranges)} unique ranges")
+    logging.info(f"Westernmost: {lon_min_global:.4f}°W")
+    logging.info(f"Easternmost: {lon_max_global:.4f}°W")
+    
+    # Print some example ranges for verification
+    logging.info("\nExample ranges:")
+    logging.info(f"First 3 latitude ranges: {[f'{x[0]}-{x[1]}N' for x in lat_ranges[:3]]}")
+    logging.info(f"First 3 longitude ranges: {[f'{x[0]}-{x[1]}W' for x in lon_ranges[:3]]}")
+    
+    return all_bounds
+
+
 def process_tif_file(input_file, output_dir):
     try:
         base_name = os.path.splitext(os.path.basename(input_file))[0]
@@ -128,40 +224,40 @@ def process_tif_file(input_file, output_dir):
 
         # Get elevation range and geotransform
         ds = gdal.Open(input_file)
-        band = ds.GetRasterBand(1)
-        min_elevation, max_elevation = band.ComputeRasterMinMax()
-        geotransform = ds.GetGeoTransform()
+        logging.info(f"Input projection: {ds.GetProjection()}")
+        
+        # First, reproject to Web Mercator (EPSG:3857)
+        reprojected_file = os.path.join(output_dir, f"{base_name}_mercator.tif")
+        logging.info("Reprojecting to Web Mercator...")
+        cmd = [
+            "gdalwarp",
+            "-s_srs", "EPSG:4326",
+            "-t_srs", "EPSG:3857",
+            "-r", "bilinear",
+            input_file,
+            reprojected_file
+        ]
+        subprocess.run(cmd, check=True)
 
-        # Calculate and log the bounding box
-        width = ds.RasterXSize
-        height = ds.RasterYSize
-        lon_min = geotransform[0]
-        lat_max = geotransform[3]
-        lon_max = lon_min + width * geotransform[1]
-        lat_min = lat_max + height * geotransform[5]
-        logging.info(f"File: {base_name}")
-        logging.info(f"Bounding Box: ({lat_min}, {lon_min}) to ({lat_max}, {lon_max})")
-        logging.info(f"Elevation range: {min_elevation} to {max_elevation}")
-
-        # Create color ramp
+        # Apply color ramp to the reprojected file
+        logging.info("Applying color ramp...")
         color_ramp = create_fixed_color_ramp()
         fixed_ramp_file = os.path.join(output_dir, f"{base_name}_color_ramp.txt")
         write_color_ramp_file(color_ramp, fixed_ramp_file)
-
-        # Add this section here - before the tile generation
-        logging.info("Applying color ramp...")
+        
         cmd = [
             "gdaldem",
             "color-relief",
             "-alpha",
-            input_file,
+            reprojected_file,
             fixed_ramp_file,
             output_file
         ]
         subprocess.run(cmd, check=True)
 
+        # Generate tiles from the reprojected and colored file
         os.environ["GDAL_NUM_THREADS"] = str(NUM_CORES)
-
+        
         with tqdm(desc="Generating tiles") as pbar:
             for zoom in range(ZOOM_RANGE[0], ZOOM_RANGE[1] + 1):
                 zoom_dir = os.path.join(tiles_dir, str(zoom))
@@ -171,42 +267,48 @@ def process_tif_file(input_file, output_dir):
                 cmd = [
                     "gdal2tiles.py",
                     "--xyz",
-                    "-z",
-                    f"{zoom}",
-                    "-w",
-                    "none",
-                    "--processes",
-                    str(NUM_CORES),
-                    "-r",
-                    "average",
+                    "-z", f"{zoom}",
+                    "-w", "none",
+                    "--processes", str(NUM_CORES),
+                    "-r", "average",
+                    "--profile", "mercator",
                     output_file,
                     tiles_dir,
                 ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    logging.error(f"Tile generation error: {result.stderr}")
+                    raise subprocess.CalledProcessError(result.returncode, cmd)
 
-                _ = subprocess.run(cmd, check=True, capture_output=True, text=True)
-
-                # Count actual tiles generated
+                # Count tiles
                 tiles_count = 0
                 for root, _, files in os.walk(zoom_dir):
                     tiles_count += sum(1 for f in files if f.endswith(".png"))
                 pbar.update(tiles_count)
                 logging.info(f"Generated {tiles_count} tiles at zoom level {zoom}")
 
-        logging.info(f"Processed {base_name}")
+        # Clean up intermediate files
+        os.remove(reprojected_file)
+        os.remove(fixed_ramp_file)
+
         return True
 
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Error processing {input_file}: {e}")
-        logging.error(f"Command output: {e.stdout}")
-        logging.error(f"Command error: {e.stderr}")
-        return False
     except Exception as e:
-        logging.error(f"Unexpected error processing {input_file}: {e}")
+        logging.error(f"Error processing {input_file}: {str(e)}")
         return False
 
 
 def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    bounds = analyze_tif_files(INPUT_DIR)
+
+    # Ask for confirmation before proceeding
+    response = input("\nProceed with processing? (y/n): ")
+    if response.lower() != 'y':
+        logging.info("Processing cancelled")
+        return
+
+    os.makedirs(PROCESSED_DIR, exist_ok=True)
 
     files_to_process = [
         os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR) if f.endswith(".tif")
@@ -217,11 +319,11 @@ def main():
         return
 
     # Merge all input files
-    merged_file = os.path.join(OUTPUT_DIR, "merged_input.tif")
+    merged_file = os.path.join(PROCESSED_DIR, "merged_input.tif")
     merge_tif_files(files_to_process, merged_file)
 
     # Process the merged file
-    process_tif_file(merged_file, OUTPUT_DIR)
+    process_tif_file(merged_file, PROCESSED_DIR)
 
 
 if __name__ == "__main__":
