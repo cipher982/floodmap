@@ -2,6 +2,7 @@ import requests
 import logging
 import os
 import colorsys
+from dataclasses import dataclass
 from math import floor
 import math
 
@@ -25,6 +26,7 @@ from dotenv import load_dotenv
 from googlemaps import Client as GoogleMaps
 
 import rasterio
+from rasterio.transform import rowcol
 
 
 load_dotenv()
@@ -43,8 +45,9 @@ app, rt = fast_app(
 
 DEBUG_COORDS = (27.95053694962414, -82.4585769277307)
 DEBUG_IP = "23.111.165.2"
-TILES_DIR = "./processed_data/tiles"
-ALLOWED_ZOOM_LEVELS = [10, 11, 12, 13, 14, 15]
+TILES_DIR = str(os.getenv("PROCESSED_DIR")) + "/tiles"
+# ALLOWED_ZOOM_LEVELS = [10, 11, 12, 13, 14, 15]
+ALLOWED_ZOOM_LEVELS = [10, 11, 12]
 MAP_HEIGHT = "600px"
 
 
@@ -54,9 +57,18 @@ gmaps_api_key = os.environ.get("GMAP_API_KEY")
 assert gmaps_api_key is not None, "GMAP_API_KEY is not set"
 
 # Global variables to store the TIF data
-tif_data = None
-tif_bounds = None
-tif_transform = None
+tif_data: list = []
+tif_bounds: list = []
+tif_transform: list = []
+
+
+@dataclass
+class LocationInfo:
+    city: str = "Unknown"
+    region: str = "Unknown"
+    country: str = "Unknown"
+    latitude: float = 0.0
+    longitude: float = 0.0
 
 
 gmaps = GoogleMaps(key=gmaps_api_key)
@@ -93,12 +105,19 @@ def preload_tile_paths():
     tile_set = set()
 
     if os.path.exists(TILES_DIR):
+        # Add debug logging for the tiles directory
+        logger.info(f"Loading tiles from: {TILES_DIR}")
+        
         for root, dirs, files in os.walk(TILES_DIR):
             for file in files:
                 if file.endswith(".png"):
                     relative_path = os.path.relpath(os.path.join(root, file), TILES_DIR)
-                    tile_set.add(relative_path.replace("\\", "/"))
-        logger.info(f"Preloaded {len(tile_set)} tile paths.")
+                    tile_path = relative_path.replace("\\", "/")
+                    tile_set.add(tile_path)
+                    
+        # Add debug logging for some sample tiles
+        sample_tiles = list(tile_set)[:5]
+        logger.info(f"Sample tile paths: {sample_tiles}")
     else:
         logger.warning(f"Tiles directory not found: {TILES_DIR}")
 
@@ -112,8 +131,27 @@ def lat_lon_to_tile(lat, lon, zoom):
     n = 2.0**zoom
     xtile = floor((lon + 180.0) / 360.0 * n)
     ytile = floor((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n)
+    logger.info(f"Converting lat={lat}, lon={lon}, zoom={zoom} to tile: x={xtile}, y={ytile}")
     return xtile, ytile
 
+def tile_to_lat_lon(x, y, zoom):
+    n = 2.0 ** zoom
+    lon_deg = (x / n * 360.0) - 180.0
+    lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * y / n)))
+    lat_deg = math.degrees(lat_rad)
+    return lat_deg, lon_deg
+
+# Add this debug code temporarily to understand coverage:
+z = 11
+min_x, max_x = 307, 665
+min_y, max_y = 616, 657
+
+nw_lat, nw_lon = tile_to_lat_lon(min_x, min_y, z)
+se_lat, se_lon = tile_to_lat_lon(max_x, max_y, z)
+
+logger.info(f"Coverage at zoom {z}:")
+logger.info(f"NW corner: {nw_lat:.4f}°N, {nw_lon:.4f}°W")
+logger.info(f"SE corner: {se_lat:.4f}°N, {se_lon:.4f}°W")
 
 def get_elevation_from_memory(latitude, longitude):
     # logger.info(f"Getting elevation for lat={latitude}, lon={longitude}")
@@ -123,7 +161,7 @@ def get_elevation_from_memory(latitude, longitude):
             and bounds.bottom <= latitude <= bounds.top
         ):
             # Use rasterio's index function to get row, col
-            row, col = rasterio.transform.rowcol(tif_transform[i], longitude, latitude)
+            row, col = rowcol(tif_transform[i], longitude, latitude)
             # logger.info(f"Calculated row={row}, col={col}")
 
             # Convert row and col to integers
@@ -181,12 +219,8 @@ def get_elevation_data(center_lat, center_lng, radius=0.05):
             min_lng, max_lng = center_lng - radius, center_lng + radius
 
             # Convert lat/lon to row/col
-            row_min, col_min = map(
-                int, rasterio.transform.rowcol(tif_transform[i], min_lng, max_lat)
-            )
-            row_max, col_max = map(
-                int, rasterio.transform.rowcol(tif_transform[i], max_lng, min_lat)
-            )
+            row_min, col_min = map(int, rowcol(tif_transform[i], min_lng, max_lat))
+            row_max, col_max = map(int, rowcol(tif_transform[i], max_lng, min_lat))
 
             # Ensure we're within bounds
             row_min, row_max = max(0, row_min), min(tif_data[i].shape[0], row_max)
@@ -215,27 +249,40 @@ def get_elevation_data(center_lat, center_lng, radius=0.05):
     return []  # Return empty list if no matching TIF file found
 
 
-def get_location_info(ip_address):
+def get_location_info(ip_address) -> LocationInfo:
     if DEBUG_MODE:
-        return "Tampa", "Florida", "United States", DEBUG_COORDS[0], DEBUG_COORDS[1]
+        return LocationInfo(
+            "Tampa", "Florida", "United States", DEBUG_COORDS[0], DEBUG_COORDS[1]
+        )
 
     cache_key = f"geo_{ip_address}"
     cached_result = cache.get(cache_key)
-    if cached_result:
-        return cached_result
+    if cached_result and isinstance(cached_result, tuple) and len(cached_result) == 5:
+        return LocationInfo(
+            city=str(cached_result[0]),
+            region=str(cached_result[1]),
+            country=str(cached_result[2]),
+            latitude=cached_result[3],
+            longitude=cached_result[4]
+        )
 
     geolocation_data = get_ip_geolocation(ip_address)
     if geolocation_data:
-        city = geolocation_data.get("city_name", "Unknown")
-        region = geolocation_data.get("region_name", "Unknown")
-        country = geolocation_data.get("country_name", "Unknown")
-        latitude = geolocation_data.get("latitude")
-        longitude = geolocation_data.get("longitude")
-        if latitude is not None and longitude is not None:
-            result = (city, region, country, float(latitude), float(longitude))
-            cache.set(cache_key, result, expire=86400)  # Cache for 24 hours
-            return result
-    return "Unknown", "Unknown", "Unknown", None, None
+        info = LocationInfo(
+            city=geolocation_data.get("city_name", "Unknown"),
+            region=geolocation_data.get("region_name", "Unknown"),
+            country=geolocation_data.get("country_name", "Unknown"),
+            latitude=float(geolocation_data.get("latitude", 0)),
+            longitude=float(geolocation_data.get("longitude", 0)),
+        )
+        cache.set(
+            cache_key,
+            (info.city, info.region, info.country, info.latitude, info.longitude),
+            expire=86400,
+        )
+        return info
+
+    return LocationInfo()
 
 
 def get_color(value):
@@ -254,8 +301,7 @@ def generate_gmaps_html(latitude, longitude, elevation):
     <script>
         function initMap() {{
             const allowedZoomLevels = {ALLOWED_ZOOM_LEVELS};
-            // const initialZoom = allowedZoomLevels[Math.floor(allowedZoomLevels.length / 2)];
-            const initialZoom = 13;
+            const initialZoom = allowedZoomLevels[Math.floor(allowedZoomLevels.length / 2)];
 
             const map = new google.maps.Map(document.getElementById("map"), {{
                 center: {{ lat: {latitude}, lng: {longitude} }},
@@ -336,6 +382,33 @@ def get_tile(z: int, x: int, y: int):
             content=f"Only zoom levels {ALLOWED_ZOOM_LEVELS} are available",
         )
 
+    # Get tile ranges for this zoom level
+    available_x = set(int(t.split('/')[1]) for t in tile_set if t.startswith(f"{z}/"))
+    available_y = set(int(t.split('/')[2].replace('.png','')) for t in tile_set if t.startswith(f"{z}/"))
+    
+    if not available_x or not available_y:
+        logger.warning(f"No tiles available for zoom level {z}")
+        return Response(status_code=404, content="No tiles available for this zoom level")
+
+    min_x, max_x = min(available_x), max(available_x)
+    min_y, max_y = min(available_y), max(available_y)
+    
+    logger.info(f"Zoom {z} tile ranges - X: {min_x}-{max_x}, Y: {min_y}-{max_y}")
+    logger.info(f"Requested tile: x={x}, y={y}")
+
+    # Check if requested tile is in range
+    if x < min_x or x > max_x or y < min_y or y > max_y:
+        logger.warning("Requested tile outside available range")
+        return Response(
+            status_code=404, 
+            content=f"Tile coordinates out of range. Available ranges - X: {min_x}-{max_x}, Y: {min_y}-{max_y}"
+        )
+
+    # Add debug logging for the requested tile
+    expected_path = f"{z}/{x}/{y}.png"
+    logger.info(f"Looking for tile: {expected_path}")
+    logger.info(f"Available tiles for zoom {z}: {[t for t in tile_set if t.startswith(str(z)+'/')][:5]}")
+
     tile_path = os.path.join(TILES_DIR, str(z), str(x), f"{y}.png")
     if os.path.exists(tile_path):
         logger.info(f"Serving tile: {tile_path}")
@@ -354,8 +427,14 @@ def get_root(request):
     else:
         user_ip = request.client.host if request.client else "Unknown"
 
-    city, state, country, latitude, longitude = get_location_info(user_ip)
-    elevation = get_elevation(latitude, longitude)
+    location = get_location_info(user_ip)
+    elevation = get_elevation(location.latitude, location.longitude)
+
+    latitude = location.latitude
+    longitude = location.longitude
+    city = location.city
+    state = location.region
+    country = location.country
 
     map_html = ""
     if latitude is not None and longitude is not None:
