@@ -33,95 +33,90 @@ NUM_CORES = 12
 MEMORY_LIMIT = 32768  # 32GB RAM allocation for GDAL
 
 
-def merge_tif_files(input_files, output_file):
-    """Merge multiple TIF files into a single file using batches."""
-    total_files = len(input_files)
-    logging.info(f"Merging {total_files} TIF files into {output_file}")
+# def merge_tif_files(input_files, output_file):
+#     """Merge multiple TIF files into a single file."""
+#     total_files = len(input_files)
+#     logging.info(f"Merging {total_files} TIF files into {output_file}")
 
-    # Log bounds of first and last files for debugging
-    for idx, f in enumerate([input_files[0], input_files[-1]]):
-        ds = gdal.Open(f)
-        gt = ds.GetGeoTransform()
-        width = ds.RasterXSize
-        height = ds.RasterYSize
-        lon_min = gt[0]
-        lat_max = gt[3]
-        lon_max = lon_min + width * gt[1]
-        lat_min = lat_max + height * gt[5]
-        logging.info(f"{'First' if idx == 0 else 'Last'} file bounds:")
-        logging.info(f"  Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
-        logging.info(f"  Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
+#     # Log bounds of first and last files for debugging
+#     for idx, f in enumerate([input_files[0], input_files[-1]]):
+#         ds = gdal.Open(f)
+#         gt = ds.GetGeoTransform()
+#         width = ds.RasterXSize
+#         height = ds.RasterYSize
+#         lon_min = gt[0]
+#         lat_max = gt[3]
+#         lon_max = lon_min + width * gt[1]
+#         lat_min = lat_max + height * gt[5]
+#         logging.info(f"{'First' if idx == 0 else 'Last'} file bounds:")
+#         logging.info(f"  Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
+#         logging.info(f"  Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
 
-    temp_vrt = output_file.replace(".tif", "_temp.vrt")
+#     temp_vrt = output_file.replace(".tif", "_temp.vrt")
 
-    merge_command = [
-        "gdalbuildvrt",
-        "-resolution",
-        "highest",
-        "-r",
-        "nearest",
-        "-separate",
-        "-overwrite",
-        temp_vrt,
-    ] + sorted(input_files)
+#     merge_command = [
+#         "gdalbuildvrt",
+#         "-resolution",
+#         "highest",
+#         "-r",
+#         "nearest",
+#         "-separate",
+#         "-overwrite",
+#         temp_vrt,
+#     ] + sorted(input_files)
 
-    try:
-        logging.info("Creating VRT file...")
-        result = subprocess.run(merge_command, capture_output=True, text=True)
-        if result.returncode != 0:
-            logging.error(f"Error creating VRT: {result.stderr}")
-            raise subprocess.CalledProcessError(
-                result.returncode, merge_command, result.stdout, result.stderr
-            )
+#     try:
+#         logging.info("Creating VRT file...")
+#         result = subprocess.run(merge_command, capture_output=True, text=True)
+#         if result.returncode != 0:
+#             logging.error(f"Error creating VRT: {result.stderr}")
+#             raise subprocess.CalledProcessError(
+#                 result.returncode, merge_command, result.stdout, result.stderr
+#             )
 
-        # Check VRT bounds
-        ds = gdal.Open(temp_vrt)
-        gt = ds.GetGeoTransform()
-        width = ds.RasterXSize
-        height = ds.RasterYSize
-        lon_min = gt[0]
-        lat_max = gt[3]
-        lon_max = lon_min + width * gt[1]
-        lat_min = lat_max + height * gt[5]
-        logging.info("VRT file bounds:")
-        logging.info(f"  Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
-        logging.info(f"  Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
+#         # Use gdalwarp instead of gdal_translate
+#         logging.info("Converting VRT to GeoTIFF using gdalwarp...")
+#         warp_command = [
+#             "gdalwarp",
+#             "-of", "GTiff",
+#             "-co", "COMPRESS=LZW",
+#             "-co", "BIGTIFF=YES",
+#             "-co", "TILED=YES",
+#             "-co", "NUM_THREADS=ALL_CPUS",  # Add this
+#             "-wo", "NUM_THREADS=ALL_CPUS",
+#             "--config", "GDAL_NUM_THREADS", str(NUM_CORES),
+#             "--config", "GDAL_CACHEMAX", str(MEMORY_LIMIT),
+#             "--config", "CHECK_DISK_FREE_SPACE", "FALSE",
+#             "--config", "GDAL_DISABLE_READDIR_ON_OPEN", "TRUE",  # Add this
+#             "-multi",
+#             "-wm", str(MEMORY_LIMIT * 1024 * 1024),  # Memory in bytes
+#             "-overwrite",
+#             "-wo", f"NUM_THREADS={NUM_CORES}",  # Add explicit thread count
+#             temp_vrt,
+#             output_file
+#         ]
 
-        # Convert VRT to GeoTIFF
-        logging.info("Converting VRT to GeoTIFF...")
-        translate_command = [
-            "gdal_translate",
-            "-of", "GTiff",
-            "-co", "COMPRESS=LZW",  # Add compression
-            "-co", "BIGTIFF=YES",   # Enable large file support
-            "-co", "TILED=YES",     # Enable tiling
-            "--config", "GDAL_NUM_THREADS", str(NUM_CORES),
-            "--config", "GDAL_CACHEMAX", str(MEMORY_LIMIT),
-            # Disable disk space check since it seems incorrect
-            "--config", "CHECK_DISK_FREE_SPACE", "FALSE",
-            temp_vrt,
-            output_file,
-        ]
+#         subprocess.run(warp_command, check=True)
+#         os.remove(temp_vrt)
 
-        subprocess.run(translate_command, check=True)
-        os.remove(temp_vrt)
+#         # Log final merged file bounds
+#         ds = gdal.Open(output_file)
+#         gt = ds.GetGeoTransform()
+#         width = ds.RasterXSize
+#         height = ds.RasterYSize
+#         lon_min = gt[0]
+#         lat_max = gt[3]
+#         lon_max = lon_min + width * gt[1]
+#         lat_min = lat_max + height * gt[5]
+#         logging.info("Merged file bounds:")
+#         logging.info(f"  Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
+#         logging.info(f"  Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
 
-        # Log final merged file bounds
-        ds = gdal.Open(output_file)
-        gt = ds.GetGeoTransform()
-        width = ds.RasterXSize
-        height = ds.RasterYSize
-        lon_min = gt[0]
-        lat_max = gt[3]
-        lon_max = lon_min + width * gt[1]
-        lat_min = lat_max + height * gt[5]
-        logging.info("Merged file bounds:")
-        logging.info(f"  Latitude: {lat_min:.4f}°N to {lat_max:.4f}°N")
-        logging.info(f"  Longitude: {lon_min:.4f}°W to {lon_max:.4f}°W")
-
-    except Exception as e:
-        logging.error(f"Error in merge process: {str(e)}")
-        raise
+#     except Exception as e:
+#         logging.error(f"Error in merge process: {str(e)}")
+#         if os.path.exists(temp_vrt):
+#             os.remove(temp_vrt)
+#         raise
 
 
 def elevation_to_color(elevation):
@@ -136,6 +131,47 @@ def elevation_to_color(elevation):
         g = int(255 * (1 - normalized) / 0.5)
         b = 0
     return r, g, b
+
+def process_group(files, output_dir, zoom_range):
+    """Process one geographical group of files"""
+    group_dir = os.path.join(output_dir, f"tiles_{os.path.basename(files[0])}")
+    os.makedirs(group_dir, exist_ok=True)
+    
+    for input_file in files:
+        # Generate tiles directly from each file
+        cmd = [
+            "gdal2tiles.py",
+            "--xyz",
+            "-z", f"{zoom_range[0]}-{zoom_range[1]}",
+            "--processes", "ALL_CPUS",
+            "-r", "average",
+            "--profile", "mercator",
+            input_file,
+            group_dir
+        ]
+        subprocess.run(cmd, check=True)
+
+
+def group_files_by_location(input_files, grid_size=5):
+    """Group files into geographical grid cells (e.g., 5x5 degree squares)"""
+    groups = {}
+    
+    for file in input_files:
+        ds = gdal.Open(file)
+        gt = ds.GetGeoTransform()
+        
+        # Get center point of the TIF
+        center_lat = gt[3] + (ds.RasterYSize * gt[5] / 2)
+        center_lon = gt[0] + (ds.RasterXSize * gt[1] / 2)
+        
+        # Group by grid cell
+        grid_lat = int(center_lat / grid_size) * grid_size
+        grid_lon = int(center_lon / grid_size) * grid_size
+        
+        cell_id = f"{grid_lat}_{grid_lon}"
+        groups.setdefault(cell_id, []).append(file)
+    
+    return groups
 
 
 def create_dynamic_color_ramp(min_elevation, max_elevation, num_steps=256):
@@ -246,122 +282,125 @@ def analyze_tif_files(input_dir):
     return all_bounds
 
 
-def process_tif_file(input_file, output_dir):
-    try:
-        base_name = os.path.splitext(os.path.basename(input_file))[0]
-        output_file = os.path.join(output_dir, f"{base_name}_colored.tif")
-        tiles_dir = os.path.join(output_dir, "tiles")
+# def process_tif_file(input_file, output_dir):
+#     try:
+#         base_name = os.path.splitext(os.path.basename(input_file))[0]
+#         output_file = os.path.join(output_dir, f"{base_name}_colored.tif")
+#         tiles_dir = os.path.join(output_dir, "tiles")
 
-        # Get elevation range and geotransform
-        ds = gdal.Open(input_file)
-        logging.info(f"Input projection: {ds.GetProjection()}")
+#         # Get elevation range and geotransform
+#         ds = gdal.Open(input_file)
+#         logging.info(f"Input projection: {ds.GetProjection()}")
 
-        # First, reproject to Web Mercator (EPSG:3857)
-        reprojected_file = os.path.join(output_dir, f"{base_name}_mercator.tif")
-        logging.info("Reprojecting to Web Mercator...")
-        cmd = [
-            "gdalwarp",
-            "-s_srs",
-            "EPSG:4326",
-            "-t_srs",
-            "EPSG:3857",
-            "-r",
-            "bilinear",
-            input_file,
-            reprojected_file,
-        ]
-        subprocess.run(cmd, check=True)
+#         # First, reproject to Web Mercator (EPSG:3857)
+#         reprojected_file = os.path.join(output_dir, f"{base_name}_mercator.tif")
+#         logging.info("Reprojecting to Web Mercator...")
+#         cmd = [
+#             "gdalwarp",
+#             "-s_srs",
+#             "EPSG:4326",
+#             "-t_srs",
+#             "EPSG:3857",
+#             "-r",
+#             "bilinear",
+#             input_file,
+#             reprojected_file,
+#         ]
+#         subprocess.run(cmd, check=True)
 
-        # Apply color ramp to the reprojected file
-        logging.info("Applying color ramp...")
-        color_ramp = create_fixed_color_ramp()
-        fixed_ramp_file = os.path.join(output_dir, f"{base_name}_color_ramp.txt")
-        write_color_ramp_file(color_ramp, fixed_ramp_file)
+#         # Apply color ramp to the reprojected file
+#         logging.info("Applying color ramp...")
+#         color_ramp = create_fixed_color_ramp()
+#         fixed_ramp_file = os.path.join(output_dir, f"{base_name}_color_ramp.txt")
+#         write_color_ramp_file(color_ramp, fixed_ramp_file)
 
-        cmd = [
-            "gdaldem",
-            "color-relief",
-            "-alpha",
-            reprojected_file,
-            fixed_ramp_file,
-            output_file,
-        ]
-        subprocess.run(cmd, check=True)
+#         cmd = [
+#             "gdaldem",
+#             "color-relief",
+#             "-alpha",
+#             reprojected_file,
+#             fixed_ramp_file,
+#             output_file,
+#         ]
+#         subprocess.run(cmd, check=True)
 
-        # Generate tiles from the reprojected and colored file
-        os.environ["GDAL_NUM_THREADS"] = str(NUM_CORES)
+#         # Generate tiles from the reprojected and colored file
+#         os.environ["GDAL_NUM_THREADS"] = str(NUM_CORES)
 
-        with tqdm(desc="Generating tiles") as pbar:
-            for zoom in range(ZOOM_RANGE[0], ZOOM_RANGE[1] + 1):
-                zoom_dir = os.path.join(tiles_dir, str(zoom))
-                os.makedirs(zoom_dir, exist_ok=True)
+#         with tqdm(desc="Generating tiles") as pbar:
+#             for zoom in range(ZOOM_RANGE[0], ZOOM_RANGE[1] + 1):
+#                 zoom_dir = os.path.join(tiles_dir, str(zoom))
+#                 os.makedirs(zoom_dir, exist_ok=True)
 
-                logging.info(f"Processing zoom level {zoom}")
-                cmd = [
-                    "gdal2tiles.py",
-                    "--xyz",
-                    "-z",
-                    f"{zoom}",
-                    "-w",
-                    "none",
-                    "--processes",
-                    str(NUM_CORES),
-                    "-r",
-                    "average",
-                    "--profile",
-                    "mercator",
-                    output_file,
-                    tiles_dir,
-                ]
+#                 logging.info(f"Processing zoom level {zoom}")
+#                 cmd = [
+#                     "gdal2tiles.py",
+#                     "--xyz",
+#                     "-z",
+#                     f"{zoom}",
+#                     "-w",
+#                     "none",
+#                     "--processes",
+#                     str(NUM_CORES),
+#                     "-r",
+#                     "average",
+#                     "--profile",
+#                     "mercator",
+#                     output_file,
+#                     tiles_dir,
+#                 ]
 
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    logging.error(f"Tile generation error: {result.stderr}")
-                    raise subprocess.CalledProcessError(result.returncode, cmd)
+#                 result = subprocess.run(cmd, capture_output=True, text=True)
+#                 if result.returncode != 0:
+#                     logging.error(f"Tile generation error: {result.stderr}")
+#                     raise subprocess.CalledProcessError(result.returncode, cmd)
 
-                # Count tiles
-                tiles_count = 0
-                for root, _, files in os.walk(zoom_dir):
-                    tiles_count += sum(1 for f in files if f.endswith(".png"))
-                pbar.update(tiles_count)
-                logging.info(f"Generated {tiles_count} tiles at zoom level {zoom}")
+#                 # Count tiles
+#                 tiles_count = 0
+#                 for root, _, files in os.walk(zoom_dir):
+#                     tiles_count += sum(1 for f in files if f.endswith(".png"))
+#                 pbar.update(tiles_count)
+#                 logging.info(f"Generated {tiles_count} tiles at zoom level {zoom}")
 
-        # Clean up intermediate files
-        os.remove(reprojected_file)
-        os.remove(fixed_ramp_file)
+#         # Clean up intermediate files
+#         os.remove(reprojected_file)
+#         os.remove(fixed_ramp_file)
 
-        return True
+#         return True
 
-    except Exception as e:
-        logging.error(f"Error processing {input_file}: {str(e)}")
-        return False
-
+#     except Exception as e:
+#         logging.error(f"Error processing {input_file}: {str(e)}")
+#         return False
 
 def main():
-    bounds = analyze_tif_files(INPUT_DIR)
-
-    # Ask for confirmation before proceeding
-    response = input("\nProceed with processing? (y/n): ")
-    if response.lower() != "y":
-        logging.info("Processing cancelled")
-        return
-
-    os.makedirs(PROCESSED_DIR, exist_ok=True)
-
-    files_to_process = [
-        os.path.join(INPUT_DIR, f) for f in os.listdir(INPUT_DIR) if f.endswith(".tif")
+    # Get all input files
+    input_files = [
+        os.path.join(INPUT_DIR, f) 
+        for f in os.listdir(INPUT_DIR) 
+        if f.endswith(".tif")
     ]
-
-    if not files_to_process:
-        logging.warning(f"No .tif files found in {INPUT_DIR}")
-        return
-
-    # Merge all input files
-    merged_file = os.path.join(PROCESSED_DIR, "merged_input.tif")
-    merge_tif_files(files_to_process, merged_file)
-
-    # Process the merged file
-    process_tif_file(merged_file, PROCESSED_DIR)
+    
+    # Group files by location
+    groups = group_files_by_location(input_files)
+    logging.info(f"Split files into {len(groups)} geographical groups")
+    
+    # Process groups in parallel
+    from concurrent.futures import ProcessPoolExecutor
+    with ProcessPoolExecutor() as executor:
+        futures = []
+        for group_files in groups.values():
+            futures.append(
+                executor.submit(
+                    process_group, 
+                    group_files, 
+                    PROCESSED_DIR, 
+                    ZOOM_RANGE
+                )
+            )
+        
+        # Wait for all groups to complete
+        for future in tqdm(futures):
+            future.result()
 
 
 if __name__ == "__main__":
