@@ -52,11 +52,11 @@ ZOOM_RANGE = (8, 9)
 MIN_ELEVATION = -100
 MAX_ELEVATION = 5500  # rounded up from 5489 for clean numbers
 
-NUM_CORES = mp.cpu_count()  # 12 cores total
-POOL_WORKERS = 3  # Process 3 files simultaneously
-GDAL_THREADS = NUM_CORES // POOL_WORKERS  # 4 cores per GDAL process
-CHUNK_SIZE = 1  # Reduce chunk size since we're processing fewer files simultaneously
-GDAL_CACHE = 512  # MB
+NUM_CORES = mp.cpu_count()
+POOL_WORKERS = 4
+GDAL_THREADS = NUM_CORES // POOL_WORKERS
+CHUNK_SIZE = 1
+GDAL_CACHE = 512
 
 os.environ["GDAL_CACHEMAX"] = str(GDAL_CACHE)
 os.environ["VSI_CACHE"] = "TRUE"
@@ -118,22 +118,24 @@ def validate_coordinates(original_bounds, processed_bounds, tolerance=0.0001):
 
 
 def process_file(args):
-    """Process a single file (used by multiprocessing)"""
+    """Process a single file with optimized settings"""
     input_file, output_dir, zoom_range = args
-    group_dir = os.path.join(output_dir, f"tiles_{os.path.basename(input_file)}")
-    os.makedirs(group_dir, exist_ok=True)
+    tiles_dir = os.path.join(output_dir, "tiles")
+    os.makedirs(tiles_dir, exist_ok=True)
 
-    os.environ["GDAL_NUM_THREADS"] = str(GDAL_THREADS)
-
-
-    vrt_file = os.path.join(output_dir, f"temp_{os.path.basename(input_file)}.vrt")
+    # Create temporary VRT in the output directory
+    base_name = os.path.basename(input_file)
+    vrt_file = os.path.join(output_dir, f"temp_{base_name}.vrt")
     
     translate_opts = gdal.TranslateOptions(
         format="VRT",
-        outputType=gdal.GDT_Byte,
-        scaleParams=[[MIN_ELEVATION, MAX_ELEVATION, 0, 255]],
-        noData=0,
-        creationOptions=["TILED=YES", "COMPRESS=LZW", "BIGTIFF=YES"]
+        outputType=gdal.GDT_Byte,  # Changed to 8-bit
+        scaleParams=[[MIN_ELEVATION, MAX_ELEVATION, 0, 255]],  # Scale to 0-255
+        creationOptions=[
+            "TILED=YES",
+            "BLOCKSIZE=512",
+            "COMPRESS=LZW"
+        ]
     )
     
     gdal.Translate(vrt_file, input_file, options=translate_opts)
@@ -143,20 +145,21 @@ def process_file(args):
         "--xyz",
         "-z", f"{zoom_range[0]}-{zoom_range[1]}",
         "--processes", str(GDAL_THREADS),
-        "-r", "average",
-        "--profile", "mercator",
-        "--s_srs", "EPSG:4326",
-        "--webviewer", "none",
+        "-r", "cubic",
         "--tmscompatible",
-        "--config", "GDAL_CACHEMAX", str(GDAL_CACHE),
+        "--webviewer", "none",
         "-q",
         vrt_file,
-        group_dir,
+        tiles_dir,
     ]
-    subprocess.run(cmd, check=True)
-    os.remove(vrt_file)
-    return group_dir
-
+    
+    try:
+        subprocess.run(cmd, check=True)
+    finally:
+        if os.path.exists(vrt_file):
+            os.remove(vrt_file)
+    
+    return tiles_dir
 
 def analyze_tif_files(input_dir):
     """Analyze all TIF files in directory to determine coverage."""
@@ -257,7 +260,7 @@ def analyze_tif_files(input_dir):
 def analyze_coverage(input_dir, output_dir):
     """Analyze and compare input TIFs vs output tile coverage"""
     
-    # Analyze input TIFs
+    # Input analysis stays the same
     input_files = glob.glob(os.path.join(input_dir, "*.tif"))
     input_bounds = []
     
@@ -280,90 +283,69 @@ def analyze_coverage(input_dir, output_dir):
             "east": east
         })
     
-    # Analyze output tiles by looking at the directory structure
-    tile_dirs = glob.glob(os.path.join(output_dir, "tiles_*"))
+    # New output analysis for unified tile structure
+    tiles_dir = os.path.join(output_dir, "tiles")
     output_coverage = []
     
-    logging.info(f"\nAnalyzing {len(tile_dirs)} output tile directories...")
-    for tile_dir in tqdm(tile_dirs, desc="Analyzing outputs"):
-        # Look for the highest zoom level tiles
-        zoom_levels = [int(d) for d in os.listdir(tile_dir) 
-                      if os.path.isdir(os.path.join(tile_dir, d)) and d.isdigit()]
+    if os.path.exists(tiles_dir):
+        zoom_levels = [int(d) for d in os.listdir(tiles_dir) 
+                      if os.path.isdir(os.path.join(tiles_dir, d))]
         
-        if not zoom_levels:
-            continue
+        logging.info(f"\nAnalyzing tiles for zoom levels: {zoom_levels}")
+        for z in zoom_levels:
+            zoom_dir = os.path.join(tiles_dir, str(z))
+            x_coords = [int(d) for d in os.listdir(zoom_dir) 
+                       if os.path.isdir(os.path.join(zoom_dir, d))]
             
-        max_zoom = max(zoom_levels)
-        tile_pattern = os.path.join(tile_dir, str(max_zoom), "*", "*.png")
-        tiles = glob.glob(tile_pattern)
-        
-        if tiles:
-            # Extract tile coordinates from filenames
-            x_coords = []
-            y_coords = []
-            for tile in tiles:
-                # Parse z/x/y.png pattern
-                parts = tile.split(os.sep)
-                try:
-                    x = int(parts[-2])
-                    y = int(parts[-1].split('.')[0])
-                    x_coords.append(x)
-                    y_coords.append(y)
-                except (IndexError, ValueError):
-                    continue
-            
-            if x_coords and y_coords:
-                # Convert tile coordinates to lat/lon
-                n = tile2lat(min(y_coords), max_zoom)
-                s = tile2lat(max(y_coords) + 1, max_zoom)
-                w = tile2lon(min(x_coords), max_zoom)
-                e = tile2lon(max(x_coords) + 1, max_zoom)
+            if not x_coords:
+                continue
                 
+            # Find bounds for this zoom level
+            min_x, max_x = min(x_coords), max(x_coords)
+            
+            # Find y bounds by checking all x directories
+            y_coords = []
+            for x in x_coords:
+                y_files = glob.glob(os.path.join(zoom_dir, str(x), "*.png"))
+                y_coords.extend([int(os.path.basename(f).split('.')[0]) for f in y_files])
+            
+            if y_coords:
+                min_y, max_y = min(y_coords), max(y_coords)
+                
+                # Convert tile coordinates to lat/lon
                 output_coverage.append({
-                    "dir": os.path.basename(tile_dir),
+                    "zoom": z,
                     "bounds": {
-                        "north": n,
-                        "south": s,
-                        "west": w,
-                        "east": e
+                        "north": tile2lat(min_y, z),
+                        "south": tile2lat(max_y + 1, z),
+                        "west": tile2lon(min_x, z),
+                        "east": tile2lon(max_x + 1, z)
                     },
-                    "zoom_level": max_zoom
+                    "tile_counts": {
+                        "x_range": (min_x, max_x),
+                        "y_range": (min_y, max_y),
+                        "total_tiles": len(y_coords)
+                    }
                 })
-    
-    # Compare coverage
-    input_area = 0
-    for bounds in input_bounds:
-        area = (bounds["north"] - bounds["south"]) * (bounds["east"] - bounds["west"])
-        input_area += abs(area)
-    
-    output_area = 0
-    for coverage in output_coverage:
-        bounds = coverage["bounds"]
-        if bounds:
-            area = (bounds["north"] - bounds["south"]) * (bounds["east"] - bounds["west"])
-            output_area += abs(area)
     
     # Report findings
     logging.info("\nCoverage Analysis Results:")
     logging.info(f"Input files: {len(input_files)}")
-    logging.info(f"Output tile directories: {len(tile_dirs)}")
-    logging.info(f"Directories with valid tiles: {len(output_coverage)}")
-    
-    logging.info("\nInput Bounds:")
-    logging.info(f"North: {max(b['north'] for b in input_bounds):.4f}°")
-    logging.info(f"South: {min(b['south'] for b in input_bounds):.4f}°")
-    logging.info(f"West: {min(b['west'] for b in input_bounds):.4f}°")
-    logging.info(f"East: {max(b['east'] for b in input_bounds):.4f}°")
     
     if output_coverage:
-        logging.info("\nOutput Bounds:")
-        logging.info(f"North: {max(c['bounds']['north'] for c in output_coverage):.4f}°")
-        logging.info(f"South: {min(c['bounds']['south'] for c in output_coverage):.4f}°")
-        logging.info(f"West: {min(c['bounds']['west'] for c in output_coverage):.4f}°")
-        logging.info(f"East: {max(c['bounds']['east'] for c in output_coverage):.4f}°")
-        logging.info(f"\nZoom levels found: {sorted(set(c['zoom_level'] for c in output_coverage))}")
-    
-    logging.info(f"\nArea Coverage Ratio (output/input): {output_area/input_area:.2%}")
+        for zoom_data in output_coverage:
+            z = zoom_data["zoom"]
+            bounds = zoom_data["bounds"]
+            counts = zoom_data["tile_counts"]
+            
+            logging.info(f"\nZoom level {z}:")
+            logging.info(f"Bounds: {bounds['north']:.4f}°N to {bounds['south']:.4f}°N, "
+                        f"{bounds['west']:.4f}°W to {bounds['east']:.4f}°W")
+            logging.info(f"Tile coverage: {counts['total_tiles']} tiles "
+                        f"({counts['x_range'][1] - counts['x_range'][0] + 1}x"
+                        f"{counts['y_range'][1] - counts['y_range'][0] + 1} grid)")
+    else:
+        logging.info("No output tiles found!")
     
     return input_bounds, output_coverage
 
