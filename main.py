@@ -9,7 +9,6 @@ import math
 from fasthtml.common import Div
 from fasthtml.common import P
 from fasthtml.common import fast_app
-from fasthtml.common import serve
 from fasthtml.common import Iframe
 from fasthtml.common import FileResponse
 from fasthtml.common import Response
@@ -25,16 +24,17 @@ from diskcache import Cache
 from dotenv import load_dotenv
 from googlemaps import Client as GoogleMaps
 
-import rasterio
+import uvicorn
 from rasterio.transform import rowcol
+
+logging.basicConfig(
+    format="%(filename)s:%(lineno)d - %(message)s",
+    level=logging.INFO
+)
 
 
 load_dotenv()
 
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Initialize disk cache
 cache = Cache("./cache")
@@ -45,9 +45,9 @@ app, rt = fast_app(
 
 DEBUG_COORDS = (27.95053694962414, -82.4585769277307)
 DEBUG_IP = "23.111.165.2"
-TILES_DIR = str(os.getenv("PROCESSED_DIR")) + "/tiles"
+TILES_DIR = str(os.getenv("PROCESSED_DIR"))
 # ALLOWED_ZOOM_LEVELS = [10, 11, 12, 13, 14, 15]
-ALLOWED_ZOOM_LEVELS = [10, 11, 12]
+ALLOWED_ZOOM_LEVELS = [8, 9]
 MAP_HEIGHT = "600px"
 
 
@@ -60,6 +60,7 @@ assert gmaps_api_key is not None, "GMAP_API_KEY is not set"
 tif_data: list = []
 tif_bounds: list = []
 tif_transform: list = []
+tile_index = {}
 
 
 @dataclass
@@ -74,87 +75,92 @@ class LocationInfo:
 gmaps = GoogleMaps(key=gmaps_api_key)
 
 
-def load_tif_data():
-    global tif_data, tif_bounds, tif_transform
-    data_dir = "./data"
-
-    tif_data = []
-    tif_bounds = []
-    tif_transform = []
-
-    for filename in os.listdir(data_dir):
-        if filename.endswith("_v3.tif"):
-            tif_path = os.path.join(data_dir, filename)
-            with rasterio.open(tif_path) as src:
-                data = src.read(1)
-                bounds = src.bounds
-                tif_data.append(data)
-                tif_bounds.append(bounds)
-                tif_transform.append(src.transform)
-                logger.info(f"Loaded {filename}: shape={data.shape}, bounds={bounds}")
-
-    logger.info(f"Loaded {len(tif_data)} TIF files")
-
-
-logger.info("Loading TIF data...")
-load_tif_data()
-logger.info("TIF data loaded")
-
-
 def preload_tile_paths():
-    tile_set = set()
+    tile_index = {}
+    total_tiles = 0
+    tif_counts = {}  # Track tiles per TIF directory
 
-    if os.path.exists(TILES_DIR):
-        # Add debug logging for the tiles directory
-        logger.info(f"Loading tiles from: {TILES_DIR}")
-        
-        for root, dirs, files in os.walk(TILES_DIR):
-            for file in files:
-                if file.endswith(".png"):
-                    relative_path = os.path.relpath(os.path.join(root, file), TILES_DIR)
-                    tile_path = relative_path.replace("\\", "/")
-                    tile_set.add(tile_path)
-                    
-        # Add debug logging for some sample tiles
-        sample_tiles = list(tile_set)[:5]
-        logger.info(f"Sample tile paths: {sample_tiles}")
-    else:
-        logger.warning(f"Tiles directory not found: {TILES_DIR}")
+    logging.info(f"Checking for tiles directory: {TILES_DIR}")
+    if not os.path.exists(TILES_DIR):
+        logging.warning(f"Tiles directory not found: {TILES_DIR}")
+        return tile_index
 
-    return tile_set
+    logging.info(f"Loading tiles from: {TILES_DIR}")
+    tif_dirs = os.listdir(TILES_DIR)
+    logging.info(f"Found {len(tif_dirs)} TIF directories")
+
+    for tif_dir in os.listdir(TILES_DIR):
+        tif_path = os.path.join(TILES_DIR, tif_dir)
+        if not os.path.isdir(tif_path):
+            continue
+
+        tif_counts[tif_dir] = 0  # Initialize counter for this TIF
+
+        for z_dir in os.listdir(tif_path):
+            if not z_dir.isdigit():
+                continue
+            z = int(z_dir)
+            if z not in tile_index:
+                tile_index[z] = {}
+
+            z_path = os.path.join(tif_path, z_dir)
+            for x_dir in os.listdir(z_path):
+                if not x_dir.isdigit():
+                    continue
+                x = int(x_dir)
+                if x not in tile_index[z]:
+                    tile_index[z][x] = {}
+
+                x_path = os.path.join(z_path, x_dir)
+                for file in os.listdir(x_path):
+                    if not file.endswith(".png"):
+                        continue
+                    y = int(file.replace(".png", ""))
+                    tile_index[z][x][y] = tif_dir
+                    total_tiles += 1
+                    tif_counts[tif_dir] += 1
+    logging.info(f"Loaded {total_tiles:,} tiles from {len(tif_counts)} TIF files")
+    return tile_index
 
 
-tile_set = preload_tile_paths()
-
+tile_index = preload_tile_paths()
 
 def lat_lon_to_tile(lat, lon, zoom):
     n = 2.0**zoom
     xtile = floor((lon + 180.0) / 360.0 * n)
     ytile = floor((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n)
-    logger.info(f"Converting lat={lat}, lon={lon}, zoom={zoom} to tile: x={xtile}, y={ytile}")
+    logging.info(
+        f"Converting lat={lat}, lon={lon}, zoom={zoom} to tile: x={xtile}, y={ytile}"
+    )
     return xtile, ytile
 
+
 def tile_to_lat_lon(x, y, zoom):
-    n = 2.0 ** zoom
+    n = 2.0**zoom
     lon_deg = (x / n * 360.0) - 180.0
     lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * y / n)))
     lat_deg = math.degrees(lat_rad)
     return lat_deg, lon_deg
 
-# Add this debug code temporarily to understand coverage:
-z = 11
-min_x, max_x = 307, 665
-min_y, max_y = 616, 657
 
-nw_lat, nw_lon = tile_to_lat_lon(min_x, min_y, z)
-se_lat, se_lon = tile_to_lat_lon(max_x, max_y, z)
-
-logger.info(f"Coverage at zoom {z}:")
-logger.info(f"NW corner: {nw_lat:.4f}°N, {nw_lon:.4f}°W")
-logger.info(f"SE corner: {se_lat:.4f}°N, {se_lon:.4f}°W")
+# Add this debug code to verify tile coverage:
+z = ALLOWED_ZOOM_LEVELS[0]  # zoom level 8
+for tif_dir in os.listdir(TILES_DIR):
+    z_path = os.path.join(TILES_DIR, tif_dir, str(z))
+    if not os.path.exists(z_path):
+        continue
+        
+    x_dirs = [int(x) for x in os.listdir(z_path) if x.isdigit()]
+    if not x_dirs:
+        continue
+        
+    for x in x_dirs:
+        y_files = [int(y.replace('.png', '')) for y in os.listdir(os.path.join(z_path, str(x))) if y.endswith('.png')]
+        if y_files:
+            logging.info(f"TIF {tif_dir} at z={z}, x={x}: y={min(y_files)}-{max(y_files)}")
 
 def get_elevation_from_memory(latitude, longitude):
-    # logger.info(f"Getting elevation for lat={latitude}, lon={longitude}")
+    # logging.info(f"Getting elevation for lat={latitude}, lon={longitude}")
     for i, bounds in enumerate(tif_bounds):
         if (
             bounds.left <= longitude <= bounds.right
@@ -162,7 +168,7 @@ def get_elevation_from_memory(latitude, longitude):
         ):
             # Use rasterio's index function to get row, col
             row, col = rowcol(tif_transform[i], longitude, latitude)
-            # logger.info(f"Calculated row={row}, col={col}")
+            # logging.info(f"Calculated row={row}, col={col}")
 
             # Convert row and col to integers
             row, col = int(row), int(col)
@@ -170,14 +176,14 @@ def get_elevation_from_memory(latitude, longitude):
             # Check if row and col are within bounds
             if 0 <= row < tif_data[i].shape[0] and 0 <= col < tif_data[i].shape[1]:
                 elevation = tif_data[i][row, col]
-                # logger.info(f"Elevation found: {elevation}")
+                # logging.info(f"Elevation found: {elevation}")
                 return float(elevation)
             else:
-                logger.warning(
+                logging.warning(
                     f"Calculated row or col out of bounds: row={row}, col={col}"
                 )
                 return None
-    logger.warning(f"No matching bounds found for lat={latitude}, lon={longitude}")
+    logging.warning(f"No matching bounds found for lat={latitude}, lon={longitude}")
     return None
 
 
@@ -190,7 +196,7 @@ def get_ip_geolocation(ip_address):
         response.raise_for_status()
         return response.json()
     except requests.RequestException as e:
-        logger.error(f"Error fetching IP geolocation: {e}")
+        logging.error(f"Error fetching IP geolocation: {e}")
         return None
 
 
@@ -230,12 +236,12 @@ def get_elevation_data(center_lat, center_lng, radius=0.05):
             data_subset = tif_data[i][row_min:row_max, col_min:col_max]
 
             # Log statistics about the data subset
-            logger.info(
+            logging.info(
                 f"Elevation data stats: min={np.nanmin(data_subset):.2f}, "
                 f"max={np.nanmax(data_subset):.2f}, mean={np.nanmean(data_subset):.2f}, "
                 f"median={np.nanmedian(data_subset):.2f}"
             )
-            logger.info(f"Data shape: {data_subset.shape}")
+            logging.info(f"Data shape: {data_subset.shape}")
 
             # Create lat/lon arrays for the subset
             lats = np.linspace(max_lat, min_lat, data_subset.shape[0])
@@ -263,7 +269,7 @@ def get_location_info(ip_address) -> LocationInfo:
             region=str(cached_result[1]),
             country=str(cached_result[2]),
             latitude=cached_result[3],
-            longitude=cached_result[4]
+            longitude=cached_result[4],
         )
 
     geolocation_data = get_ip_geolocation(ip_address)
@@ -364,10 +370,10 @@ def create_map(latitude, longitude):
     # cache_key = f"map_{latitude}_{longitude}"
     # cached_map = cache.get(cache_key)
     # if cached_map:
-    #     logger.info(f"Cache hit for map: {cache_key}")
+    #     logging.info(f"Cache hit for map: {cache_key}")
     #     return cached_map
 
-    # logger.info(f"Cache miss for map: {cache_key}")
+    # logging.info(f"Cache miss for map: {cache_key}")
     elevation = get_elevation(latitude, longitude)
     map_html = generate_gmaps_html(latitude, longitude, elevation)
     # cache.set(cache_key, map_html, expire=86400)  # Cache for 24 hours
@@ -382,45 +388,18 @@ def get_tile(z: int, x: int, y: int):
             content=f"Only zoom levels {ALLOWED_ZOOM_LEVELS} are available",
         )
 
-    # Get tile ranges for this zoom level
-    available_x = set(int(t.split('/')[1]) for t in tile_set if t.startswith(f"{z}/"))
-    available_y = set(int(t.split('/')[2].replace('.png','')) for t in tile_set if t.startswith(f"{z}/"))
-    
-    if not available_x or not available_y:
-        logger.warning(f"No tiles available for zoom level {z}")
-        return Response(status_code=404, content="No tiles available for this zoom level")
-
-    min_x, max_x = min(available_x), max(available_x)
-    min_y, max_y = min(available_y), max(available_y)
-    
-    logger.info(f"Zoom {z} tile ranges - X: {min_x}-{max_x}, Y: {min_y}-{max_y}")
-    logger.info(f"Requested tile: x={x}, y={y}")
-
-    # Check if requested tile is in range
-    if x < min_x or x > max_x or y < min_y or y > max_y:
-        logger.warning("Requested tile outside available range")
-        return Response(
-            status_code=404, 
-            content=f"Tile coordinates out of range. Available ranges - X: {min_x}-{max_x}, Y: {min_y}-{max_y}"
-        )
-
-    # Add debug logging for the requested tile
-    expected_path = f"{z}/{x}/{y}.png"
-    logger.info(f"Looking for tile: {expected_path}")
-    logger.info(f"Available tiles for zoom {z}: {[t for t in tile_set if t.startswith(str(z)+'/')][:5]}")
-
-    tile_path = os.path.join(TILES_DIR, str(z), str(x), f"{y}.png")
-    if os.path.exists(tile_path):
-        logger.info(f"Serving tile: {tile_path}")
+    # Fast lookup using nested dictionary
+    if z in tile_index and x in tile_index[z] and y in tile_index[z][x]:
+        tif_dir = tile_index[z][x][y]
+        tile_path = os.path.join(TILES_DIR, tif_dir, str(z), str(x), f"{y}.png")
         return FileResponse(tile_path, media_type="image/png")
 
-    logger.warning(f"Tile not found: z={z}, x={x}, y={y}")
     return Response(status_code=404, content=f"Tile not found: z={z}, x={x}, y={y}")
 
 
 @rt("/")
 def get_root(request):
-    logger.info("==== Running route / ====")
+    logging.info("==== Running route / ====")
 
     if DEBUG_MODE:
         user_ip = DEBUG_IP
@@ -439,8 +418,7 @@ def get_root(request):
     map_html = ""
     if latitude is not None and longitude is not None:
         map_html = generate_gmaps_html(latitude, longitude, elevation)
-        x, y = lat_lon_to_tile(latitude, longitude, 10)
-        # tile_info = f"Tile coordinates at zoom 10: x={x}, y={y}"
+        x, y = lat_lon_to_tile(latitude, longitude, ALLOWED_ZOOM_LEVELS[0])
 
     if latitude is None:
         latitude = "Unknown"
@@ -473,5 +451,11 @@ def get_root(request):
     )
     return content
 
-
-serve()
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=5001,
+        reload=False,
+        log_config=None,
+    )
