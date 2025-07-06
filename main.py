@@ -684,8 +684,21 @@ async def risk_endpoint(
         lat, lon = loc.latitude, loc.longitude
 
     elev = get_elevation(lat, lon)
-    status = "unknown" if elev is None else ("risk" if elev <= water_level_m else "safe")
-    return {"lat": lat, "lon": lon, "elevation": elev, "water_level": water_level_m, "status": status}
+
+    if elev is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Elevation data not available for the requested location",
+        )
+
+    status = "risk" if elev <= water_level_m else "safe"
+    return {
+        "latitude": lat,
+        "longitude": lon,
+        "elevation_m": elev,
+        "water_level_m": water_level_m,
+        "status": status,
+    }
 
 
 @app.get("/flood_tiles/{level}/{z}/{x}/{y}")
@@ -709,11 +722,11 @@ async def flood_tile(
         png_bytes = None
 
     if png_bytes is None:
-        # Return 1×1 transparent PNG to keep Google Maps happy
-        empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
-        buf = BytesIO()
-        empty.save(buf, format="PNG")
-        return Response(content=buf.getvalue(), media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
+        # No flooded pixels or outside DEM coverage
+        raise HTTPException(
+            status_code=204,
+            detail="No flooded area in this tile for the specified water level",
+        )
 
     FLOOD_TILE_COUNTER.inc()
     return Response(content=png_bytes, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
