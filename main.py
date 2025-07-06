@@ -184,6 +184,7 @@ RATE_LIMIT_COUNTER = Counter(
 )
 MAP_RENDER_COUNTER = Counter("map_render_total", "Number of map pages rendered")
 FLOOD_TILE_COUNTER = Counter("flood_tiles_generated_total", "Flood overlay tiles generated")
+FLOOD_TILE_ERROR_COUNTER = Counter("flood_tile_errors_total", "Errors during flood tile generation")
 
 # Redis client for distributed rate limiting
 REDIS_URL = os.getenv("REDIS_URL")
@@ -688,7 +689,13 @@ async def flood_tile(level: float, z: int, x: int, y: int):
     if z not in ALLOWED_ZOOM_LEVELS:
         raise HTTPException(status_code=404, detail="Zoom level not available")
 
-    png_bytes = await asyncio.to_thread(_generate_flood_overlay_png, level, z, x, y)
+    try:
+        png_bytes = await asyncio.to_thread(_generate_flood_overlay_png, level, z, x, y)
+    except Exception as exc:
+        logging.error(f"Flood overlay generation failed for z={z}/x={x}/y={y}: {exc}")
+        FLOOD_TILE_ERROR_COUNTER.inc()
+        png_bytes = None
+
     if png_bytes is None:
         # Return 1×1 transparent PNG to keep Google Maps happy
         empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
