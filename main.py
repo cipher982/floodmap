@@ -33,6 +33,15 @@ import time
 from collections import defaultdict
 from fastapi import Request, HTTPException
 
+# Prometheus metrics
+from prometheus_client import Counter, Summary, make_asgi_app
+
+# Optional Redis for distributed rate limiting
+try:
+    import redis.asyncio as aioredis  # type: ignore
+except ImportError:  # pragma: no cover
+    aioredis = None
+
 logging.basicConfig(
     format="%(filename)s:%(lineno)d - %(message)s",
     level=logging.INFO
@@ -146,20 +155,56 @@ if not mb_conn:
 else:
     tile_index = {}
 
-# ---------------------------------------------------------------------------
-# Simple in-memory rate-limiter for the tiles endpoint
-# ---------------------------------------------------------------------------
-MAX_TILES_PER_SECOND = int(os.getenv("MAX_TILES_PER_SECOND", "30"))
+# Prometheus metrics definitions
+REQUEST_TIME = Summary("request_processing_seconds", "Time spent processing request", ["endpoint"])
+TILE_HIT_COUNTER = Counter("tiles_served_total", "Total tiles served", ["source"])
+RATE_LIMIT_COUNTER = Counter("rate_limit_exceeded_total", "Number of requests rejected by rate limiter")
+
+# Mount Prometheus ASGI app
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
+
+# Prometheus metrics definitions
+REQUEST_TIME = Summary("request_processing_seconds", "Time spent processing request", ["endpoint"])
+TILE_HIT_COUNTER = Counter("tiles_served_total", "Total tiles served", ["source"])
+RATE_LIMIT_COUNTER = Counter("rate_limit_exceeded_total", "Number of requests rejected by rate limiter")
+
+# Redis client for distributed rate limiting
+REDIS_URL = os.getenv("REDIS_URL")
+redis_client = None
+if REDIS_URL and aioredis is not None:
+    try:
+        redis_client = aioredis.from_url(REDIS_URL, encoding="utf-8", decode_responses=False)
+    except Exception as e:
+        logging.error(f"Failed to connect to Redis at {REDIS_URL}: {e}")
+
+# Fallback in-memory store
 _tile_rate_state: defaultdict[str, list[float]] = defaultdict(list)
 
 
-def _rate_limit(client_ip: str):
+async def _rate_limit(client_ip: str):
+    """Sliding-window rate limit per IP, backed by Redis if available."""
+    if redis_client:
+        key = f"rl:{client_ip}"
+        try:
+            pipe = redis_client.pipeline()
+            pipe.incr(key)
+            pipe.expire(key, 1)
+            count, _ = await pipe.execute()
+            if int(count) > MAX_TILES_PER_SECOND:
+                RATE_LIMIT_COUNTER.inc()
+                raise HTTPException(status_code=429, detail="Too many tile requests")
+            return
+        except Exception as e:
+            logging.error(f"Redis rate-limit error: {e}")
+
+    # Local in-memory fallback
     now = time.time()
     window = _tile_rate_state[client_ip]
-    # evict requests older than 1 s
     while window and now - window[0] > 1:
         window.pop(0)
     if len(window) >= MAX_TILES_PER_SECOND:
+        RATE_LIMIT_COUNTER.inc()
         raise HTTPException(status_code=429, detail="Too many tile requests")
     window.append(now)
 
@@ -436,18 +481,19 @@ def create_map(latitude, longitude):
     return map_html
 
 
-@app.get("/tiles/{z}/{x}/{y}")
+@REQUEST_TIME.time()(lambda *args, **kwargs: None)  # Decorator factory usage
 async def get_tile(request: Request, z: int, x: int, y: int):
     # Basic zoom validation
     if z not in ALLOWED_ZOOM_LEVELS:
         raise HTTPException(status_code=404, detail="Zoom level not available")
 
     client_ip = request.client.host if request.client else "unknown"
-    _rate_limit(client_ip)
+    await _rate_limit(client_ip)
 
     # Try MBTiles first
     blob = await _async_fetch_mbtiles(z, x, y)
     if blob:
+        TILE_HIT_COUNTER.labels("mbtiles").inc()
         return Response(
             content=blob,
             media_type="image/png",
@@ -461,6 +507,7 @@ async def get_tile(request: Request, z: int, x: int, y: int):
         tif_dir = tile_index[z][x][y]
         tile_path = os.path.join(TILES_DIR, tif_dir, str(z), str(x), f"{y}.png")
         if os.path.exists(tile_path):
+            TILE_HIT_COUNTER.labels("disk").inc()
             return Response(
                 content=open(tile_path, "rb").read(),
                 media_type="image/png",
@@ -523,6 +570,20 @@ def get_root(request):
         ),
     )
     return content
+
+# ---------------------------------------------------------------------------
+# Health check endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/healthz")
+async def healthz():
+    status = {
+        "status": "ok",
+        "mbtiles": bool(mb_conn),
+        "redis": bool(redis_client),
+    }
+    return status
 
 if __name__ == "__main__":
     uvicorn.run(

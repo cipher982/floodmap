@@ -40,6 +40,8 @@ RUN pip install --no-cache-dir \
     scipy==1.14.1 \
     tqdm==4.66.5 \
     s3fs==2024.3.1 \
+    prometheus-client==0.20.0 \
+    redis==5.0.4 \
     fastapi==0.110.0 \
     uvicorn[standard]==0.29.0 \
     requests==2.31.0 \
