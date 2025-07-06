@@ -27,6 +27,12 @@ from googlemaps import Client as GoogleMaps
 import uvicorn
 from rasterio.transform import rowcol
 
+import sqlite3
+import asyncio
+import time
+from collections import defaultdict
+from fastapi import Request, HTTPException
+
 logging.basicConfig(
     format="%(filename)s:%(lineno)d - %(message)s",
     level=logging.INFO
@@ -123,7 +129,57 @@ def preload_tile_paths():
     return tile_index
 
 
-tile_index = preload_tile_paths()
+# MBTiles path (preferred)
+MBTILES_PATH = os.getenv("MBTILES_PATH", os.path.join(TILES_DIR, "elevation.mbtiles"))
+
+# Open SQLite connection (shared across threads)
+mb_conn = None
+if os.path.exists(MBTILES_PATH):
+    try:
+        mb_conn = sqlite3.connect(MBTILES_PATH, check_same_thread=False)
+    except Exception as e:
+        logging.error(f"Failed to open MBTiles {MBTILES_PATH}: {e}")
+
+# Only preload directory index if MBTiles not present
+if not mb_conn:
+    tile_index = preload_tile_paths()
+else:
+    tile_index = {}
+
+# ---------------------------------------------------------------------------
+# Simple in-memory rate-limiter for the tiles endpoint
+# ---------------------------------------------------------------------------
+MAX_TILES_PER_SECOND = int(os.getenv("MAX_TILES_PER_SECOND", "30"))
+_tile_rate_state: defaultdict[str, list[float]] = defaultdict(list)
+
+
+def _rate_limit(client_ip: str):
+    now = time.time()
+    window = _tile_rate_state[client_ip]
+    # evict requests older than 1 s
+    while window and now - window[0] > 1:
+        window.pop(0)
+    if len(window) >= MAX_TILES_PER_SECOND:
+        raise HTTPException(status_code=429, detail="Too many tile requests")
+    window.append(now)
+
+
+async def _async_fetch_mbtiles(z: int, x: int, y: int):
+    """Fetch PNG bytes from MBTiles in a thread pool."""
+    if not mb_conn:
+        return None
+
+    def _query():
+        # MBTiles stored with XYZ tiling scheme; no y inversion needed.
+        cur = mb_conn.execute(
+            "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?",
+            (z, x, y),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+    return await asyncio.to_thread(_query)
+
 
 def lat_lon_to_tile(lat, lon, zoom):
     n = 2.0**zoom
@@ -381,20 +437,37 @@ def create_map(latitude, longitude):
 
 
 @app.get("/tiles/{z}/{x}/{y}")
-def get_tile(z: int, x: int, y: int):
+async def get_tile(request: Request, z: int, x: int, y: int):
+    # Basic zoom validation
     if z not in ALLOWED_ZOOM_LEVELS:
+        raise HTTPException(status_code=404, detail="Zoom level not available")
+
+    client_ip = request.client.host if request.client else "unknown"
+    _rate_limit(client_ip)
+
+    # Try MBTiles first
+    blob = await _async_fetch_mbtiles(z, x, y)
+    if blob:
         return Response(
-            status_code=404,
-            content=f"Only zoom levels {ALLOWED_ZOOM_LEVELS} are available",
+            content=blob,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+            },
         )
 
-    # Fast lookup using nested dictionary
+    # Fallback to file system tiles if present
     if z in tile_index and x in tile_index[z] and y in tile_index[z][x]:
         tif_dir = tile_index[z][x][y]
         tile_path = os.path.join(TILES_DIR, tif_dir, str(z), str(x), f"{y}.png")
-        return FileResponse(tile_path, media_type="image/png")
+        if os.path.exists(tile_path):
+            return Response(
+                content=open(tile_path, "rb").read(),
+                media_type="image/png",
+                headers={"Cache-Control": "public, max-age=31536000, immutable"},
+            )
 
-    return Response(status_code=404, content=f"Tile not found: z={z}, x={x}, y={y}")
+    raise HTTPException(status_code=404, detail="Tile not found")
 
 
 @rt("/")
