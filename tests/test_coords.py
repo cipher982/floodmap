@@ -1,5 +1,6 @@
 import math
 import pytest
+import random
 
 from main import lat_lon_to_tile, tile_to_lat_lon
 
@@ -31,7 +32,7 @@ def test_latlon_tile_roundtrip(lat: float, lon: float, zoom: int):
 
 def test_tile_consistency_random():
     """Random points should yield identical tile indices via double conversion."""
-    rng = math.random if hasattr(math, "random") else __import__("random").random
+    rng = random.random
     for _ in range(100):
         lat = rng() * 170 - 85  # [-85, +85]
         lon = rng() * 360 - 180
