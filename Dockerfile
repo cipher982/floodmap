@@ -42,6 +42,7 @@ RUN pip install --no-cache-dir \
     s3fs==2024.3.1 \
     prometheus-client==0.20.0 \
     redis==5.0.4 \
+    Pillow==10.3.0 \
     fastapi==0.110.0 \
     uvicorn[standard]==0.29.0 \
     requests==2.31.0 \
