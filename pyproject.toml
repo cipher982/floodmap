@@ -21,5 +21,6 @@ dependencies = [
     "prometheus-client>=0.20.0",
     "redis>=5.0.4",
     "Pillow>=10.3.0",
+    "httptools @ git+https://github.com/MagicStack/httptools",
     "uvicorn==0.29.0",
 ]
