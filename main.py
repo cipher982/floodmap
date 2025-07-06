@@ -180,6 +180,7 @@ TILE_HIT_COUNTER = Counter("tiles_served_total", "Total tiles served", ["source"
 RATE_LIMIT_COUNTER = Counter(
     "rate_limit_exceeded_total", "Number of requests rejected by rate limiter"
 )
+MAP_RENDER_COUNTER = Counter("map_render_total", "Number of map pages rendered")
 
 # Redis client for distributed rate limiting
 REDIS_URL = os.getenv("REDIS_URL")
@@ -423,6 +424,7 @@ def get_color(value):
 
 
 def generate_gmaps_html(latitude, longitude, elevation):
+    error_tile = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/YoZ7xQAAAAASUVORK5CYII="
     tile_url_pattern = "/tiles/{z}/{x}/{y}"
 
     return f"""
@@ -476,7 +478,7 @@ def generate_gmaps_html(latitude, longitude, elevation):
                             .replace('{{x}}', coord.x)
                             .replace('{{y}}', coord.y);
                     }}
-                    return "";
+                    return "{error_tile}";
                 }},
                 tileSize: new google.maps.Size(256, 256),
                 name: "Elevation Overlay",
@@ -575,6 +577,8 @@ def get_root(request):
         longitude = "Unknown"
     if elevation is None:
         elevation = "Unknown"
+
+    MAP_RENDER_COUNTER.inc()
 
     content = Titled(
         "Flood Buddy",
