@@ -389,6 +389,7 @@ def create_mbtiles(vrt_file: str, mbtiles_path: str, zoom_range: tuple[int, int]
         outputType=gdal.GDT_Int16,
         creationOptions=[
             "TILE_FORMAT=PNG",
+            "TILING_SCHEME=XYZ",
             f"MINZOOM={zoom_range[0]}",
             f"MAXZOOM={zoom_range[1]}",
         ],
