@@ -31,7 +31,7 @@ import sqlite3
 import asyncio
 import time
 from collections import defaultdict
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, Path
 import queue
 from io import BytesIO
 from PIL import Image
@@ -669,7 +669,12 @@ def _generate_flood_overlay_png(level_m: float, z: int, x: int, y: int) -> bytes
 
 
 @app.get("/risk/{water_level_m}")
-async def risk_endpoint(water_level_m: float, request: Request):
+async def risk_endpoint(
+    request: Request,
+    water_level_m: float = Path(
+        ..., description="Water level in meters", ge=0, le=100, title="water_level_m"
+    ),
+):
     """Return risk assessment at client's location (DEBUG uses fixed coords)."""
     if DEBUG_MODE:
         lat, lon = DEBUG_COORDS
@@ -684,15 +689,22 @@ async def risk_endpoint(water_level_m: float, request: Request):
 
 
 @app.get("/flood_tiles/{level}/{z}/{x}/{y}")
-async def flood_tile(level: float, z: int, x: int, y: int):
+async def flood_tile(
+    level: float = Path(..., ge=0, le=100, description="Water level in meters"),
+    z: int = Path(..., ge=min(ALLOWED_ZOOM_LEVELS), le=max(ALLOWED_ZOOM_LEVELS)),
+    x: int = Path(..., description="Tile X coordinate"),
+    y: int = Path(..., description="Tile Y coordinate"),
+):
     """Return a semi-transparent overlay tile representing flooded area."""
-    if z not in ALLOWED_ZOOM_LEVELS:
-        raise HTTPException(status_code=404, detail="Zoom level not available")
+    # Validate tile coordinate bounds for given zoom
+    max_index = (1 << z) - 1
+    if not (0 <= x <= max_index and 0 <= y <= max_index):
+        raise HTTPException(status_code=400, detail="Tile indices out of range for zoom level")
 
     try:
         png_bytes = await asyncio.to_thread(_generate_flood_overlay_png, level, z, x, y)
     except Exception as exc:
-        logging.error(f"Flood overlay generation failed for z={z}/x={x}/y={y}: {exc}")
+        logging.exception("Flood overlay generation failed", extra={"z": z, "x": x, "y": y})
         FLOOD_TILE_ERROR_COUNTER.inc()
         png_bytes = None
 
