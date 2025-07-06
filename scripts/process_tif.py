@@ -146,7 +146,6 @@ def process_file(args):
         "-z", f"{zoom_range[0]}-{zoom_range[1]}",
         "--processes", str(GDAL_THREADS),
         "-r", "cubic",
-        "--tmscompatible",
         "--webviewer", "none",
         "-q",
         vrt_file,
