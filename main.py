@@ -427,7 +427,7 @@ def get_color(value):
     return f"rgb({int(rgb[0]*255)}, {int(rgb[1]*255)}, {int(rgb[2]*255)})"
 
 
-def generate_gmaps_html(latitude, longitude, elevation):
+def generate_gmaps_html(latitude, longitude, elevation, water_level):
     error_tile = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/YoZ7xQAAAAASUVORK5CYII="
     tile_url_pattern = "/tiles/{z}/{x}/{y}"
 
@@ -474,6 +474,7 @@ def generate_gmaps_html(latitude, longitude, elevation):
                 infowindow.open(map, marker);
             }});
 
+            // Elevation tiles
             const tileLayer = new google.maps.ImageMapType({{
                 getTileUrl: function(coord, zoom) {{
                     if (allowedZoomLevels.includes(zoom)) {{
@@ -489,6 +490,20 @@ def generate_gmaps_html(latitude, longitude, elevation):
                 opacity: 0.6
             }});
 
+            // Flood overlay tiles (semi-transparent)
+            const floodLayer = new google.maps.ImageMapType({{
+                getTileUrl: function(coord, zoom) {{
+                    if (allowedZoomLevels.includes(zoom)) {{
+                        return `/flood_tiles/${water_level}/${'{'}zoom{'}'}/${'{'}coord.x{'}'}/${'{'}coord.y{'}'}`;
+                    }}
+                    return "";
+                }},
+                tileSize: new google.maps.Size(256, 256),
+                name: "Flood Overlay",
+                opacity: 0.5
+            }});
+
+            map.overlayMapTypes.insertAt(0, floodLayer);
             map.overlayMapTypes.insertAt(0, tileLayer);
         }}
     </script>
@@ -496,7 +511,7 @@ def generate_gmaps_html(latitude, longitude, elevation):
     """
 
 
-def create_map(latitude, longitude):
+def create_map(latitude, longitude, water_level):
     # cache_key = f"map_{latitude}_{longitude}"
     # cached_map = cache.get(cache_key)
     # if cached_map:
@@ -505,7 +520,7 @@ def create_map(latitude, longitude):
 
     # logging.info(f"Cache miss for map: {cache_key}")
     elevation = get_elevation(latitude, longitude)
-    map_html = generate_gmaps_html(latitude, longitude, elevation)
+    map_html = generate_gmaps_html(latitude, longitude, elevation, water_level)
     # cache.set(cache_key, map_html, expire=86400)  # Cache for 24 hours
     return map_html
 
@@ -553,7 +568,7 @@ async def get_tile(request: Request, z: int, x: int, y: int):
 
 
 @rt("/")
-def get_root(request):
+def get_root(request, water_level: float = 1.0):
     logging.info("==== Running route / ====")
 
     if DEBUG_MODE:
@@ -572,7 +587,7 @@ def get_root(request):
 
     map_html = ""
     if latitude is not None and longitude is not None:
-        map_html = generate_gmaps_html(latitude, longitude, elevation)
+        map_html = generate_gmaps_html(latitude, longitude, elevation, water_level)
         x, y = lat_lon_to_tile(latitude, longitude, ALLOWED_ZOOM_LEVELS[0])
 
     if latitude is None:
