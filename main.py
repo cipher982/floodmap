@@ -32,6 +32,7 @@ import asyncio
 import time
 from collections import defaultdict
 from fastapi import Request, HTTPException
+import queue
 
 # Prometheus metrics
 from prometheus_client import Counter, Summary, make_asgi_app
@@ -141,33 +142,44 @@ def preload_tile_paths():
 # MBTiles path (preferred)
 MBTILES_PATH = os.getenv("MBTILES_PATH", os.path.join(TILES_DIR, "elevation.mbtiles"))
 
-# Open SQLite connection (shared across threads)
-mb_conn = None
-if os.path.exists(MBTILES_PATH):
-    try:
-        mb_conn = sqlite3.connect(MBTILES_PATH, check_same_thread=False)
-    except Exception as e:
-        logging.error(f"Failed to open MBTiles {MBTILES_PATH}: {e}")
+# Simple connection pool for read-only MBTiles connections
+_pool_size = int(os.getenv("MBTILES_POOL_SIZE", "4"))
+_mbtiles_pool: queue.Queue[sqlite3.Connection] | None = None
 
-# Only preload directory index if MBTiles not present
-if not mb_conn:
+if os.path.exists(MBTILES_PATH):
+    _mbtiles_pool = queue.Queue(maxsize=_pool_size)
+    try:
+        for _ in range(_pool_size):
+            conn = sqlite3.connect(
+                f"file:{MBTILES_PATH}?mode=ro", uri=True, check_same_thread=False
+            )
+            conn.execute("PRAGMA journal_mode=OFF")
+            conn.execute("PRAGMA synchronous=OFF")
+            _mbtiles_pool.put(conn)
+    except Exception as e:
+        logging.error(f"Failed to initialize MBTiles pool: {e}")
+        _mbtiles_pool = None
+
+# Only preload directory index if MBTiles pool not present
+if not _mbtiles_pool:
     tile_index = preload_tile_paths()
 else:
     tile_index = {}
 
-# Prometheus metrics definitions
-REQUEST_TIME = Summary("request_processing_seconds", "Time spent processing request", ["endpoint"])
-TILE_HIT_COUNTER = Counter("tiles_served_total", "Total tiles served", ["source"])
-RATE_LIMIT_COUNTER = Counter("rate_limit_exceeded_total", "Number of requests rejected by rate limiter")
-
-# Mount Prometheus ASGI app
+# Mount Prometheus ASGI app once and define metrics
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
 
-# Prometheus metrics definitions
-REQUEST_TIME = Summary("request_processing_seconds", "Time spent processing request", ["endpoint"])
+# Prometheus metric objects
+REQUEST_TIME = Summary(
+    "request_processing_seconds",
+    "Time spent processing request",
+    ["endpoint"],
+)
 TILE_HIT_COUNTER = Counter("tiles_served_total", "Total tiles served", ["source"])
-RATE_LIMIT_COUNTER = Counter("rate_limit_exceeded_total", "Number of requests rejected by rate limiter")
+RATE_LIMIT_COUNTER = Counter(
+    "rate_limit_exceeded_total", "Number of requests rejected by rate limiter"
+)
 
 # Redis client for distributed rate limiting
 REDIS_URL = os.getenv("REDIS_URL")
@@ -180,6 +192,9 @@ if REDIS_URL and aioredis is not None:
 
 # Fallback in-memory store
 _tile_rate_state: defaultdict[str, list[float]] = defaultdict(list)
+
+# Rate limiting configuration
+MAX_TILES_PER_SECOND = int(os.getenv("MAX_TILES_PER_SECOND", "30"))
 
 
 async def _rate_limit(client_ip: str):
@@ -211,17 +226,25 @@ async def _rate_limit(client_ip: str):
 
 async def _async_fetch_mbtiles(z: int, x: int, y: int):
     """Fetch PNG bytes from MBTiles in a thread pool."""
-    if not mb_conn:
+    if not _mbtiles_pool:
         return None
 
     def _query():
-        # MBTiles stored with XYZ tiling scheme; no y inversion needed.
-        cur = mb_conn.execute(
-            "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?",
-            (z, x, y),
-        )
-        row = cur.fetchone()
-        return row[0] if row else None
+        conn = None
+        try:
+            conn = _mbtiles_pool.get(timeout=5)
+            cur = conn.execute(
+                "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?",
+                (z, x, y),
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+        except Exception as e:
+            logging.error(f"MBTiles query error: {e}")
+            return None
+        finally:
+            if conn:
+                _mbtiles_pool.put(conn)
 
     return await asyncio.to_thread(_query)
 
@@ -481,19 +504,23 @@ def create_map(latitude, longitude):
     return map_html
 
 
-@REQUEST_TIME.time()(lambda *args, **kwargs: None)  # Decorator factory usage
+@app.get("/tiles/{z}/{x}/{y}")
 async def get_tile(request: Request, z: int, x: int, y: int):
     # Basic zoom validation
     if z not in ALLOWED_ZOOM_LEVELS:
         raise HTTPException(status_code=404, detail="Zoom level not available")
 
     client_ip = request.client.host if request.client else "unknown"
+
+    start_time = time.time()
+
     await _rate_limit(client_ip)
 
     # Try MBTiles first
     blob = await _async_fetch_mbtiles(z, x, y)
     if blob:
         TILE_HIT_COUNTER.labels("mbtiles").inc()
+        REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
         return Response(
             content=blob,
             media_type="image/png",
@@ -508,12 +535,14 @@ async def get_tile(request: Request, z: int, x: int, y: int):
         tile_path = os.path.join(TILES_DIR, tif_dir, str(z), str(x), f"{y}.png")
         if os.path.exists(tile_path):
             TILE_HIT_COUNTER.labels("disk").inc()
+            REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
             return Response(
                 content=open(tile_path, "rb").read(),
                 media_type="image/png",
                 headers={"Cache-Control": "public, max-age=31536000, immutable"},
             )
 
+    REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
     raise HTTPException(status_code=404, detail="Tile not found")
 
 
@@ -580,7 +609,7 @@ def get_root(request):
 async def healthz():
     status = {
         "status": "ok",
-        "mbtiles": bool(mb_conn),
+        "mbtiles": bool(_mbtiles_pool),
         "redis": bool(redis_client),
     }
     return status

@@ -2,6 +2,7 @@ import os
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
+import time
 
 import fsspec
 from tqdm import tqdm
@@ -25,14 +26,29 @@ def list_cogs(fs: fsspec.AbstractFileSystem, prefix: str):
     return [f"{SRTM_BUCKET}{key}" for key in objects if key.lower().endswith(".tif")]
 
 
-def download_one(fs: fsspec.AbstractFileSystem, url: str, dest_dir: str):
+def download_one(fs: fsspec.AbstractFileSystem, url: str, dest_dir: str, retries: int = 3):
+    """Download a single COG with retry logic."""
     parsed = urlparse(url)
     filename = os.path.basename(parsed.path)
     dest_path = os.path.join(dest_dir, filename)
+
     if os.path.exists(dest_path) and os.path.getsize(dest_path) > 0:
         return False  # already exists
-    fs.get(url, dest_path)
-    return True
+
+    delay = 1.0
+    for attempt in range(1, retries + 1):
+        try:
+            fs.get(url, dest_path)
+            return True
+        except Exception as e:
+            logging.warning(
+                f"Failed to download {filename} (attempt {attempt}/{retries}): {e}"
+            )
+            if attempt == retries:
+                logging.error(f"Giving up on {filename}")
+                return False
+            time.sleep(delay)
+            delay *= 2  # exponential backoff
 
 
 def main(max_workers: int = 8):
