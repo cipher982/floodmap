@@ -44,7 +44,7 @@ RUN pip install --no-cache-dir \
     redis==5.0.4 \
     Pillow==10.3.0 \
     fastapi==0.110.0 \
-    uvicorn[standard]==0.29.0 \
+    uvicorn==0.29.0 \
     requests==2.31.0 \
     python-dotenv==1.0.1
 
