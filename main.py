@@ -33,6 +33,8 @@ import time
 from collections import defaultdict
 from fastapi import Request, HTTPException
 import queue
+from io import BytesIO
+from PIL import Image
 
 # Prometheus metrics
 from prometheus_client import Counter, Summary, make_asgi_app
@@ -181,6 +183,7 @@ RATE_LIMIT_COUNTER = Counter(
     "rate_limit_exceeded_total", "Number of requests rejected by rate limiter"
 )
 MAP_RENDER_COUNTER = Counter("map_render_total", "Number of map pages rendered")
+FLOOD_TILE_COUNTER = Counter("flood_tiles_generated_total", "Flood overlay tiles generated")
 
 # Redis client for distributed rate limiting
 REDIS_URL = os.getenv("REDIS_URL")
@@ -617,6 +620,84 @@ async def healthz():
         "redis": bool(redis_client),
     }
     return status
+
+# ---------------------------------------------------------------------------
+# Flood simulation helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_tile_bounds(z: int, x: int, y: int):
+    """Return (lat_max, lat_min, lon_min, lon_max) for an XYZ tile."""
+    lat_max, lon_min = tile_to_lat_lon(x, y, z)
+    lat_min, lon_max = tile_to_lat_lon(x + 1, y + 1, z)
+    return lat_max, lat_min, lon_min, lon_max
+
+
+def _generate_flood_overlay_png(level_m: float, z: int, x: int, y: int) -> bytes | None:
+    """Return a PNG byte string with semi-transparent blue where elevation <= level."""
+    lat_max, lat_min, lon_min, lon_max = _get_tile_bounds(z, x, y)
+
+    # Sample 64×64 grid for speed then upscale to 256.
+    rows, cols = 64, 64
+    lats = np.linspace(lat_max, lat_min, rows)
+    lons = np.linspace(lon_min, lon_max, cols)
+    mask = np.zeros((rows, cols), dtype=bool)
+
+    for i, lat in enumerate(lats):
+        for j, lon in enumerate(lons):
+            elev = get_elevation_from_memory(lat, lon)
+            if elev is not None and elev <= level_m:
+                mask[i, j] = True
+
+    if not mask.any():
+        return None  # No flooded pixels in this tile
+
+    # Upscale mask to 256×256
+    mask_img = Image.fromarray(mask.astype("uint8") * 255, mode="L").resize((256, 256), Image.NEAREST)
+    rgba = Image.new("RGBA", (256, 256), (0, 0, 255, 0))  # transparent
+    blue = Image.new("RGBA", (256, 256), (0, 0, 255, 120))
+    rgba.paste(blue, mask=mask_img)
+
+    buf = BytesIO()
+    rgba.save(buf, format="PNG")
+    return buf.getvalue()
+
+# ---------------------------------------------------------------------------
+# Flood simulation endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/risk/{water_level_m}")
+async def risk_endpoint(water_level_m: float, request: Request):
+    """Return risk assessment at client's location (DEBUG uses fixed coords)."""
+    if DEBUG_MODE:
+        lat, lon = DEBUG_COORDS
+    else:
+        user_ip = request.client.host if request.client else "unknown"
+        loc = get_location_info(user_ip)
+        lat, lon = loc.latitude, loc.longitude
+
+    elev = get_elevation(lat, lon)
+    status = "unknown" if elev is None else ("risk" if elev <= water_level_m else "safe")
+    return {"lat": lat, "lon": lon, "elevation": elev, "water_level": water_level_m, "status": status}
+
+
+@app.get("/flood_tiles/{level}/{z}/{x}/{y}")
+async def flood_tile(level: float, z: int, x: int, y: int):
+    """Return a semi-transparent overlay tile representing flooded area."""
+    if z not in ALLOWED_ZOOM_LEVELS:
+        raise HTTPException(status_code=404, detail="Zoom level not available")
+
+    png_bytes = await asyncio.to_thread(_generate_flood_overlay_png, level, z, x, y)
+    if png_bytes is None:
+        # Return 1×1 transparent PNG to keep Google Maps happy
+        empty = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+        buf = BytesIO()
+        empty.save(buf, format="PNG")
+        return Response(content=buf.getvalue(), media_type="image/png", headers={"Cache-Control": "public, max-age=3600"})
+
+    FLOOD_TILE_COUNTER.inc()
+    return Response(content=png_bytes, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
 
 if __name__ == "__main__":
     uvicorn.run(
