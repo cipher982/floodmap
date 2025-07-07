@@ -23,4 +23,6 @@ dependencies = [
     "Pillow>=10.3.0",
     "httptools @ git+https://github.com/MagicStack/httptools",
     "cryptography<46",
+    "setuptools>=69.0.0",
+    "wheel>=0.43.0",
 ]
