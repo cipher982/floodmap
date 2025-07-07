@@ -23,10 +23,13 @@ VALIDATE = bool(os.getenv("VALIDATE_DEM", "1") == "1")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def list_cogs(fs: fsspec.AbstractFileSystem, prefix: str):
-    """Return a list of COG URLs under the given prefix."""
+def list_cogs(fs: fsspec.AbstractFileSystem, prefix: str, limit: int | None = None):
+    """Return a list of COG URLs under the given prefix. If *limit* is given, return only the first N results to speed up tests."""
     objects = fs.ls(prefix, detail=False)
-    return [f"{SRTM_BUCKET}{key}" for key in objects if key.lower().endswith(".tif")]
+    urls = [f"{SRTM_BUCKET}{key}" for key in objects if key.lower().endswith(".tif")]
+    if limit is not None:
+        urls = urls[:limit]
+    return urls
 
 
 def download_one(fs: fsspec.AbstractFileSystem, url: str, dest_dir: str, retries: int = 3):
@@ -66,16 +69,18 @@ def download_one(fs: fsspec.AbstractFileSystem, url: str, dest_dir: str, retries
             delay *= 2  # exponential backoff
 
 
-def main(max_workers: int = 8):
+def main(max_workers: int = 8, limit: int | None = None):
     os.makedirs(INPUT_DIR, exist_ok=True)
 
     fs = fsspec.filesystem("s3", anon=True, region_name=AWS_REGION)
-    cog_urls = list_cogs(fs, PREFIX)
+    cog_urls = list_cogs(fs, PREFIX, limit=limit)
     logging.info(f"Found {len(cog_urls):,} COG files to consider")
 
     downloaded = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(download_one, fs, url, INPUT_DIR): url for url in cog_urls}
+        futures = {
+            executor.submit(download_one, fs, url, INPUT_DIR): url for url in cog_urls
+        }
         for f in tqdm(as_completed(futures), total=len(futures), desc="Downloading COGs"):
             if f.result():
                 downloaded += 1
@@ -83,4 +88,11 @@ def main(max_workers: int = 8):
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Download sample DEM COGs from AWS")
+    parser.add_argument("--limit", type=int, default=None, help="Maximum number of COGs to download")
+    parser.add_argument("--workers", type=int, default=8, help="Thread workers")
+    args = parser.parse_args()
+
+    main(max_workers=args.workers, limit=args.limit)
