@@ -172,3 +172,13 @@ processed_data/
 debug.py
 ingest/
 .vscode/
+data_v2/
+*.mbtiles
+*.pkl
+*.bin
+test_screenshot.png
+test_*.png
+elevation_data.bin
+elevation_index.pkl
+static/.DS_Store
+tests/e2e/screenshots/

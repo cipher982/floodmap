@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from googlemaps import Client as GoogleMaps
 
 import uvicorn
+import rasterio
 from rasterio.transform import rowcol
 
 import sqlite3
@@ -64,15 +65,15 @@ app, rt = fast_app(
 DEBUG_COORDS = (27.95053694962414, -82.4585769277307)
 DEBUG_IP = "23.111.165.2"
 TILES_DIR = str(os.getenv("PROCESSED_DIR"))
-# ALLOWED_ZOOM_LEVELS = [10, 11, 12, 13, 14, 15]
-ALLOWED_ZOOM_LEVELS = [8, 9]
+# ALLOWED_ZOOM_LEVELS = [10, 11, 12, 13, 14, 15] 
+ALLOWED_ZOOM_LEVELS = [10, 11, 12]
 MAP_HEIGHT = "600px"
 
 
 DEBUG_MODE = True
 
-gmaps_api_key = os.environ.get("GMAP_API_KEY")
-assert gmaps_api_key is not None, "GMAP_API_KEY is not set"
+gmaps_api_key = os.environ.get("GMAP_API_KEY", "DISABLED_FOR_LOCAL_DEV")
+# assert gmaps_api_key is not None, "GMAP_API_KEY is not set"  # DISABLED to prevent API quota usage
 
 # Global variables to store the TIF data
 tif_data: list = []
@@ -90,7 +91,7 @@ class LocationInfo:
     longitude: float = 0.0
 
 
-gmaps = GoogleMaps(key=gmaps_api_key)
+# gmaps = GoogleMaps(key=gmaps_api_key)  # DISABLED to prevent API quota usage
 
 
 def preload_tile_paths():
@@ -141,6 +142,54 @@ def preload_tile_paths():
     return tile_index
 
 
+def load_elevation_data():
+    """Load TIF elevation data into memory for flood calculations."""
+    global tif_data, tif_bounds, tif_transform
+    
+    # Clear existing data
+    tif_data.clear()
+    tif_bounds.clear() 
+    tif_transform.clear()
+    
+    # Check for input directory with TIF files
+    input_dir = os.getenv("INPUT_DIR", "scratch/data_tampa")
+    if not os.path.exists(input_dir):
+        logging.warning(f"Input directory not found: {input_dir}")
+        return
+        
+    # Find all TIF files
+    tif_files = []
+    for file in os.listdir(input_dir):
+        if file.endswith('.tif'):
+            tif_files.append(os.path.join(input_dir, file))
+    
+    if not tif_files:
+        logging.warning(f"No TIF files found in {input_dir}")
+        return
+        
+    logging.info(f"Loading {len(tif_files)} TIF files into memory...")
+    
+    for tif_file in tif_files:
+        try:
+            with rasterio.open(tif_file) as src:
+                # Read elevation data
+                data = src.read(1)  # Read first band
+                bounds = src.bounds
+                transform = src.transform
+                
+                # Store in global arrays
+                tif_data.append(data)
+                tif_bounds.append(bounds)
+                tif_transform.append(transform)
+                
+                logging.info(f"Loaded {tif_file}: {data.shape} pixels, bounds={bounds}")
+                
+        except Exception as e:
+            logging.error(f"Failed to load {tif_file}: {e}")
+    
+    logging.info(f"Successfully loaded {len(tif_data)} TIF files into memory")
+
+
 # MBTiles path (preferred)
 MBTILES_PATH = os.getenv("MBTILES_PATH", os.path.join(TILES_DIR, "elevation.mbtiles"))
 
@@ -168,23 +217,43 @@ if not _mbtiles_pool:
 else:
     tile_index = {}
 
-# Mount Prometheus ASGI app once and define metrics
-metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
+# Load elevation data into memory for flood calculations
+load_elevation_data()
 
-# Prometheus metric objects
-REQUEST_TIME = Summary(
-    "request_processing_seconds",
-    "Time spent processing request",
-    ["endpoint"],
-)
-TILE_HIT_COUNTER = Counter("tiles_served_total", "Total tiles served", ["source"])
-RATE_LIMIT_COUNTER = Counter(
-    "rate_limit_exceeded_total", "Number of requests rejected by rate limiter"
-)
-MAP_RENDER_COUNTER = Counter("map_render_total", "Number of map pages rendered")
-FLOOD_TILE_COUNTER = Counter("flood_tiles_generated_total", "Flood overlay tiles generated")
-FLOOD_TILE_ERROR_COUNTER = Counter("flood_tile_errors_total", "Errors during flood tile generation")
+# Mount Prometheus ASGI app once and define metrics
+try:
+    metrics_app = make_asgi_app()
+    app.mount("/metrics", metrics_app)
+
+    # Prometheus metric objects - only create if not already created
+    REQUEST_TIME = Summary(
+        "request_processing_seconds",
+        "Time spent processing request",
+        ["endpoint"],
+    )
+    TILE_HIT_COUNTER = Counter("tiles_served_total", "Total tiles served", ["source"])
+    RATE_LIMIT_COUNTER = Counter(
+        "rate_limit_exceeded_total", "Number of requests rejected by rate limiter"
+    )
+    MAP_RENDER_COUNTER = Counter("map_render_total", "Number of map pages rendered")
+    FLOOD_TILE_COUNTER = Counter("flood_tiles_generated_total", "Flood overlay tiles generated")
+    FLOOD_TILE_ERROR_COUNTER = Counter("flood_tile_errors_total", "Errors during flood tile generation")
+except ValueError as e:
+    if "Duplicated timeseries" in str(e):
+        logging.warning("Prometheus metrics already registered, continuing...")
+        # Create dummy metrics to avoid NameError
+        class DummyMetric:
+            def inc(self): pass
+            def observe(self, val): pass
+            def labels(self, *args): return self
+        REQUEST_TIME = DummyMetric()
+        TILE_HIT_COUNTER = DummyMetric()
+        RATE_LIMIT_COUNTER = DummyMetric()
+        MAP_RENDER_COUNTER = DummyMetric()
+        FLOOD_TILE_COUNTER = DummyMetric()
+        FLOOD_TILE_ERROR_COUNTER = DummyMetric()
+    else:
+        raise
 
 # Redis client for distributed rate limiting
 REDIS_URL = os.getenv("REDIS_URL")
@@ -256,11 +325,8 @@ async def _async_fetch_mbtiles(z: int, x: int, y: int):
 
 def lat_lon_to_tile(lat, lon, zoom):
     n = 2.0**zoom
-    xtile = floor((lon + 180.0) / 360.0 * n)
-    ytile = floor((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n)
-    logging.info(
-        f"Converting lat={lat}, lon={lon}, zoom={zoom} to tile: x={xtile}, y={ytile}"
-    )
+    xtile = int(floor((lon + 180.0) / 360.0 * n))
+    ytile = int(floor((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n))
     return xtile, ytile
 
 
@@ -272,21 +338,22 @@ def tile_to_lat_lon(x, y, zoom):
     return lat_deg, lon_deg
 
 
-# Add this debug code to verify tile coverage:
-z = ALLOWED_ZOOM_LEVELS[0]  # zoom level 8
-for tif_dir in os.listdir(TILES_DIR):
-    z_path = os.path.join(TILES_DIR, tif_dir, str(z))
-    if not os.path.exists(z_path):
-        continue
-        
-    x_dirs = [int(x) for x in os.listdir(z_path) if x.isdigit()]
-    if not x_dirs:
-        continue
-        
-    for x in x_dirs:
-        y_files = [int(y.replace('.png', '')) for y in os.listdir(os.path.join(z_path, str(x))) if y.endswith('.png')]
-        if y_files:
-            logging.info(f"TIF {tif_dir} at z={z}, x={x}: y={min(y_files)}-{max(y_files)}")
+# Add this debug code to verify tile coverage (only run if not testing):
+if __name__ == "__main__" and os.path.exists(TILES_DIR):
+    z = ALLOWED_ZOOM_LEVELS[0]  # zoom level 8
+    for tif_dir in os.listdir(TILES_DIR):
+        z_path = os.path.join(TILES_DIR, tif_dir, str(z))
+        if not os.path.exists(z_path):
+            continue
+            
+        x_dirs = [int(x) for x in os.listdir(z_path) if x.isdigit()]
+        if not x_dirs:
+            continue
+            
+        for x in x_dirs:
+            y_files = [int(y.replace('.png', '')) for y in os.listdir(os.path.join(z_path, str(x))) if y.endswith('.png')]
+            if y_files:
+                logging.info(f"TIF {tif_dir} at z={z}, x={x}: y={min(y_files)}-{max(y_files)}")
 
 def get_elevation_from_memory(latitude, longitude):
     # logging.info(f"Getting elevation for lat={latitude}, lon={longitude}")
@@ -494,7 +561,7 @@ def generate_gmaps_html(latitude, longitude, elevation, water_level):
             const floodLayer = new google.maps.ImageMapType({{
                 getTileUrl: function(coord, zoom) {{
                     if (allowedZoomLevels.includes(zoom)) {{
-                        return `/flood_tiles/${water_level}/${'{'}zoom{'}'}/${'{'}coord.x{'}'}/${'{'}coord.y{'}'}`;
+                        return `/flood_tiles/{water_level}/` + zoom + '/' + coord.x + '/' + coord.y;
                     }}
                     return "";
                 }},
@@ -550,7 +617,7 @@ async def get_tile(request: Request, z: int, x: int, y: int):
             },
         )
 
-    # Fallback to file system tiles if present
+    # Fallback to file system tiles if present (TIF directory structure)
     if z in tile_index and x in tile_index[z] and y in tile_index[z][x]:
         tif_dir = tile_index[z][x][y]
         tile_path = os.path.join(TILES_DIR, tif_dir, str(z), str(x), f"{y}.png")
@@ -562,6 +629,17 @@ async def get_tile(request: Request, z: int, x: int, y: int):
                 media_type="image/png",
                 headers={"Cache-Control": "public, max-age=31536000, immutable"},
             )
+
+    # Fallback to direct tile structure (z/x/y.png)
+    direct_tile_path = os.path.join(TILES_DIR, str(z), str(x), f"{y}.png")
+    if os.path.exists(direct_tile_path):
+        TILE_HIT_COUNTER.labels("disk").inc()
+        REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
+        return Response(
+            content=open(direct_tile_path, "rb").read(),
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
 
     REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
     raise HTTPException(status_code=404, detail="Tile not found")
@@ -668,8 +746,8 @@ def _generate_flood_overlay_png(level_m: float, z: int, x: int, y: int) -> bytes
     if not mask.any():
         return None  # No flooded pixels in this tile
 
-    # Upscale mask to 256×256
-    mask_img = Image.fromarray(mask.astype("uint8") * 255, mode="L").resize((256, 256), Image.NEAREST)
+    # Upscale mask to 256×256  
+    mask_img = Image.fromarray(mask.astype("uint8") * 255).resize((256, 256), Image.NEAREST)
     rgba = Image.new("RGBA", (256, 256), (0, 0, 255, 0))  # transparent
     blue = Image.new("RGBA", (256, 256), (0, 0, 255, 120))
     rgba.paste(blue, mask=mask_img)
