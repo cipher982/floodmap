@@ -28,6 +28,9 @@ import uvicorn
 import rasterio
 from rasterio.transform import rowcol
 
+# Import our compressed storage system
+from elevation_storage import ElevationStorage
+
 import sqlite3
 import asyncio
 import time
@@ -75,11 +78,14 @@ DEBUG_MODE = True
 gmaps_api_key = os.environ.get("GMAP_API_KEY", "DISABLED_FOR_LOCAL_DEV")
 # assert gmaps_api_key is not None, "GMAP_API_KEY is not set"  # DISABLED to prevent API quota usage
 
-# Global variables to store the TIF data
+# Global variables to store the TIF data (legacy)
 tif_data: list = []
 tif_bounds: list = []
 tif_transform: list = []
 tile_index = {}
+
+# Compressed elevation storage system
+compressed_storage = None
 
 
 @dataclass
@@ -219,6 +225,19 @@ else:
 
 # Load elevation data into memory for flood calculations
 load_elevation_data()
+
+# Initialize compressed elevation storage system
+try:
+    compressed_data_dir = "compressed_data/tampa"  # Start with Tampa compressed data
+    if os.path.exists(compressed_data_dir):
+        compressed_storage = ElevationStorage(compressed_data_dir, cache_size=20)
+        logging.info(f"Initialized compressed storage with {len(compressed_storage.tile_index)} tiles")
+    else:
+        logging.warning(f"Compressed data directory not found: {compressed_data_dir}")
+        compressed_storage = None
+except Exception as e:
+    logging.error(f"Failed to initialize compressed storage: {e}")
+    compressed_storage = None
 
 # Mount Prometheus ASGI app once and define metrics
 try:
@@ -403,7 +422,15 @@ def get_elevation(latitude, longitude):
     if cached_elevation:
         return cached_elevation
 
+    # Try in-memory TIF data first (legacy system)
     elevation = get_elevation_from_memory(latitude, longitude)
+    
+    # Fallback to compressed storage system
+    if elevation is None and compressed_storage is not None:
+        elevation = compressed_storage.get_elevation(latitude, longitude)
+        if elevation is not None:
+            logging.debug(f"Using compressed storage for elevation at ({latitude}, {longitude})")
+    
     if elevation is not None:
         cache.set(cache_key, elevation, expire=86400)  # Cache for 24 hours
     return elevation
