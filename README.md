@@ -1,52 +1,66 @@
-# Elevation Map Web Application
+# Flood Buddy – Elevation & Flood-risk Tiles
 
-An interactive web application that overlays elevation data on a map based on the user's location.
+![Architecture](docs/arch.svg)
 
-![Elevation Map Screenshot](./static/screenshot.png)
+## 1. Overview
+Flood Buddy turns raw public-domain elevation data into colored map tiles and serves them through a FastAPI backend.  
+Key design choices:
 
-## Overview
+* **Single MBTiles datastore** – tiles are stored in `elevation.mbtiles`, avoiding millions of tiny PNG files and heavy inode usage.
+* **Public Open-Data ingestion** – elevation COGs are pulled anonymously from AWS (e.g. `s3://usgs-srtm`). No USGS API keys or rate-limits.
+* **Docker-first runtime** – shipped as an image based on `ghcr.io/osgeo/gdal:alpine` so GDAL/Rasterio just work.
+* **Observability built-in** – Prometheus metrics, health checks and distributed rate-limiting (Redis).
 
-This project displays color-coded elevation data on an interactive map centered on the user's location. High-resolution elevation data is processed to generate map tiles that visually represent different elevation levels.
+## 2. Quick start with Docker
+```bash
+# Clone and create a .env from the template
+cp .env.example .env
+# edit GMAP_API_KEY, REDIS_URL (optional) etc.
 
-## Features
+# Build (or pull) and run
+docker build -t flood-buddy .
 
-- **Automatic Location Detection**: Identifies the user's location using IP geolocation.
-- **Elevation Overlay**: Displays color-coded elevation tiles over the map.
-- **Interactive Map**: Users can zoom and pan to explore elevation data in different areas.
-- **Fast Data Access**: Elevation data is loaded into memory for quick retrieval.
+docker run -p 5001:5001 \
+  -v $(pwd)/data:/data \
+  --env-file .env \
+  flood-buddy
 
-## How It Works
+# Visit
+open http://localhost:5001/
+```
 
-### Data Processing
+The first run downloads public DEM COGs (~<1 GB for CONUS at 1-arc-second) and builds `elevation.mbtiles`. Subsequent runs start instantly.
 
-1. **Merge Elevation Data**: Combines multiple TIFF files into a single dataset.
-2. **Apply Color Ramp**: Assigns colors to elevation ranges using a fixed color scale.
-3. **Generate Map Tiles**: Creates tiles for multiple zoom levels using GDAL tools.
+## 3. Environment variables
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `GMAP_API_KEY` | – | Google Maps JS API key for front-end map. |
+| `INPUT_DIR` | `/data/input` | Where raw GeoTIFF/COG files are stored. |
+| `PROCESSED_DIR` | `/data/processed` | Output directory for VRT, tiles & MBTiles. |
+| `MBTILES_PATH` | `$PROCESSED_DIR/elevation.mbtiles` | Override MBTiles location. |
+| `COLOR_RAMP` | `scripts/color_ramp.txt` | Color table for GDAL. |
+| `MAX_TILES_PER_SECOND` | `30` | Per-IP rate limit (Redis-backed). |
+| `REDIS_URL` | – | `redis://host:port` for distributed rate limiting. Optional. |
+| `MBTILES_POOL_SIZE` | `4` | SQLite connection pool size. |
+| `AWS_REGION` | `us-east-1` | Region for public S3 endpoints. |
 
-### Web Application
+See `.env.example` for a full template.
 
-1. **Location Detection**: Uses IP geolocation to determine the user's coordinates.
-2. **Elevation Retrieval**: Fetches elevation data from in-memory datasets.
-3. **Map Rendering**: Displays an interactive map with the elevation overlay.
-4. **Tile Serving**: Serves pre-processed map tiles to the web application.
+## 4. Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Main HTML page with user-centric map overlay. |
+| `GET` | `/tiles/{z}/{x}/{y}` | PNG tile (XYZ scheme, 8≤z≤9 by default). |
+| `GET` | `/healthz` | Liveness/readiness probe. Returns JSON `{status, mbtiles, redis}`. |
+| `GET` | `/metrics` | Prometheus metrics in OpenMetrics format. |
 
-## Technologies Used
+## 5. Development workflow
+1. `pytest -q` – runs unit + integration tests (builds sample MBTiles in temp dir).  
+2. `scripts/download_aws_dem.py` – pulls COGs into `INPUT_DIR`.  
+3. `scripts/process_tif.py` – mosaics, tiles, and writes MBTiles.  
+4. `uvicorn main:app --reload` – hot-reload API during development.
 
-- **Python**: Core programming language for the application.
-- **FastAPI**: Web framework for building the API.
-- **GDAL**: Geospatial data processing library for handling raster data.
-- **Rasterio**: Library for reading and writing raster datasets.
-- **Google Maps API**: Provides the interactive map interface.
-- **DiskCache**: Caching mechanism to improve performance.
-
-## Data Processing Details
-
-- **Elevation Data**: High-resolution TIFF files representing elevation.
-- **Color Relief**: A fixed color ramp maps specific elevation ranges to colors.
-- **Tile Generation**: Map tiles are created for zoom levels 10 to 15 for detailed visualization.
-
-## Use Cases
-
-- **Elevation Visualization**: Helps users understand the elevation of their surroundings.
-- **Flood Risk Awareness**: Assists in identifying areas that may be prone to flooding.
-- **Educational Tool**: Provides a visual aid for learning about geographic elevation differences.
+## 6. Production notes
+* Behind a reverse-proxy/CDN, be sure to forward `X-Real-IP` so rate-limiter sees the real client.  
+* Mount `/data` on fast SSD; GDAL tiling is I/O-heavy the first time.  
+* Scrape `/metrics` every 15 s to size Redis and tune rate limit thresholds.

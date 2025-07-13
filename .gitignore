@@ -172,3 +172,21 @@ processed_data/
 debug.py
 ingest/
 .vscode/
+data_v2/
+*.mbtiles
+*.pkl
+*.bin
+test_screenshot.png
+test_*.png
+test_compressed_storage.py
+test_integrated_compressed.py
+test_flood_fix.py
+test_flood_overlay.py
+test_tiles_direct.py
+elevation_data.bin
+elevation_index.pkl
+# Ignore all compressed elevation data (too large for git)
+compressed_data/
+*.zst
+static/.DS_Store
+tests/e2e/screenshots/
