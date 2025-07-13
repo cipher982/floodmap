@@ -1,0 +1,89 @@
+import os
+import subprocess
+import sys
+import time
+import tracemalloc
+from pathlib import Path
+
+import numpy as np
+import rasterio
+from rasterio.transform import from_origin
+import pytest
+
+# Ensure scripts directory is importable
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "scripts"))
+
+import importlib
+
+SCRIPT_PATH = Path(__file__).resolve().parent.parent.parent / "scripts" / "process_tif.py"
+
+
+def create_sample_dem(tif_path: Path):
+    """Create a 2×2 GeoTIFF covering lon 0-2, lat 0-2 (EPSG:4326)."""
+    data = np.array([[100, 150], [200, 250]], dtype=np.int16)
+    transform = from_origin(0, 2, 1, 1)  # west, north, xres, yres
+    with rasterio.open(
+        tif_path,
+        "w",
+        driver="GTiff",
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype=data.dtype,
+        crs="EPSG:4326",
+        transform=transform,
+    ) as dst:
+        dst.write(data, 1)
+
+
+@pytest.mark.integration
+def test_end_to_end_pipeline(tmp_path, monkeypatch):
+    """Run the pipeline on a synthetic DEM and measure resource usage."""
+    input_dir = tmp_path / "input"
+    output_dir = tmp_path / "output"
+    input_dir.mkdir()
+    output_dir.mkdir()
+
+    # Create sample DEM
+    tif_path = input_dir / "sample.tif"
+    create_sample_dem(tif_path)
+
+    # Set environment variables expected by process_tif
+    monkeypatch.setenv("INPUT_DIR", str(input_dir))
+    monkeypatch.setenv("PROCESSED_DIR", str(output_dir))
+    monkeypatch.setenv("COLOR_RAMP", str(Path(__file__).parent.parent.parent / "scripts" / "color_ramp.txt"))
+
+    # Reduce zoom range for speed
+    monkeypatch.setenv("ZOOM_RANGE", "(0,1)")
+
+    # Measure time and memory
+    start = time.perf_counter()
+    tracemalloc.start()
+
+    # Import and run main (process_tif.main())
+    spec = importlib.util.spec_from_file_location("process_tif", SCRIPT_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore
+    module.main()
+
+    current, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    duration = time.perf_counter() - start
+
+    print(f"Pipeline completed in {duration:.2f}s, peak mem {peak/1e6:.1f} MB")
+
+    # Verify MBTiles exists
+    mbtiles_path = output_dir / "elevation.mbtiles"
+    assert mbtiles_path.exists(), "MBTiles not generated"
+
+    # Verify at least one tile exists in MBTiles
+    import sqlite3
+
+    with sqlite3.connect(f"file:{mbtiles_path}?mode=ro", uri=True) as conn:
+        cur = conn.execute("SELECT COUNT(1) FROM tiles")
+        count = cur.fetchone()[0]
+        assert count > 0, "No tiles stored in MBTiles"
+
+    # Assert reasonable resource usage
+    assert duration < 30, "Integration pipeline too slow"
+    assert peak < 150 * 1e6, "Memory usage exceeded 150 MB"

@@ -53,8 +53,11 @@ MIN_ELEVATION = -100
 MAX_ELEVATION = 5500  # rounded up from 5489 for clean numbers
 
 NUM_CORES = mp.cpu_count()
-POOL_WORKERS = 4
-GDAL_THREADS = NUM_CORES // POOL_WORKERS
+# Use a single external worker and let GDAL/`gdal2tiles` fan out internally to
+# avoid massive thread oversubscription (N×M threads).
+POOL_WORKERS = 1
+# Threads used by `gdal2tiles.py` internally
+GDAL_THREADS = max(1, NUM_CORES - 1)
 CHUNK_SIZE = 1
 GDAL_CACHE = 512
 
@@ -127,17 +130,10 @@ def process_file(args):
     base_name = os.path.basename(input_file)
     vrt_file = os.path.join(output_dir, f"temp_{base_name}.vrt")
     
-    translate_opts = gdal.TranslateOptions(
-        format="VRT",
-        outputType=gdal.GDT_Byte,  # Changed to 8-bit
-        scaleParams=[[MIN_ELEVATION, MAX_ELEVATION, 0, 255]],  # Scale to 0-255
-        creationOptions=[
-            "TILED=YES",
-            "BLOCKSIZE=512",
-            "COMPRESS=LZW"
-        ]
-    )
-    
+    # Preserve original bit-depth (often 16-bit for DEMs) to avoid precision
+    # loss and banding artefacts. We merely wrap the source into a VRT.
+    translate_opts = gdal.TranslateOptions(format="VRT")
+
     gdal.Translate(vrt_file, input_file, options=translate_opts)
 
     cmd = [
@@ -146,7 +142,6 @@ def process_file(args):
         "-z", f"{zoom_range[0]}-{zoom_range[1]}",
         "--processes", str(GDAL_THREADS),
         "-r", "cubic",
-        "--tmscompatible",
         "--webviewer", "none",
         "-q",
         vrt_file,
@@ -358,42 +353,81 @@ def tile2lon(x, z):
     """Convert tile x coordinate to longitude"""
     return x / math.pow(2.0, z) * 360.0 - 180.0
 
+def build_mosaic(input_files: list[str], vrt_path: str):
+    """Create a single VRT mosaic from input rasters."""
+    logging.info(f"Creating mosaic VRT → {vrt_path}")
+    gdal.BuildVRT(vrt_path, input_files)
+    return vrt_path
+
+
+def generate_tiles(src_file: str, output_dir: str, zoom_range: tuple[int, int]):
+    """Run `gdal2tiles.py` once to build an XYZ tile pyramid."""
+    tiles_dir = os.path.join(output_dir, "tiles")
+    os.makedirs(tiles_dir, exist_ok=True)
+
+    cmd = [
+        "gdal2tiles.py",
+        "--xyz",
+        "-z", f"{zoom_range[0]}-{zoom_range[1]}",
+        "--processes", str(GDAL_THREADS),
+        "-r", "cubic",
+        "--webviewer", "none",
+        "-q",
+        src_file,
+        tiles_dir,
+    ]
+    logging.info("Running gdal2tiles.py for mosaic …")
+    subprocess.run(cmd, check=True)
+    return tiles_dir
+
+
+def create_mbtiles(vrt_file: str, mbtiles_path: str, zoom_range: tuple[int, int]):
+    """Optionally export the mosaic into a single MBTiles container."""
+    logging.info(f"Generating MBTiles → {mbtiles_path}")
+    translate_opts = gdal.TranslateOptions(
+        format="MBTILES",
+        outputType=gdal.GDT_Int16,
+        creationOptions=[
+            "TILE_FORMAT=PNG",
+            "TILING_SCHEME=XYZ",
+            f"MINZOOM={zoom_range[0]}",
+            f"MAXZOOM={zoom_range[1]}",
+        ],
+    )
+    gdal.Translate(mbtiles_path, vrt_file, options=translate_opts)
 
 def main():
     analyze_tif_files(INPUT_DIR)
 
-    # Clear entire processed directory at start
+    # Clear or create output directory
     if os.path.exists(PROCESSED_DIR):
         logging.info(f"Clearing output directory: {PROCESSED_DIR}")
         subprocess.run(["rm", "-rf", PROCESSED_DIR])
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
-    # Get all input files directly (no grouping needed)
+    # Collect source rasters
     input_files = [
-        os.path.join(INPUT_DIR, f) 
-        for f in os.listdir(INPUT_DIR) 
+        os.path.join(INPUT_DIR, f)
+        for f in os.listdir(INPUT_DIR)
         if f.endswith(".tif")
     ]
 
-    # Process all files in parallel
-    process_args = [
-        (file, PROCESSED_DIR, ZOOM_RANGE)
-        for file in input_files
-    ]
+    if not input_files:
+        logging.error("No input GeoTIFF files found — aborting.")
+        return
 
-    try:
-        with Pool(POOL_WORKERS) as pool:
-            list(tqdm(
-                pool.imap_unordered(process_file, process_args, chunksize=CHUNK_SIZE),
-                total=len(process_args),
-                desc="Processing files"
-            ))
+    # Build mosaic VRT
+    mosaic_vrt = os.path.join(PROCESSED_DIR, "mosaic.vrt")
+    build_mosaic(input_files, mosaic_vrt)
 
-    except KeyboardInterrupt:
-        logging.info("Received interrupt, shutting down gracefully...")
-        raise
+    # Generate tile pyramid once
+    generate_tiles(mosaic_vrt, PROCESSED_DIR, ZOOM_RANGE)
 
-    logging.info("\nAnalyzing final coverage...")
+    # Create MBTiles container (optional — comment out if not needed)
+    mbtiles_path = os.path.join(PROCESSED_DIR, "elevation.mbtiles")
+    create_mbtiles(mosaic_vrt, mbtiles_path, ZOOM_RANGE)
+
+    logging.info("\nAnalyzing final coverage…")
     _, _ = analyze_coverage(INPUT_DIR, PROCESSED_DIR)
 
 
