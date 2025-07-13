@@ -190,3 +190,4 @@ compressed_data/
 *.zst
 static/.DS_Store
 tests/e2e/screenshots/
+test_compress_*
