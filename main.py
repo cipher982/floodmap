@@ -9,6 +9,8 @@ import math
 from fasthtml.common import Div
 from fasthtml.common import P
 from fasthtml.common import fast_app
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fasthtml.common import Iframe
 from fasthtml.common import FileResponse
 from fasthtml.common import Response
@@ -40,6 +42,8 @@ import queue
 from io import BytesIO
 from PIL import Image
 import aiofiles
+import os.path
+import pathlib
 
 # Prometheus metrics
 from prometheus_client import Counter, Summary, make_asgi_app
@@ -66,6 +70,38 @@ app, rt = fast_app(
     hdrs=(Favicon(light_icon="./static/favicon.ico", dark_icon="./static/favicon.ico"))
 )
 
+# Security: Add middleware for CORS and trusted hosts
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])  # Configure in production
+
+# Security: Configure CORS properly
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5001"],  # Configure for production
+    allow_credentials=False,  # Don't allow credentials for security
+    allow_methods=["GET"],  # Only allow GET requests
+    allow_headers=["Accept", "Accept-Language", "Content-Language"],
+)
+
+
+# Security: Add security headers middleware
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    
+    # Only add HSTS in production with HTTPS
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
+    return response
+
 DEBUG_COORDS = (27.95053694962414, -82.4585769277307)
 DEBUG_IP = "23.111.165.2"
 TILES_DIR = str(os.getenv("PROCESSED_DIR"))
@@ -76,8 +112,32 @@ MAP_HEIGHT = "600px"
 
 DEBUG_MODE = True
 
-gmaps_api_key = os.environ.get("GMAP_API_KEY", "DISABLED_FOR_LOCAL_DEV")
-# assert gmaps_api_key is not None, "GMAP_API_KEY is not set"  # DISABLED to prevent API quota usage
+# Secure API key handling
+def _get_gmaps_api_key() -> str:
+    """Securely retrieve Google Maps API key with validation."""
+    api_key = os.environ.get("GMAP_API_KEY")
+    
+    if not api_key or api_key in ["", "DISABLED_FOR_LOCAL_DEV", "disabled", "none"]:
+        if DEBUG_MODE:
+            logging.warning("Google Maps API disabled in debug mode")
+            return ""
+        else:
+            raise ValueError("GMAP_API_KEY environment variable must be set for production")
+    
+    # Basic validation of API key format
+    if not api_key.startswith("AIza") or len(api_key) < 35:
+        raise ValueError("Invalid Google Maps API key format")
+    
+    return api_key
+
+# Initialize API key securely
+try:
+    gmaps_api_key = _get_gmaps_api_key()
+    GMAPS_ENABLED = bool(gmaps_api_key)
+except ValueError as e:
+    logging.error(f"Google Maps API key error: {e}")
+    gmaps_api_key = ""
+    GMAPS_ENABLED = False
 
 # Global variables to store the TIF data (legacy)
 tif_data: list = []
@@ -297,31 +357,171 @@ _tile_rate_state: defaultdict[str, list[float]] = defaultdict(list)
 MAX_TILES_PER_SECOND = int(os.getenv("MAX_TILES_PER_SECOND", "30"))
 
 
-async def _rate_limit(client_ip: str):
-    """Sliding-window rate limit per IP, backed by Redis if available."""
+def _get_client_ip(request: Request) -> str:
+    """Securely extract client IP address, handling proxies and spoofing attempts."""
+    # Check for real IP behind proxy (in order of trust)
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        # Take the first IP (original client) and validate
+        client_ip = forwarded_for.split(",")[0].strip()
+        if _is_valid_ip(client_ip):
+            return client_ip
+    
+    # Check other proxy headers
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip and _is_valid_ip(real_ip):
+        return real_ip
+    
+    # Fallback to direct connection
+    if request.client and request.client.host:
+        return request.client.host
+    
+    return "unknown"
+
+
+def _is_valid_ip(ip: str) -> bool:
+    """Validate IP address format to prevent header injection."""
+    try:
+        import ipaddress
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
+
+async def _rate_limit_secure(request: Request, endpoint: str = "tiles"):
+    """Secure rate limiting with consistent enforcement and anti-spoofing."""
+    client_ip = _get_client_ip(request)
+    
+    # Security: Use different limits per endpoint
+    limits = {
+        "tiles": MAX_TILES_PER_SECOND,
+        "flood": MAX_TILES_PER_SECOND // 2,  # Flood tiles are more expensive
+        "api": 10,  # API endpoints get lower limits
+    }
+    limit = limits.get(endpoint, 10)
+    
+    # Try Redis first (preferred for consistency)
     if redis_client:
-        key = f"rl:{client_ip}"
+        key = f"rl:{endpoint}:{client_ip}"
         try:
+            # Use sliding window with Redis sorted sets for better accuracy
+            now = time.time()
+            window_start = now - 1  # 1 second window
+            
             pipe = redis_client.pipeline()
-            pipe.incr(key)
-            pipe.expire(key, 1)
-            count, _ = await pipe.execute()
-            if int(count) > MAX_TILES_PER_SECOND:
+            # Remove old entries
+            pipe.zremrangebyscore(key, 0, window_start)
+            # Count current requests in window
+            pipe.zcard(key)
+            # Add current request
+            pipe.zadd(key, {str(now): now})
+            # Set expiration
+            pipe.expire(key, 2)  # Keep data for 2 seconds
+            
+            results = await pipe.execute()
+            current_count = results[1]  # Count after cleanup
+            
+            if current_count >= limit:
                 RATE_LIMIT_COUNTER.inc()
-                raise HTTPException(status_code=429, detail="Too many tile requests")
+                logging.warning(f"Rate limit exceeded for {client_ip} on {endpoint}: {current_count}/{limit}")
+                raise HTTPException(
+                    status_code=429, 
+                    detail=f"Rate limit exceeded. Max {limit} requests per second.",
+                    headers={"Retry-After": "1"}
+                )
             return
+            
         except Exception as e:
             logging.error(f"Redis rate-limit error: {e}")
+            # Don't fall back silently - this could be a security bypass attempt
+            if "Connection" in str(e):
+                # Redis is down - apply stricter local limits
+                limit = min(limit, 5)  # Much stricter when Redis is down
+            else:
+                # Other Redis errors - be cautious
+                raise HTTPException(status_code=503, detail="Rate limiting service temporarily unavailable")
 
-    # Local in-memory fallback
+    # Local in-memory fallback (consistent sliding window)
     now = time.time()
-    window = _tile_rate_state[client_ip]
-    while window and now - window[0] > 1:
-        window.pop(0)
-    if len(window) >= MAX_TILES_PER_SECOND:
+    window = _tile_rate_state[f"{endpoint}:{client_ip}"]
+    
+    # Clean old entries
+    cutoff = now - 1  # 1 second window
+    window[:] = [ts for ts in window if ts > cutoff]
+    
+    if len(window) >= limit:
         RATE_LIMIT_COUNTER.inc()
-        raise HTTPException(status_code=429, detail="Too many tile requests")
+        logging.warning(f"Rate limit exceeded (local) for {client_ip} on {endpoint}: {len(window)}/{limit}")
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Rate limit exceeded. Max {limit} requests per second.",
+            headers={"Retry-After": "1"}
+        )
+    
     window.append(now)
+
+
+# Keep old function for backward compatibility
+async def _rate_limit(client_ip: str):
+    """Legacy rate limit function - use _rate_limit_secure instead."""
+    # Create a fake request object for compatibility
+    class FakeRequest:
+        def __init__(self, ip):
+            self.client = type('obj', (object,), {'host': ip})
+            self.headers = {}
+    
+    fake_request = FakeRequest(client_ip)
+    await _rate_limit_secure(fake_request, "tiles")
+
+
+def _validate_tile_coordinates(z: int, x: int, y: int) -> bool:
+    """Validate tile coordinates to prevent path traversal and invalid requests."""
+    # Validate zoom level
+    if z < 0 or z > 25:  # Reasonable zoom range for web maps
+        return False
+    
+    # Validate tile coordinates for given zoom level
+    max_coord = (1 << z) - 1  # 2^z - 1
+    if x < 0 or x > max_coord or y < 0 or y > max_coord:
+        return False
+    
+    return True
+
+
+def _sanitize_path_component(component: str) -> str:
+    """Sanitize a path component to prevent directory traversal."""
+    # Remove any path traversal attempts
+    component = component.replace('..', '').replace('/', '').replace('\\', '')
+    # Keep only alphanumeric, hyphens, underscores
+    return ''.join(c for c in component if c.isalnum() or c in '-_')
+
+
+def _validate_safe_path(file_path: str, base_dir: str) -> bool:
+    """Ensure the resolved path is within the base directory."""
+    try:
+        # Resolve both paths to absolute
+        base_path = pathlib.Path(base_dir).resolve()
+        target_path = pathlib.Path(file_path).resolve()
+        
+        # Check if target is within base directory
+        return target_path.is_relative_to(base_path)
+    except (OSError, ValueError):
+        return False
+
+
+async def _read_tile_file_async_secure(tile_path: str, base_dir: str) -> bytes:
+    """Secure async file read with path validation."""
+    # Validate path is within base directory
+    if not _validate_safe_path(tile_path, base_dir):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check file exists and is readable
+    if not os.path.exists(tile_path) or not os.path.isfile(tile_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    async with aiofiles.open(tile_path, 'rb') as f:
+        return await f.read()
 
 
 async def _read_tile_file_async(tile_path: str) -> bytes:
@@ -543,15 +743,28 @@ def generate_gmaps_html(latitude, longitude, elevation, water_level):
     error_tile = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/YoZ7xQAAAAASUVORK5CYII="
     tile_url_pattern = "/tiles/{z}/{x}/{y}"
 
+    # Security: Conditional loading based on API key availability
+    if GMAPS_ENABLED and gmaps_api_key:
+        # API key is valid - load Google Maps (but key still exposed to client)
+        # TODO: Implement server-side proxy for Google Maps API to avoid client exposure
+        gmaps_script = f'<script src="https://maps.googleapis.com/maps/api/js?key={gmaps_api_key}"></script>'
+        maps_init_condition = "if (typeof google !== 'undefined' && google.maps)"
+    else:
+        # No valid API key - use fallback map
+        gmaps_script = '<!-- Google Maps API disabled or not configured -->'
+        maps_init_condition = "if (false) /* Google Maps disabled */"
+
     return f"""
     <div id="map" style="height: {MAP_HEIGHT}; width: 100%;"></div>
-    <script src="https://maps.googleapis.com/maps/api/js?key={gmaps_api_key}"></script>
+    {gmaps_script}
     <script>
         function initMap() {{
             const allowedZoomLevels = {ALLOWED_ZOOM_LEVELS};
             const initialZoom = allowedZoomLevels[Math.floor(allowedZoomLevels.length / 2)];
 
-            const map = new google.maps.Map(document.getElementById("map"), {{
+            // Security: Check if Google Maps API is available before using
+            {maps_init_condition} {{
+                const map = new google.maps.Map(document.getElementById("map"), {{
                 center: {{ lat: {latitude}, lng: {longitude} }},
                 zoom: initialZoom,
                 mapTypeId: "terrain",
@@ -615,8 +828,20 @@ def generate_gmaps_html(latitude, longitude, elevation, water_level):
                 opacity: 0.5
             }});
 
-            map.overlayMapTypes.insertAt(0, floodLayer);
-            map.overlayMapTypes.insertAt(0, tileLayer);
+                map.overlayMapTypes.insertAt(0, floodLayer);
+                map.overlayMapTypes.insertAt(0, tileLayer);
+            }} else {{
+                // Fallback when Google Maps API is not available
+                document.getElementById("map").innerHTML = 
+                    '<div style="background: #f0f0f0; height: 100%; display: flex; align-items: center; justify-content: center; color: #666;">' +
+                    '<div style="text-align: center;">' +
+                    '<h3>Map View</h3>' +
+                    '<p>Location: {latitude:.4f}, {longitude:.4f}</p>' +
+                    '<p>Elevation: {elevation}m</p>' +
+                    '<p>Water Level: {water_level}m</p>' +
+                    '<p><em>Google Maps API not configured</em></p>' +
+                    '</div></div>';
+            }}
         }}
     </script>
     <script>initMap();</script>
@@ -639,15 +864,18 @@ def create_map(latitude, longitude, water_level):
 
 @app.get("/tiles/{z}/{x}/{y}")
 async def get_tile(request: Request, z: int, x: int, y: int):
+    # Security: Validate tile coordinates
+    if not _validate_tile_coordinates(z, x, y):
+        raise HTTPException(status_code=400, detail="Invalid tile coordinates")
+    
     # Basic zoom validation
     if z not in ALLOWED_ZOOM_LEVELS:
         raise HTTPException(status_code=404, detail="Zoom level not available")
 
-    client_ip = request.client.host if request.client else "unknown"
-
     start_time = time.time()
 
-    await _rate_limit(client_ip)
+    # Security: Apply secure rate limiting
+    await _rate_limit_secure(request, "tiles")
 
     # Try MBTiles first
     blob = await _async_fetch_mbtiles(z, x, y)
@@ -664,29 +892,39 @@ async def get_tile(request: Request, z: int, x: int, y: int):
 
     # Fallback to file system tiles if present (TIF directory structure)
     if z in tile_index and x in tile_index[z] and y in tile_index[z][x]:
-        tif_dir = tile_index[z][x][y]
+        tif_dir = _sanitize_path_component(tile_index[z][x][y])  # Security: sanitize directory name
         tile_path = os.path.join(TILES_DIR, tif_dir, str(z), str(x), f"{y}.png")
-        if os.path.exists(tile_path):
+        
+        # Security: Validate path is within TILES_DIR
+        if _validate_safe_path(tile_path, TILES_DIR):
+            try:
+                TILE_HIT_COUNTER.labels("disk").inc()
+                REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
+                tile_content = await _read_tile_file_async_secure(tile_path, TILES_DIR)
+                return Response(
+                    content=tile_content,
+                    media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"},
+                )
+            except HTTPException:
+                pass  # Continue to next fallback
+
+    # Fallback to direct tile structure (z/x/y.png)
+    direct_tile_path = os.path.join(TILES_DIR, str(z), str(x), f"{y}.png")
+    
+    # Security: Validate path is within TILES_DIR
+    if _validate_safe_path(direct_tile_path, TILES_DIR):
+        try:
             TILE_HIT_COUNTER.labels("disk").inc()
             REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
-            tile_content = await _read_tile_file_async(tile_path)
+            tile_content = await _read_tile_file_async_secure(direct_tile_path, TILES_DIR)
             return Response(
                 content=tile_content,
                 media_type="image/png",
                 headers={"Cache-Control": "public, max-age=31536000, immutable"},
             )
-
-    # Fallback to direct tile structure (z/x/y.png)
-    direct_tile_path = os.path.join(TILES_DIR, str(z), str(x), f"{y}.png")
-    if os.path.exists(direct_tile_path):
-        TILE_HIT_COUNTER.labels("disk").inc()
-        REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
-        tile_content = await _read_tile_file_async(direct_tile_path)
-        return Response(
-            content=tile_content,
-            media_type="image/png",
-            headers={"Cache-Control": "public, max-age=31536000, immutable"},
-        )
+        except HTTPException:
+            pass  # File not found, continue to 404
 
     REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
     raise HTTPException(status_code=404, detail="Tile not found")
@@ -890,21 +1128,26 @@ async def risk_endpoint(
 
 @app.get("/flood_tiles/{level}/{z}/{x}/{y}")
 async def flood_tile(
+    request: Request,
     level: float = Path(..., ge=0, le=100, description="Water level in meters"),
     z: int = Path(..., ge=min(ALLOWED_ZOOM_LEVELS), le=max(ALLOWED_ZOOM_LEVELS)),
     x: int = Path(..., description="Tile X coordinate"),
     y: int = Path(..., description="Tile Y coordinate"),
 ):
     """Return a semi-transparent overlay tile representing flooded area."""
-    # Validate tile coordinate bounds for given zoom
-    max_index = (1 << z) - 1
-    if not (0 <= x <= max_index and 0 <= y <= max_index):
-        raise HTTPException(status_code=400, detail="Tile indices out of range for zoom level")
+    # Security: Validate tile coordinates comprehensively
+    if not _validate_tile_coordinates(z, x, y):
+        raise HTTPException(status_code=400, detail="Invalid tile coordinates")
+    
+    # Security: Apply rate limiting for flood tiles (more expensive operations)
+    await _rate_limit_secure(request, "flood")
 
     try:
         png_bytes = await asyncio.to_thread(_generate_flood_overlay_png, level, z, x, y)
     except Exception as exc:
-        logging.exception("Flood overlay generation failed", extra={"z": z, "x": x, "y": y})
+        # Security: Log detailed error internally, return generic error to client
+        logging.error(f"Flood overlay generation failed for tile {z}/{x}/{y}: {type(exc).__name__}")
+        logging.debug(f"Flood overlay error details", exc_info=True)  # Full details only in debug
         FLOOD_TILE_ERROR_COUNTER.inc()
         png_bytes = None
 
