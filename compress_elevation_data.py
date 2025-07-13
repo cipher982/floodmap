@@ -13,10 +13,14 @@ import argparse
 from pathlib import Path
 import time
 import logging
+import psutil
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import cpu_count
 
 import numpy as np
 import rasterio
 import zstandard as zstd
+from tqdm import tqdm
 
 
 def compress_tile(input_path: Path, output_dir: Path, compression_level: int = 3) -> dict:
@@ -117,8 +121,33 @@ def test_decompression(compressed_file: Path, metadata_file: Path) -> bool:
     return True
 
 
-def compress_directory(input_dir: Path, output_dir: Path, test_decompression_flag: bool = True):
-    """Compress all SRTM tiles in a directory."""
+def estimate_processing_time(tif_files: list, sample_size: int = 3) -> float:
+    """Estimate total processing time by sampling a few files."""
+    if len(tif_files) <= sample_size:
+        return 0  # Too small to estimate
+    
+    logging.info(f"Estimating processing time with {sample_size} sample files...")
+    sample_files = tif_files[:sample_size]
+    
+    start_time = time.time()
+    for tif_file in sample_files:
+        # Quick test: just read the file to estimate I/O time
+        try:
+            with rasterio.open(tif_file) as src:
+                _ = src.read(1)
+        except Exception:
+            continue
+    
+    sample_time = time.time() - start_time
+    avg_time_per_file = sample_time / len(sample_files)
+    estimated_total = avg_time_per_file * len(tif_files)
+    
+    logging.info(f"Estimated total processing time: {estimated_total/60:.1f} minutes ({estimated_total/3600:.1f} hours)")
+    return estimated_total
+
+
+def compress_directory(input_dir: Path, output_dir: Path, test_decompression_flag: bool = True, max_workers: int = None):
+    """Compress all SRTM tiles in a directory with progress tracking and memory efficiency."""
     
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -132,35 +161,76 @@ def compress_directory(input_dir: Path, output_dir: Path, test_decompression_fla
     
     logging.info(f"Found {len(tif_files)} TIF files to compress")
     
+    # Estimate processing time
+    estimate_processing_time(tif_files)
+    
+    # Check available memory
+    available_memory_gb = psutil.virtual_memory().available / (1024**3)
+    logging.info(f"Available memory: {available_memory_gb:.1f} GB")
+    
+    # Check available disk space
+    available_disk_gb = psutil.disk_usage(str(output_dir)).free / (1024**3)
+    logging.info(f"Available disk space: {available_disk_gb:.1f} GB")
+    
+    # Set up parallel processing
+    if max_workers is None:
+        max_workers = min(cpu_count(), 4)  # Don't overwhelm the system
+    
+    logging.info(f"Using {max_workers} parallel workers")
+    
     total_original_size = 0
     total_compressed_size = 0
     successful_compressions = 0
+    failed_files = []
     
     start_time = time.time()
     
-    for i, tif_file in enumerate(tif_files):
-        try:
-            logging.info(f"Compressing {i+1}/{len(tif_files)}: {tif_file.name}")
+    # Process files with progress bar
+    with tqdm(total=len(tif_files), desc="Compressing tiles", unit="file") as pbar:
+        # Process in batches to avoid memory issues
+        batch_size = max_workers * 2
+        
+        for i in range(0, len(tif_files), batch_size):
+            batch = tif_files[i:i + batch_size]
             
-            result = compress_tile(tif_file, output_dir)
-            
-            total_original_size += result['original_size']
-            total_compressed_size += result['compressed_size']
-            successful_compressions += 1
-            
-            # Test decompression if requested
-            if test_decompression_flag:
-                metadata_file = output_dir / f"{result['tile_id']}.json"
-                compressed_file = Path(result['output_file'])
+            # Process batch in parallel
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                # Submit jobs
+                futures = {
+                    executor.submit(compress_tile, tif_file, output_dir): tif_file 
+                    for tif_file in batch
+                }
                 
-                if not test_decompression(compressed_file, metadata_file):
-                    logging.error(f"Decompression test failed for {result['tile_id']}")
-            
-            logging.info(f"  ✅ {result['compression_ratio']:.1f}x compression "
-                        f"({result['original_size']//1024//1024}MB → {result['compressed_size']//1024//1024}MB)")
-            
-        except Exception as e:
-            logging.error(f"Failed to compress {tif_file}: {e}")
+                # Collect results
+                for future in as_completed(futures):
+                    tif_file = futures[future]
+                    try:
+                        result = future.result()
+                        
+                        total_original_size += result['original_size']
+                        total_compressed_size += result['compressed_size']
+                        successful_compressions += 1
+                        
+                        # Test decompression if requested
+                        if test_decompression_flag:
+                            metadata_file = output_dir / f"{result['tile_id']}.json"
+                            compressed_file = Path(result['output_file'])
+                            
+                            if not test_decompression(compressed_file, metadata_file):
+                                logging.error(f"Decompression test failed for {result['tile_id']}")
+                        
+                        # Update progress bar with compression info
+                        pbar.set_postfix({
+                            'ratio': f"{result['compression_ratio']:.1f}x",
+                            'success': f"{successful_compressions}/{len(tif_files)}",
+                            'memory': f"{psutil.virtual_memory().percent:.1f}%"
+                        })
+                        
+                    except Exception as e:
+                        logging.error(f"Failed to compress {tif_file.name}: {e}")
+                        failed_files.append(tif_file.name)
+                    
+                    pbar.update(1)
     
     elapsed_time = time.time() - start_time
     
@@ -173,9 +243,16 @@ Files processed: {successful_compressions}/{len(tif_files)}
 Original size: {total_original_size / 1024 / 1024 / 1024:.1f} GB
 Compressed size: {total_compressed_size / 1024 / 1024 / 1024:.1f} GB
 Overall compression ratio: {overall_ratio:.1f}x
-Time elapsed: {elapsed_time:.1f} seconds
+Time elapsed: {elapsed_time/60:.1f} minutes ({elapsed_time/3600:.1f} hours)
 Average time per file: {elapsed_time / len(tif_files):.1f} seconds
+Throughput: {len(tif_files) / (elapsed_time/60):.1f} files/minute
+Failed files: {len(failed_files)}
     """)
+    
+    if failed_files:
+        logging.warning(f"Failed files: {', '.join(failed_files[:10])}")
+        if len(failed_files) > 10:
+            logging.warning(f"... and {len(failed_files) - 10} more")
 
 
 def main():
