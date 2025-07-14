@@ -1,0 +1,1 @@
+# Make fixtures a proper Python package

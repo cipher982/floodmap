@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile.test
+    ports:
+      - "5001:5001"
+    environment:
+      - DEBUG_MODE=true
+      - TILESERVER_URL=http://tileserver:8080
+      - REDIS_URL=redis://redis:6379
+      - PROCESSED_DIR=/app/scratch/data_tampa_processed
+    depends_on:
+      - tileserver
+      - redis
+    volumes:
+      - ./:/app
+      - ./map_data:/app/map_data
+      - ./compressed_data:/app/compressed_data
+      - ./scratch:/app/scratch
+    command: ["python", "main.py"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  tileserver:
+    image: maptiler/tileserver-gl:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./map_data:/data
+    command: ["tampa.mbtiles"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Test runner service - runs tests against the services above
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      - APP_URL=http://app:5001
+      - TILESERVER_URL=http://tileserver:8080
+      - REDIS_URL=redis://redis:6379
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    depends_on:
+      app:
+        condition: service_healthy
+      tileserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+      - ./tests:/app/tests
+    working_dir: /app
+    command: ["pytest", "tests/", "-v", "--html=test_report.html"]
+
+networks:
+  default:
+    name: floodmap_test_network
