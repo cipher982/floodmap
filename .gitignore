@@ -206,3 +206,6 @@ static/sprites/
 tests/e2e/screenshots/
 test_compress_*
 test_screenshot.png
+# Testing process files
+.app.pid
+.tileserver.pid
