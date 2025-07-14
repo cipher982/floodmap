@@ -20,6 +20,8 @@ from fasthtml.common import Container
 from fasthtml.common import Card
 from fasthtml.common import H2
 from fasthtml.common import Grid
+from fasthtml.common import Link
+from fasthtml.common import Script
 from fasthtml.xtend import Favicon
 
 import numpy as np
@@ -75,6 +77,14 @@ app, rt = fast_app(
     hdrs=(Favicon(light_icon="./static/favicon.ico", dark_icon="./static/favicon.ico"))
 )
 
+# Serve static font files
+app.mount("/fonts", StaticFiles(directory="static/fonts"), name="fonts")
+# Note: Sprites are served via custom endpoints below due to StaticFiles issue with PNG files
+
+# Add global error handling
+from error_handling import floodmap_exception_handler, FloodMapError
+app.add_exception_handler(FloodMapError, floodmap_exception_handler)
+
 # Security: Add middleware for CORS and trusted hosts
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])  # Configure in production
@@ -115,7 +125,8 @@ ALLOWED_ZOOM_LEVELS = [10, 11, 12]
 MAP_HEIGHT = "600px"
 
 
-DEBUG_MODE = True
+# Make DEBUG_MODE configurable - defaults to False for nationwide access
+DEBUG_MODE = os.getenv("DEBUG_MODE", "false").lower() in ["true", "1", "yes", "on"]
 
 # Secure API key handling
 def _get_gmaps_api_key() -> str:
@@ -215,7 +226,9 @@ def preload_tile_paths():
 
 
 def load_elevation_data():
-    """Load TIF elevation data into memory for flood calculations."""
+    """Load TIF elevation data into memory for flood calculations with integrity validation."""
+    from error_handling import validate_elevation_data, ElevationDataError, ErrorCode, error_handler
+    
     global tif_data, tif_bounds, tif_transform
     
     # Clear existing data
@@ -241,6 +254,9 @@ def load_elevation_data():
         
     logging.info(f"Loading {len(tif_files)} TIF files into memory...")
     
+    successful_loads = 0
+    failed_loads = []
+    
     for tif_file in tif_files:
         try:
             with rasterio.open(tif_file) as src:
@@ -249,17 +265,64 @@ def load_elevation_data():
                 bounds = src.bounds
                 transform = src.transform
                 
+                # Validate data integrity
+                try:
+                    validate_elevation_data(data)
+                except ElevationDataError as e:
+                    logging.error(f"Data validation failed for {tif_file}: {e}")
+                    failed_loads.append((tif_file, str(e)))
+                    continue
+                
+                # Additional validation for bounds and transform
+                if not all(isinstance(b, (int, float)) for b in [bounds.left, bounds.right, bounds.top, bounds.bottom]):
+                    logging.error(f"Invalid bounds in {tif_file}: {bounds}")
+                    failed_loads.append((tif_file, "Invalid bounds"))
+                    continue
+                
+                if len(transform) != 6:
+                    logging.error(f"Invalid transform in {tif_file}: {transform}")
+                    failed_loads.append((tif_file, "Invalid transform"))
+                    continue
+                
                 # Store in global arrays
                 tif_data.append(data)
                 tif_bounds.append(bounds)
                 tif_transform.append(transform)
+                successful_loads += 1
                 
-                logging.info(f"Loaded {tif_file}: {data.shape} pixels, bounds={bounds}")
+                # Log with data quality info
+                valid_pixels = np.sum(data != -32768)
+                total_pixels = data.size
+                coverage_pct = (valid_pixels / total_pixels) * 100
                 
+                logging.info(
+                    f"Loaded {tif_file}: {data.shape} pixels, "
+                    f"bounds={bounds}, coverage={coverage_pct:.1f}%"
+                )
+                
+        except rasterio.RasterioIOError as e:
+            logging.error(f"Rasterio error loading {tif_file}: {e}")
+            failed_loads.append((tif_file, f"Rasterio error: {str(e)}"))
         except Exception as e:
-            logging.error(f"Failed to load {tif_file}: {e}")
+            logging.error(f"Unexpected error loading {tif_file}: {e}")
+            failed_loads.append((tif_file, f"Unexpected error: {str(e)}"))
     
-    logging.info(f"Successfully loaded {len(tif_data)} TIF files into memory")
+    # Log summary
+    total_files = len(tif_files)
+    logging.info(f"Elevation data loading summary: {successful_loads}/{total_files} files loaded successfully")
+    
+    if failed_loads:
+        logging.warning(f"Failed to load {len(failed_loads)} files:")
+        for file_path, error in failed_loads:
+            logging.warning(f"  - {os.path.basename(file_path)}: {error}")
+    
+    # Ensure we have at least some data
+    if successful_loads == 0:
+        error_handler.logger.error("No elevation data could be loaded!")
+        # Don't raise exception here as this is called during startup
+        # The application can still function with compressed storage
+    elif successful_loads < total_files / 2:
+        error_handler.logger.warning(f"Only {successful_loads}/{total_files} elevation files loaded - data coverage may be incomplete")
 
 
 # MBTiles path (preferred)
@@ -395,7 +458,9 @@ def _is_valid_ip(ip: str) -> bool:
 
 
 async def _rate_limit_secure(request: Request, endpoint: str = "tiles"):
-    """Secure rate limiting with consistent enforcement and anti-spoofing."""
+    """Secure rate limiting with circuit breaker pattern and proper error handling."""
+    from error_handling import RateLimitError, ErrorCode, error_handler
+    
     client_ip = _get_client_ip(request)
     
     # Security: Use different limits per endpoint
@@ -406,12 +471,22 @@ async def _rate_limit_secure(request: Request, endpoint: str = "tiles"):
     }
     limit = limits.get(endpoint, 10)
     
-    # Try Redis first (preferred for consistency)
-    if redis_client:
+    # Circuit breaker: Track Redis failures
+    redis_failure_key = f"redis_failures_{endpoint}"
+    redis_failures = _tile_rate_state.get(redis_failure_key, [])
+    now = time.time()
+    
+    # Clean old failure records (last 60 seconds)
+    redis_failures[:] = [ts for ts in redis_failures if now - ts < 60]
+    
+    # Circuit breaker: If too many recent Redis failures, skip Redis
+    redis_circuit_open = len(redis_failures) > 5
+    
+    # Try Redis first (if circuit is closed)
+    if redis_client and not redis_circuit_open:
         key = f"rl:{endpoint}:{client_ip}"
         try:
             # Use sliding window with Redis sorted sets for better accuracy
-            now = time.time()
             window_start = now - 1  # 1 second window
             
             pipe = redis_client.pipeline()
@@ -429,26 +504,44 @@ async def _rate_limit_secure(request: Request, endpoint: str = "tiles"):
             
             if current_count >= limit:
                 RATE_LIMIT_COUNTER.inc()
-                logging.warning(f"Rate limit exceeded for {client_ip} on {endpoint}: {current_count}/{limit}")
-                raise HTTPException(
-                    status_code=429, 
-                    detail=f"Rate limit exceeded. Max {limit} requests per second.",
-                    headers={"Retry-After": "1"}
+                raise RateLimitError(
+                    ErrorCode.RATE_LIMIT_EXCEEDED,
+                    f"Rate limit exceeded for {client_ip} on {endpoint}: {current_count}/{limit}",
+                    suggestions=[f"Wait 1 second before retrying", f"Reduce request frequency to max {limit}/second"]
                 )
             return
             
+        except RateLimitError:
+            # Re-raise rate limit errors
+            raise
         except Exception as e:
-            logging.error(f"Redis rate-limit error: {e}")
-            # Don't fall back silently - this could be a security bypass attempt
-            if "Connection" in str(e):
-                # Redis is down - apply stricter local limits
-                limit = min(limit, 5)  # Much stricter when Redis is down
+            # Track Redis failure
+            redis_failures.append(now)
+            _tile_rate_state[redis_failure_key] = redis_failures
+            
+            error_handler.log_error(e, request, {
+                "endpoint": endpoint, 
+                "client_ip": client_ip,
+                "redis_failures": len(redis_failures)
+            })
+            
+            # Apply stricter local limits when Redis is failing
+            if "Connection" in str(e) or "timeout" in str(e).lower():
+                limit = min(limit, 3)  # Much stricter during Redis outages
+                logging.warning(f"Redis connection failed, applying strict local rate limit: {limit}")
             else:
-                # Other Redis errors - be cautious
-                raise HTTPException(status_code=503, detail="Rate limiting service temporarily unavailable")
+                # Unknown Redis errors - be very cautious
+                logging.error(f"Unknown Redis error, failing closed: {e}")
+                raise HTTPException(
+                    status_code=503, 
+                    detail={
+                        "error": "RATE_LIMITER_UNAVAILABLE",
+                        "message": "Rate limiting service temporarily unavailable",
+                        "user_message": "Service temporarily unavailable, please try again later"
+                    }
+                )
 
     # Local in-memory fallback (consistent sliding window)
-    now = time.time()
     window = _tile_rate_state[f"{endpoint}:{client_ip}"]
     
     # Clean old entries
@@ -457,11 +550,10 @@ async def _rate_limit_secure(request: Request, endpoint: str = "tiles"):
     
     if len(window) >= limit:
         RATE_LIMIT_COUNTER.inc()
-        logging.warning(f"Rate limit exceeded (local) for {client_ip} on {endpoint}: {len(window)}/{limit}")
-        raise HTTPException(
-            status_code=429, 
-            detail=f"Rate limit exceeded. Max {limit} requests per second.",
-            headers={"Retry-After": "1"}
+        raise RateLimitError(
+            ErrorCode.RATE_LIMIT_EXCEEDED,
+            f"Rate limit exceeded (local) for {client_ip} on {endpoint}: {len(window)}/{limit}",
+            suggestions=[f"Wait 1 second before retrying", f"Reduce request frequency to max {limit}/second"]
         )
     
     window.append(now)
@@ -635,27 +727,88 @@ def get_ip_geolocation(ip_address):
 
 # Update the get_elevation function
 def get_elevation(latitude, longitude):
+    """Get elevation with comprehensive error handling and graceful degradation."""
+    from error_handling import validate_coordinates, ValidationError, error_handler
+    
+    try:
+        # Validate input coordinates
+        validate_coordinates(latitude, longitude)
+    except ValidationError as e:
+        error_handler.log_error(e)
+        return None
+    
     cache_key = f"elevation_{latitude}_{longitude}"
+    
+    # Check cache with integrity validation
     cached_elevation = cache.get(cache_key)
-    if cached_elevation:
-        return cached_elevation
+    if cached_elevation is not None:
+        # Validate cached data
+        if isinstance(cached_elevation, (int, float)) and -500 <= cached_elevation <= 9000:
+            return cached_elevation
+        else:
+            # Invalid cached data - remove it
+            logging.warning(f"Removing invalid cached elevation: {cached_elevation}")
+            cache.delete(cache_key)
 
     elevation = None
+    errors = []
     
-    # Use compressed storage as primary system (replaces in-memory TIF)
+    # Primary: Use compressed storage system
     if compressed_storage is not None:
-        elevation = compressed_storage.get_elevation(latitude, longitude)
-        if elevation is not None:
-            logging.debug(f"Using compressed storage for elevation at ({latitude}, {longitude})")
+        try:
+            elevation = compressed_storage.get_elevation(latitude, longitude)
+            if elevation is not None:
+                # Validate elevation value
+                if isinstance(elevation, (int, float)) and -500 <= elevation <= 9000:
+                    logging.debug(f"Using compressed storage for elevation at ({latitude}, {longitude})")
+                else:
+                    logging.warning(f"Invalid elevation from compressed storage: {elevation}")
+                    elevation = None
+        except Exception as e:
+            errors.append(f"Compressed storage error: {str(e)}")
+            logging.warning(f"Compressed storage failed for ({latitude}, {longitude}): {e}")
+    else:
+        errors.append("Compressed storage not available")
     
-    # Fallback to in-memory TIF data if compressed storage fails (legacy fallback)
+    # Fallback 1: In-memory TIF data (legacy fallback)
     if elevation is None and len(tif_data) > 0:
-        elevation = get_elevation_from_memory(latitude, longitude)
-        if elevation is not None:
-            logging.debug(f"Using legacy in-memory TIF for elevation at ({latitude}, {longitude})")
+        try:
+            elevation = get_elevation_from_memory(latitude, longitude)
+            if elevation is not None:
+                # Validate elevation value
+                if isinstance(elevation, (int, float)) and -500 <= elevation <= 9000:
+                    logging.debug(f"Using legacy in-memory TIF for elevation at ({latitude}, {longitude})")
+                else:
+                    logging.warning(f"Invalid elevation from memory: {elevation}")
+                    elevation = None
+        except Exception as e:
+            errors.append(f"Memory storage error: {str(e)}")
+            logging.warning(f"Memory storage failed for ({latitude}, {longitude}): {e}")
+    else:
+        errors.append("In-memory TIF data not available")
     
+    # Fallback 2: External elevation service (if configured)
+    # TODO: Add external service integration
+    
+    # Cache valid results
     if elevation is not None:
-        cache.set(cache_key, elevation, expire=86400)  # Cache for 24 hours
+        try:
+            cache.set(cache_key, elevation, expire=86400)  # Cache for 24 hours
+        except Exception as e:
+            logging.warning(f"Failed to cache elevation data: {e}")
+    else:
+        # Log comprehensive error info when no elevation is available
+        error_handler.logger.warning(
+            f"No elevation data available for ({latitude}, {longitude})",
+            extra={
+                "latitude": latitude,
+                "longitude": longitude,
+                "errors": errors,
+                "compressed_storage_available": compressed_storage is not None,
+                "tif_data_available": len(tif_data) > 0
+            }
+        )
+    
     return elevation
 
 
@@ -720,21 +873,49 @@ def get_location_info(ip_address) -> LocationInfo:
 
     geolocation_data = get_ip_geolocation(ip_address)
     if geolocation_data:
-        info = LocationInfo(
-            city=geolocation_data.get("city_name", "Unknown"),
-            region=geolocation_data.get("region_name", "Unknown"),
-            country=geolocation_data.get("country_name", "Unknown"),
-            latitude=float(geolocation_data.get("latitude", 0)),
-            longitude=float(geolocation_data.get("longitude", 0)),
-        )
-        cache.set(
-            cache_key,
-            (info.city, info.region, info.country, info.latitude, info.longitude),
-            expire=86400,
-        )
-        return info
+        try:
+            # Safely extract coordinates with proper validation
+            lat = geolocation_data.get("latitude")
+            lon = geolocation_data.get("longitude")
+            
+            # Validate latitude and longitude values
+            if lat is not None and lon is not None:
+                lat = float(lat)
+                lon = float(lon)
+                
+                # Basic coordinate validation
+                if -90 <= lat <= 90 and -180 <= lon <= 180:
+                    info = LocationInfo(
+                        city=geolocation_data.get("city_name", "Unknown"),
+                        region=geolocation_data.get("region_name", "Unknown"),
+                        country=geolocation_data.get("country_name", "Unknown"),
+                        latitude=lat,
+                        longitude=lon,
+                    )
+                    cache.set(
+                        cache_key,
+                        (info.city, info.region, info.country, info.latitude, info.longitude),
+                        expire=86400,
+                    )
+                    return info
+                else:
+                    logging.warning(f"Invalid coordinates from IP geolocation: lat={lat}, lon={lon}")
+            else:
+                logging.warning(f"Missing coordinates from IP geolocation: lat={lat}, lon={lon}")
+        except (ValueError, TypeError) as e:
+            logging.warning(f"Error parsing geolocation data for {ip_address}: {e}")
+    else:
+        logging.info(f"IP geolocation unavailable for {ip_address} (API key not configured)")
 
-    return LocationInfo()
+    # Fallback to default location (continental US center) when geolocation fails
+    logging.info("Using fallback location (Kansas City, MO - geographic center of continental US)")
+    return LocationInfo(
+        city="Kansas City",
+        region="Missouri", 
+        country="United States",
+        latitude=39.0997,  # Geographic center of continental US
+        longitude=-94.5786
+    )
 
 
 def get_color(value):
@@ -744,87 +925,7 @@ def get_color(value):
     return f"rgb({int(rgb[0]*255)}, {int(rgb[1]*255)}, {int(rgb[2]*255)})"
 
 
-def generate_maplibre_html(latitude, longitude, elevation, water_level):
-    """Generate MapLibre GL map with self-hosted vector tiles and flood overlays."""
-    
-    return f"""
-    <link href="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css" rel="stylesheet" />
-    <div id="map" style="height: {MAP_HEIGHT}; width: 100%;"></div>
-    <script src="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script>
-    <script>
-        const map = new maplibregl.Map({{
-            container: 'map',
-            style: {{
-                version: 8,
-                glyphs: '/fonts/{{fontstack}}/{{range}}.pbf',
-                sprite: '/sprites/sprite',
-                sources: {{
-                    'osm': {{
-                        type: 'vector',
-                        tiles: [window.location.origin + '/vector_tiles/{{z}}/{{x}}/{{y}}.pbf']
-                    }},
-                    'elevation': {{
-                        type: 'raster',
-                        tiles: [window.location.origin + '/tiles/{{z}}/{{x}}/{{y}}']
-                    }},
-                    'flood': {{
-                        type: 'raster',
-                        tiles: [window.location.origin + '/flood_tiles/{water_level}/{{z}}/{{x}}/{{y}}']
-                    }}
-                }},
-                layers: [
-                    {{
-                        id: 'background',
-                        type: 'background',
-                        paint: {{ 'background-color': '#f8f4f0' }}
-                    }},
-                    {{
-                        id: 'water',
-                        type: 'fill',
-                        source: 'osm',
-                        'source-layer': 'water',
-                        paint: {{ 'fill-color': '#a0c8f0' }}
-                    }},
-                    {{
-                        id: 'roads',
-                        type: 'line',
-                        source: 'osm',
-                        'source-layer': 'transportation',
-                        paint: {{ 'line-color': '#ff9c00', 'line-width': 2 }}
-                    }},
-                    {{
-                        id: 'elevation-layer',
-                        type: 'raster',
-                        source: 'elevation',
-                        paint: {{ 'raster-opacity': 0.6 }}
-                    }},
-                    {{
-                        id: 'flood-layer',
-                        type: 'raster',
-                        source: 'flood',
-                        paint: {{ 'raster-opacity': 0.5 }}
-                    }}
-                ]
-            }},
-            center: [{longitude}, {latitude}],
-            zoom: {ALLOWED_ZOOM_LEVELS[len(ALLOWED_ZOOM_LEVELS)//2]},
-            minZoom: {min(ALLOWED_ZOOM_LEVELS)},
-            maxZoom: {max(ALLOWED_ZOOM_LEVELS)}
-        }});
-
-        // Add marker for user location
-        new maplibregl.Marker()
-            .setLngLat([{longitude}, {latitude}])
-            .setPopup(new maplibregl.Popup().setHTML(
-                '<div><strong>Your Location</strong><br>' +
-                'Lat: {latitude:.4f}<br>' +
-                'Lng: {longitude:.4f}<br>' +
-                'Elevation: {elevation}m<br>' +
-                'Water Level: {water_level}m</div>'
-            ))
-            .addTo(map);
-    </script>
-    """
+# generate_maplibre_html function removed - now using FastHTML components directly
 
 
 def create_map(latitude, longitude, water_level):
@@ -912,19 +1013,42 @@ async def get_tile(request: Request, z: int, x: int, y: int):
 @app.get("/vector_tiles/{z}/{x}/{y}.pbf")
 async def get_vector_tile(request: Request, z: int, x: int, y: int):
     """Serve vector base map tiles from tileserver-gl."""
+    from error_handling import (
+        validate_tile_coordinates, 
+        handle_external_service_error,
+        TileServiceError,
+        ErrorCode,
+        error_handler
+    )
+    
     # Security: Validate coordinates
-    if not _validate_tile_coordinates(z, x, y):
+    try:
+        validate_tile_coordinates(z, x, y)
+    except Exception as e:
+        error_handler.log_error(e, request)
         raise HTTPException(status_code=400, detail="Invalid tile coordinates")
     
     # Rate limiting for vector tiles
     await _rate_limit_secure(request, "tiles")
     
     try:
-        # Proxy to tileserver-gl (local development uses tampa tiles)
+        # Proxy to tileserver-gl with proper timeout and error handling
         import httpx
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{TILESERVER_URL}/data/tampa/{z}/{x}/{y}.pbf")
+        
+        timeout = httpx.Timeout(10.0, connect=5.0)  # 10s total, 5s connect
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                response = await client.get(f"{TILESERVER_URL}/data/tampa/{z}/{x}/{y}.pbf")
+            except httpx.TimeoutException as e:
+                await handle_external_service_error("tileserver", "get_vector_tile", e)
+            except httpx.ConnectError as e:
+                await handle_external_service_error("tileserver", "get_vector_tile", e)
+            except Exception as e:
+                # Catch any other httpx errors during request
+                logging.error(f"HTTP client error for vector tile {z}/{x}/{y}: {e}")
+                await handle_external_service_error("tileserver", "get_vector_tile", e)
             
+        # Handle different response status codes appropriately
         if response.status_code == 200:
             return Response(
                 content=response.content,
@@ -935,17 +1059,109 @@ async def get_vector_tile(request: Request, z: int, x: int, y: int):
                     "Access-Control-Allow-Origin": "*"
                 }
             )
+        elif response.status_code == 404:
+            # Tile doesn't exist - this is normal for sparse tilesets
+            raise HTTPException(
+                status_code=404, 
+                detail={
+                    "error": "TILE_NOT_FOUND",
+                    "message": f"Vector tile not available for {z}/{x}/{y}",
+                    "user_message": "Map data not available for this area"
+                }
+            )
+        elif response.status_code == 500:
+            # Tileserver internal error
+            logging.error(f"Tileserver internal error for tile {z}/{x}/{y}")
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "TILESERVER_ERROR", 
+                    "message": "Tile server internal error",
+                    "user_message": "Map service is temporarily unavailable"
+                }
+            )
         else:
-            raise HTTPException(status_code=404, detail="Vector tile not found")
+            # Other HTTP errors
+            logging.warning(f"Unexpected tileserver response {response.status_code} for tile {z}/{x}/{y}")
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": "TILESERVER_UNAVAILABLE",
+                    "message": f"Tileserver returned status {response.status_code}",
+                    "user_message": "Map service is temporarily unavailable"
+                }
+            )
             
+    except HTTPException:
+        # Re-raise HTTP exceptions (already handled above)
+        raise
     except Exception as e:
-        logging.error(f"Vector tile serving error: {e}")
-        raise HTTPException(status_code=500, detail="Vector tile service unavailable")
+        # Log unexpected errors but don't expose details
+        error_handler.log_error(e, request, {"tile_coords": f"{z}/{x}/{y}"})
+        raise HTTPException(
+            status_code=500, 
+            detail={
+                "error": "INTERNAL_SERVER_ERROR",
+                "message": "Internal error while serving vector tile",
+                "user_message": "An error occurred while loading map data"
+            }
+        )
 
 
-# Serve static font files
-app.mount("/fonts", StaticFiles(directory="static/fonts"), name="fonts")
-app.mount("/sprites", StaticFiles(directory="static/sprites"), name="sprites")
+# Static files now mounted at the top for priority
+
+# Note: Test endpoints removed - sprites and fonts are now working
+
+# Custom sprite endpoints (replacing StaticFiles mount due to PNG serving issue)
+# Note: These must come before other routes to avoid conflicts
+
+@app.get("/sprites/sprite.png")
+async def serve_sprite_png_direct():
+    """Direct endpoint for sprite.png to avoid route conflicts."""
+    import os
+    file_path = "static/sprites/sprite.png"
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            content = f.read()
+        return Response(
+            content=content, 
+            media_type="image/png",
+            headers={"Cache-Control": "public, max-age=31536000, immutable"}
+        )
+    else:
+        raise HTTPException(status_code=404, detail="Sprite PNG not found")
+
+@app.get("/sprites/{filename}")
+async def serve_sprite_file(filename: str):
+    """Serve sprite files (both JSON and PNG) with dynamic filename matching."""
+    import os
+    
+    # Handle specific sprite files
+    if filename == "sprite.json":
+        file_path = "static/sprites/sprite.json"
+        media_type = "application/json"
+        mode = "r"
+    elif filename == "sprite@2x.json":
+        file_path = "static/sprites/sprite@2x.json"
+        media_type = "application/json"
+        mode = "r"
+    elif filename == "sprite@2x.png":
+        file_path = "static/sprites/sprite@2x.png"
+        media_type = "image/png"
+        mode = "rb"
+    else:
+        raise HTTPException(status_code=404, detail="Sprite file not found")
+    
+    if os.path.exists(file_path):
+        with open(file_path, mode) as f:
+            content = f.read()
+        return Response(
+            content=content, 
+            media_type=media_type,
+            headers={"Cache-Control": "public, max-age=31536000, immutable"}
+        )
+    else:
+        raise HTTPException(status_code=404, detail="Sprite file not found")
 
 
 @rt("/")
@@ -966,9 +1182,8 @@ def get_root(request, water_level: float = 1.0):
     state = location.region
     country = location.country
 
-    map_html = ""
+    # Map will be rendered directly in FastHTML components
     if latitude is not None and longitude is not None:
-        map_html = generate_gmaps_html(latitude, longitude, elevation, water_level)
         x, y = lat_lon_to_tile(latitude, longitude, ALLOWED_ZOOM_LEVELS[0])
 
     if latitude is None:
@@ -999,7 +1214,90 @@ def get_root(request, water_level: float = 1.0):
                     ),
                 ),
             ),
-            Card(H2("Map"), Iframe(srcdoc=map_html, width="100%", height=MAP_HEIGHT)),
+            Card(
+                H2("Map"), 
+                Div(
+                    # Map container
+                    Div(id="map", style=f"height: {MAP_HEIGHT}; width: 100%;"),
+                    # MapLibre CSS and JS
+                    Link(href="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css", rel="stylesheet"),
+                    Script(src="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js"),
+                    # MapLibre initialization script
+                    Script(f"""
+                        const map = new maplibregl.Map({{
+                            container: 'map',
+                            style: {{
+                                version: 8,
+                                glyphs: window.location.origin + '/fonts/{{fontstack}}/{{range}}.pbf',
+                                sprite: window.location.origin + '/sprites/sprite',
+                                sources: {{
+                                    'osm': {{
+                                        type: 'vector',
+                                        tiles: [window.location.origin + '/vector_tiles/{{z}}/{{x}}/{{y}}.pbf']
+                                    }},
+                                    'elevation': {{
+                                        type: 'raster',
+                                        tiles: [window.location.origin + '/tiles/{{z}}/{{x}}/{{y}}']
+                                    }},
+                                    'flood': {{
+                                        type: 'raster',
+                                        tiles: [window.location.origin + '/flood_tiles/{water_level}/{{z}}/{{x}}/{{y}}']
+                                    }}
+                                }},
+                                layers: [
+                                    {{
+                                        id: 'background',
+                                        type: 'background',
+                                        paint: {{ 'background-color': '#f8f4f0' }}
+                                    }},
+                                    {{
+                                        id: 'water',
+                                        type: 'fill',
+                                        source: 'osm',
+                                        'source-layer': 'water',
+                                        paint: {{ 'fill-color': '#a0c8f0' }}
+                                    }},
+                                    {{
+                                        id: 'roads',
+                                        type: 'line',
+                                        source: 'osm',
+                                        'source-layer': 'transportation',
+                                        paint: {{ 'line-color': '#ff9c00', 'line-width': 2 }}
+                                    }},
+                                    {{
+                                        id: 'elevation-layer',
+                                        type: 'raster',
+                                        source: 'elevation',
+                                        paint: {{ 'raster-opacity': 0.6 }}
+                                    }},
+                                    {{
+                                        id: 'flood-layer',
+                                        type: 'raster',
+                                        source: 'flood',
+                                        paint: {{ 'raster-opacity': 0.5 }}
+                                    }}
+                                ]
+                            }},
+                            center: [{longitude}, {latitude}],
+                            zoom: {ALLOWED_ZOOM_LEVELS[len(ALLOWED_ZOOM_LEVELS)//2]},
+                            minZoom: {min(ALLOWED_ZOOM_LEVELS)},
+                            maxZoom: {max(ALLOWED_ZOOM_LEVELS)}
+                        }});
+
+                        // Add marker for user location
+                        new maplibregl.Marker()
+                            .setLngLat([{longitude}, {latitude}])
+                            .setPopup(new maplibregl.Popup().setHTML(
+                                '<div><strong>Your Location</strong><br>' +
+                                'Lat: {latitude:.4f}<br>' +
+                                'Lng: {longitude:.4f}<br>' +
+                                'Elevation: {elevation}m<br>' +
+                                'Water Level: {water_level}m</div>'
+                            ))
+                            .addTo(map);
+                    """)
+                )
+            ),
         ),
     )
     return content
