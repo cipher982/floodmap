@@ -36,6 +36,8 @@ dependencies = [
     "pytest-playwright>=0.7.0",
     "lz4>=4.4.4",
     "zstandard>=0.23.0",
+    "fastapi>=0.116.1",
+    "pytest-asyncio>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -61,11 +63,14 @@ addopts = [
     "--strict-markers",
 ]
 markers = [
+    "unit: fast unit tests (< 1s each)",
     "integration: integration tests that require external dependencies",
-    "aws: tests that require AWS credentials", 
-    "external: tests that require external resources like network access",
     "e2e: end-to-end tests using Playwright",
     "visual: visual regression tests",
+    "performance: performance and load tests",
+    "slow: slow tests that can be skipped in development",
+    "asyncio: async tests",
+    "aws: tests that require AWS credentials", 
+    "external: tests that require external resources like network access",
 ]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
