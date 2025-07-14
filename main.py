@@ -14,6 +14,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fasthtml.common import Iframe
 from fasthtml.common import FileResponse
 from fasthtml.common import Response
+from fastapi.staticfiles import StaticFiles
 from fasthtml.common import Titled
 from fasthtml.common import Container
 from fasthtml.common import Card
@@ -65,6 +66,10 @@ load_dotenv()
 
 # Initialize disk cache
 cache = Cache("./cache")
+
+# Vector tile configuration (local development)
+VECTOR_TILES_PATH = os.getenv("VECTOR_TILES_PATH", "./map_data/tampa.mbtiles")
+TILESERVER_URL = os.getenv("TILESERVER_URL", "http://localhost:8080")
 
 app, rt = fast_app(
     hdrs=(Favicon(light_icon="./static/favicon.ico", dark_icon="./static/favicon.ico"))
@@ -739,112 +744,86 @@ def get_color(value):
     return f"rgb({int(rgb[0]*255)}, {int(rgb[1]*255)}, {int(rgb[2]*255)})"
 
 
-def generate_gmaps_html(latitude, longitude, elevation, water_level):
-    error_tile = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/YoZ7xQAAAAASUVORK5CYII="
-    tile_url_pattern = "/tiles/{z}/{x}/{y}"
-
-    # Security: Conditional loading based on API key availability
-    if GMAPS_ENABLED and gmaps_api_key:
-        # API key is valid - load Google Maps (but key still exposed to client)
-        # TODO: Implement server-side proxy for Google Maps API to avoid client exposure
-        gmaps_script = f'<script src="https://maps.googleapis.com/maps/api/js?key={gmaps_api_key}"></script>'
-        maps_init_condition = "if (typeof google !== 'undefined' && google.maps)"
-    else:
-        # No valid API key - use fallback map
-        gmaps_script = '<!-- Google Maps API disabled or not configured -->'
-        maps_init_condition = "if (false) /* Google Maps disabled */"
-
+def generate_maplibre_html(latitude, longitude, elevation, water_level):
+    """Generate MapLibre GL map with self-hosted vector tiles and flood overlays."""
+    
     return f"""
+    <link href="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css" rel="stylesheet" />
     <div id="map" style="height: {MAP_HEIGHT}; width: 100%;"></div>
-    {gmaps_script}
+    <script src="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script>
     <script>
-        function initMap() {{
-            const allowedZoomLevels = {ALLOWED_ZOOM_LEVELS};
-            const initialZoom = allowedZoomLevels[Math.floor(allowedZoomLevels.length / 2)];
-
-            // Security: Check if Google Maps API is available before using
-            {maps_init_condition} {{
-                const map = new google.maps.Map(document.getElementById("map"), {{
-                center: {{ lat: {latitude}, lng: {longitude} }},
-                zoom: initialZoom,
-                mapTypeId: "terrain",
-                zoomControl: true,
-                scrollwheel: true,
-                disableDoubleClickZoom: false,
-                draggable: true,
-                minZoom: Math.min(...allowedZoomLevels),
-                maxZoom: Math.max(...allowedZoomLevels),
-                restriction: {{
-                    latLngBounds: {{
-                        north: {latitude} + 0.1,
-                        south: {latitude} - 0.1,
-                        east: {longitude} + 0.1,
-                        west: {longitude} - 0.1,
+        const map = new maplibregl.Map({{
+            container: 'map',
+            style: {{
+                version: 8,
+                glyphs: '/fonts/{{fontstack}}/{{range}}.pbf',
+                sprite: '/sprites/sprite',
+                sources: {{
+                    'osm': {{
+                        type: 'vector',
+                        tiles: [window.location.origin + '/vector_tiles/{{z}}/{{x}}/{{y}}.pbf']
                     }},
-                    strictBounds: false,
-                }}
-            }});
-
-            const marker = new google.maps.Marker({{
-                position: {{ lat: {latitude}, lng: {longitude} }},
-                map: map,
-                title: "Your location"
-            }});
-
-            const infowindow = new google.maps.InfoWindow({{
-                content: "Lat: {latitude}, Lon: {longitude}<br>Elevation: {elevation} m"
-            }});
-
-            marker.addListener("click", () => {{
-                infowindow.open(map, marker);
-            }});
-
-            // Elevation tiles
-            const tileLayer = new google.maps.ImageMapType({{
-                getTileUrl: function(coord, zoom) {{
-                    if (allowedZoomLevels.includes(zoom)) {{
-                        return '{tile_url_pattern}'
-                            .replace('{{z}}', zoom)
-                            .replace('{{x}}', coord.x)
-                            .replace('{{y}}', coord.y);
+                    'elevation': {{
+                        type: 'raster',
+                        tiles: [window.location.origin + '/tiles/{{z}}/{{x}}/{{y}}']
+                    }},
+                    'flood': {{
+                        type: 'raster',
+                        tiles: [window.location.origin + '/flood_tiles/{water_level}/{{z}}/{{x}}/{{y}}']
                     }}
-                    return "{error_tile}";
                 }},
-                tileSize: new google.maps.Size(256, 256),
-                name: "Elevation Overlay",
-                opacity: 0.6
-            }});
-
-            // Flood overlay tiles (semi-transparent)
-            const floodLayer = new google.maps.ImageMapType({{
-                getTileUrl: function(coord, zoom) {{
-                    if (allowedZoomLevels.includes(zoom)) {{
-                        return `/flood_tiles/{water_level}/` + zoom + '/' + coord.x + '/' + coord.y;
+                layers: [
+                    {{
+                        id: 'background',
+                        type: 'background',
+                        paint: {{ 'background-color': '#f8f4f0' }}
+                    }},
+                    {{
+                        id: 'water',
+                        type: 'fill',
+                        source: 'osm',
+                        'source-layer': 'water',
+                        paint: {{ 'fill-color': '#a0c8f0' }}
+                    }},
+                    {{
+                        id: 'roads',
+                        type: 'line',
+                        source: 'osm',
+                        'source-layer': 'transportation',
+                        paint: {{ 'line-color': '#ff9c00', 'line-width': 2 }}
+                    }},
+                    {{
+                        id: 'elevation-layer',
+                        type: 'raster',
+                        source: 'elevation',
+                        paint: {{ 'raster-opacity': 0.6 }}
+                    }},
+                    {{
+                        id: 'flood-layer',
+                        type: 'raster',
+                        source: 'flood',
+                        paint: {{ 'raster-opacity': 0.5 }}
                     }}
-                    return "";
-                }},
-                tileSize: new google.maps.Size(256, 256),
-                name: "Flood Overlay",
-                opacity: 0.5
-            }});
+                ]
+            }},
+            center: [{longitude}, {latitude}],
+            zoom: {ALLOWED_ZOOM_LEVELS[len(ALLOWED_ZOOM_LEVELS)//2]},
+            minZoom: {min(ALLOWED_ZOOM_LEVELS)},
+            maxZoom: {max(ALLOWED_ZOOM_LEVELS)}
+        }});
 
-                map.overlayMapTypes.insertAt(0, floodLayer);
-                map.overlayMapTypes.insertAt(0, tileLayer);
-            }} else {{
-                // Fallback when Google Maps API is not available
-                document.getElementById("map").innerHTML = 
-                    '<div style="background: #f0f0f0; height: 100%; display: flex; align-items: center; justify-content: center; color: #666;">' +
-                    '<div style="text-align: center;">' +
-                    '<h3>Map View</h3>' +
-                    '<p>Location: {latitude:.4f}, {longitude:.4f}</p>' +
-                    '<p>Elevation: {elevation}m</p>' +
-                    '<p>Water Level: {water_level}m</p>' +
-                    '<p><em>Google Maps API not configured</em></p>' +
-                    '</div></div>';
-            }}
-        }}
+        // Add marker for user location
+        new maplibregl.Marker()
+            .setLngLat([{longitude}, {latitude}])
+            .setPopup(new maplibregl.Popup().setHTML(
+                '<div><strong>Your Location</strong><br>' +
+                'Lat: {latitude:.4f}<br>' +
+                'Lng: {longitude:.4f}<br>' +
+                'Elevation: {elevation}m<br>' +
+                'Water Level: {water_level}m</div>'
+            ))
+            .addTo(map);
     </script>
-    <script>initMap();</script>
     """
 
 
@@ -857,7 +836,7 @@ def create_map(latitude, longitude, water_level):
 
     # logging.info(f"Cache miss for map: {cache_key}")
     elevation = get_elevation(latitude, longitude)
-    map_html = generate_gmaps_html(latitude, longitude, elevation, water_level)
+    map_html = generate_maplibre_html(latitude, longitude, elevation, water_level)
     # cache.set(cache_key, map_html, expire=86400)  # Cache for 24 hours
     return map_html
 
@@ -928,6 +907,45 @@ async def get_tile(request: Request, z: int, x: int, y: int):
 
     REQUEST_TIME.labels("/tiles").observe(time.time() - start_time)
     raise HTTPException(status_code=404, detail="Tile not found")
+
+
+@app.get("/vector_tiles/{z}/{x}/{y}.pbf")
+async def get_vector_tile(request: Request, z: int, x: int, y: int):
+    """Serve vector base map tiles from tileserver-gl."""
+    # Security: Validate coordinates
+    if not _validate_tile_coordinates(z, x, y):
+        raise HTTPException(status_code=400, detail="Invalid tile coordinates")
+    
+    # Rate limiting for vector tiles
+    await _rate_limit_secure(request, "tiles")
+    
+    try:
+        # Proxy to tileserver-gl (local development uses tampa tiles)
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{TILESERVER_URL}/data/tampa/{z}/{x}/{y}.pbf")
+            
+        if response.status_code == 200:
+            return Response(
+                content=response.content,
+                media_type="application/x-protobuf",
+                headers={
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "Content-Encoding": "gzip",
+                    "Access-Control-Allow-Origin": "*"
+                }
+            )
+        else:
+            raise HTTPException(status_code=404, detail="Vector tile not found")
+            
+    except Exception as e:
+        logging.error(f"Vector tile serving error: {e}")
+        raise HTTPException(status_code=500, detail="Vector tile service unavailable")
+
+
+# Serve static font files
+app.mount("/fonts", StaticFiles(directory="static/fonts"), name="fonts")
+app.mount("/sprites", StaticFiles(directory="static/sprites"), name="sprites")
 
 
 @rt("/")
