@@ -188,6 +188,21 @@ elevation_index.pkl
 # Ignore all compressed elevation data (too large for git)
 compressed_data/
 *.zst
+
+# Ignore vector tiles and map data (too large for git)
+*.mbtiles
+*.pmtiles
+vector_tiles/
+map_data/
+fonts/
+sprites/
+
+# Ignore static files
 static/.DS_Store
+static/fonts/
+static/sprites/
+
+# Ignore test artifacts
 tests/e2e/screenshots/
 test_compress_*
+test_screenshot.png
