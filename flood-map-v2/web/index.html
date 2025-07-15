@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flood Risk Map</title>
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>🌊 Flood Risk Map</h1>
+            <div id="location-info"></div>
+        </header>
+        
+        <main>
+            <div id="map"></div>
+            <div id="controls">
+                <div class="control-group">
+                    <label for="water-level">Water Level (m):</label>
+                    <input type="range" id="water-level" min="0" max="5" step="0.1" value="1.0">
+                    <span id="water-level-display">1.0m</span>
+                </div>
+                <button id="find-location">📍 Find My Location</button>
+            </div>
+        </main>
+        
+        <div id="risk-panel">
+            <h3>Risk Assessment</h3>
+            <div id="risk-details">
+                <p>Click on the map or use "Find My Location" to see flood risk assessment.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="/static/js/map.js"></script>
+</body>
+</html>
