@@ -1,5 +1,5 @@
 # Floodmap Testing Makefile
-.PHONY: help test-setup test-unit test-integration test-e2e test-visual test-all test-cleanup dev-loop
+.PHONY: help test-setup test-unit test-integration test-e2e test-visual test-all test-cleanup dev-loop start-tileserver stop-tileserver
 
 # Default target
 help:
@@ -13,6 +13,8 @@ help:
 	@echo "  make test-setup    - Start services for testing"
 	@echo "  make test-cleanup  - Stop all test services"
 	@echo "  make test-docker   - Run tests using Docker Compose"
+	@echo "  make start-tileserver - Start tileserver container"
+	@echo "  make stop-tileserver  - Stop tileserver container"
 	@echo "  make fix-maplibre  - Debug and fix MapLibre tile loading"
 
 # Fast development loop - what you run most often
@@ -58,13 +60,46 @@ test-docker:
 	docker-compose -f docker-compose.test.yml down
 
 # Service management for local testing
+start-tileserver:
+	@echo "🚀 Starting tileserver..."
+	@# Check for existing container and stop it
+	@if docker ps -a --format '{{.Names}}' | grep -q "^tileserver-local$$"; then \
+		echo "🛑 Stopping existing tileserver container..."; \
+		docker stop tileserver-local 2>/dev/null || true; \
+		docker rm tileserver-local 2>/dev/null || true; \
+	fi
+	@# Check if MBTiles file exists
+	@if [ ! -f "map_data/tampa.mbtiles" ]; then \
+		echo "❌ Tampa MBTiles not found. Please run the Planetiler command first."; \
+		exit 1; \
+	fi
+	@# Start the container
+	docker run --rm --name tileserver-local \
+		-p 8080:8080 \
+		-v $(PWD)/map_data:/data \
+		maptiler/tileserver-gl tampa.mbtiles &
+
+stop-tileserver:
+	@echo "🛑 Stopping tileserver..."
+	@if docker ps --format '{{.Names}}' | grep -q "^tileserver-local$$"; then \
+		echo "📦 Stopping tileserver-local container..."; \
+		docker stop tileserver-local; \
+	else \
+		echo "ℹ️  No tileserver-local container running"; \
+	fi
+	@# Clean up any leftover containers
+	@if docker ps -a --format '{{.Names}}' | grep -q "^tileserver-local$$"; then \
+		echo "🧹 Removing tileserver-local container..."; \
+		docker rm tileserver-local; \
+	fi
+
 test-setup:
 	@echo "🛠️  Starting test services..."
 	# Clean up any existing services first
-	-./stop_tileserver.sh
+	-$(MAKE) stop-tileserver
 	-pkill -f "main.py"
 	# Start tileserver in background (Docker will manage the container)
-	./start_tileserver.sh &
+	$(MAKE) start-tileserver
 	@echo "⏳ Waiting for tileserver to be ready..."
 	@timeout=30; while [ $$timeout -gt 0 ] && ! curl -s http://localhost:8080 > /dev/null; do sleep 1; timeout=$$((timeout-1)); done
 	# Start Flask app in test mode
@@ -83,7 +118,7 @@ test-setup-check:
 test-cleanup:
 	@echo "🧹 Cleaning up test services..."
 	# Stop tileserver container cleanly
-	-./stop_tileserver.sh
+	-$(MAKE) stop-tileserver
 	# Kill Flask app processes
 	-kill `cat .app.pid 2>/dev/null` 2>/dev/null || true
 	-pkill -f "main.py"
