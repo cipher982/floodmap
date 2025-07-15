@@ -60,12 +60,11 @@ test-docker:
 # Service management for local testing
 test-setup:
 	@echo "🛠️  Starting test services..."
-	# Kill any existing services
-	-pkill -f "tileserver"
+	# Clean up any existing services first
+	-./stop_tileserver.sh
 	-pkill -f "main.py"
-	# Start tileserver
+	# Start tileserver in background (Docker will manage the container)
 	./start_tileserver.sh &
-	echo $$! > .tileserver.pid
 	@echo "⏳ Waiting for tileserver to be ready..."
 	@timeout=30; while [ $$timeout -gt 0 ] && ! curl -s http://localhost:8080 > /dev/null; do sleep 1; timeout=$$((timeout-1)); done
 	# Start Flask app in test mode
@@ -83,11 +82,13 @@ test-setup-check:
 
 test-cleanup:
 	@echo "🧹 Cleaning up test services..."
-	-kill `cat .tileserver.pid 2>/dev/null` 2>/dev/null || true
+	# Stop tileserver container cleanly
+	-./stop_tileserver.sh
+	# Kill Flask app processes
 	-kill `cat .app.pid 2>/dev/null` 2>/dev/null || true
-	-rm -f .tileserver.pid .app.pid
-	-pkill -f "tileserver"
 	-pkill -f "main.py"
+	# Clean up PID files
+	-rm -f .tileserver.pid .app.pid
 	@echo "✅ Cleanup complete"
 
 # Debug MapLibre tile loading issue
