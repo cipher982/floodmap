@@ -35,10 +35,10 @@ def test_services(service_urls):
     print("🚀 Starting test services...")
     
     try:
-        # Start tileserver
+        # Start tileserver using Makefile
         if not tileserver_running:
             tileserver_proc = subprocess.Popen(
-                ["./start_tileserver.sh"],
+                ["make", "start-tileserver"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
