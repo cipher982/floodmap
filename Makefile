@@ -1,5 +1,5 @@
 # Flood Map - Clean Architecture Makefile
-.PHONY: help run start stop test
+.PHONY: help run start stop test process-data process-miami process-regions list-regions
 
 # Default target
 help:
@@ -14,6 +14,10 @@ help:
 	@echo "🔧 Individual Services:"
 	@echo "  make tileserver    - Start tileserver only"
 	@echo "  make website       - Start website only (requires tileserver)"
+	@echo ""
+	@echo "📊 Data Processing:"
+	@echo "  make process-test  - Test pipeline with one tile"
+	@echo "  make process-all   - Process all USA elevation data"
 
 # Main development commands
 run: start
@@ -73,3 +77,14 @@ stop-tileserver:
 	@if docker ps -a --format '{{.Names}}' | grep -q "^tileserver-local$$"; then \
 		docker rm tileserver-local; \
 	fi
+
+# Data processing commands
+process-test:
+	@echo "🧪 Testing pipeline with one tile..."
+	uv run python scripts/process_elevation.py --test
+
+process-all:
+	@echo "🇺🇸 Processing all USA elevation data..."
+	@echo "⚠️  This will take several hours and use significant disk space"
+	@read -p "Continue? (y/N) " confirm && [ "$$confirm" = "y" ]
+	uv run python scripts/process_elevation.py --all
