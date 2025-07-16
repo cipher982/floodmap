@@ -209,3 +209,4 @@ test_screenshot.png
 # Testing process files
 .app.pid
 .tileserver.pid
+temp/
