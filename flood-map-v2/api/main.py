@@ -6,6 +6,11 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import uvicorn
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import routers
 from routers import tiles, risk, health
@@ -32,10 +37,15 @@ async def serve_frontend():
         return HTMLResponse(content=f.read())
 
 if __name__ == "__main__":
+    import os
+    
+    # Get port from environment or use default
+    port = int(os.getenv("API_PORT", "5002"))
+    
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=5002,  # Use different port for new architecture
+        port=port,
         reload=True,
         log_level="info"
     )

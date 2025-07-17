@@ -107,8 +107,14 @@ class ElevationDataLoader:
             # Decompress elevation data
             dctx = zstd.ZstdDecompressor()
             decompressed = dctx.decompress(compressed_data)
+            # Handle both 'shape' (new format) and 'height'/'width' (old format) 
+            if 'shape' in metadata:
+                height, width = metadata['shape']
+            else:
+                height, width = metadata['height'], metadata['width']
+                
             elevation_array = np.frombuffer(decompressed, dtype=np.int16).reshape(
-                metadata['height'], metadata['width']
+                height, width
             )
             
             # Cache management
@@ -200,10 +206,10 @@ class ElevationDataLoader:
         
         # Convert tile bounds to array indices
         file_bounds = metadata['bounds']
-        file_lat_top = file_bounds['north']
-        file_lat_bottom = file_bounds['south'] 
-        file_lon_left = file_bounds['west']
-        file_lon_right = file_bounds['east']
+        file_lat_top = file_bounds['top']
+        file_lat_bottom = file_bounds['bottom'] 
+        file_lon_left = file_bounds['left']
+        file_lon_right = file_bounds['right']
         
         # Calculate overlap region
         overlap_lat_top = min(lat_top, file_lat_top)
