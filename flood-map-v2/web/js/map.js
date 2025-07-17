@@ -29,12 +29,8 @@ class FloodMap {
                     },
                     'elevation-tiles': {
                         type: 'raster',
-                        tiles: [window.location.origin + '/api/tiles/elevation/{z}/{x}/{y}.png']
+                        tiles: [window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png']
                     },
-                    'flood-tiles': {
-                        type: 'raster',
-                        tiles: [window.location.origin + '/api/tiles/flood/' + this.currentWaterLevel + '/{z}/{x}/{y}.png']
-                    }
                 },
                 layers: [
                     // Background
@@ -59,19 +55,12 @@ class FloodMap {
                         'source-layer': 'transportation',
                         paint: { 'line-color': '#6b7280', 'line-width': 1 }
                     },
-                    // Elevation overlay
+                    // Contextual flood risk elevation overlay
                     {
                         id: 'elevation',
                         type: 'raster',
                         source: 'elevation-tiles',
-                        paint: { 'raster-opacity': 0.3 }
-                    },
-                    // Flood risk overlay
-                    {
-                        id: 'flood-risk',
-                        type: 'raster',
-                        source: 'flood-tiles',
-                        paint: { 'raster-opacity': 0.7 }
+                        paint: { 'raster-opacity': 0.6 }
                     }
                 ]
             },
@@ -108,9 +97,9 @@ class FloodMap {
     }
 
     updateFloodLayer() {
-        // Update flood tiles source with new water level
-        this.map.getSource('flood-tiles').setTiles([
-            window.location.origin + '/api/tiles/flood/' + this.currentWaterLevel + '/{z}/{x}/{y}.png'
+        // Update elevation tiles with new water level for contextual coloring
+        this.map.getSource('elevation-tiles').setTiles([
+            window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png'
         ]);
     }
 
