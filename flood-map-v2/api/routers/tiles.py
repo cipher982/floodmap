@@ -3,12 +3,21 @@ from fastapi import APIRouter, HTTPException, Response
 from fastapi.responses import Response
 import httpx
 import os
+import io
+import logging
+from PIL import Image
+import numpy as np
+
+from color_mapping import color_mapper
+from elevation_loader import elevation_loader
+from tile_cache import tile_cache
+from error_handling import safe_tile_generation, log_performance, health_monitor
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Configuration
 TILESERVER_URL = "http://localhost:8080"
-ELEVATION_DATA_PATH = "../elevation_data.bin"  # Path to existing data
 
 @router.get("/tiles/vector/{z}/{x}/{y}.pbf")
 async def get_vector_tile(z: int, x: int, y: int):
@@ -44,39 +53,77 @@ async def get_vector_tile(z: int, x: int, y: int):
         except httpx.RequestError:
             raise HTTPException(status_code=503, detail="Tileserver unavailable")
 
-@router.get("/tiles/elevation/{z}/{x}/{y}.png")
-async def get_elevation_tile(z: int, x: int, y: int):
-    """Serve elevation tiles from processed TIF data."""
+@router.get("/tiles/elevation/{water_level}/{z}/{x}/{y}.png")
+@safe_tile_generation
+@log_performance
+async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
+    """Generate contextual flood risk tiles dynamically."""
     # Input validation
-    if not (10 <= z <= 12):  # Our elevation data zoom range
-        # Return transparent tile for unsupported zoom levels
-        transparent_png = b'\\x89PNG\\r\\n\\x1a\\n\\x00\\x00\\x00\\rIHDR\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x08\\x06\\x00\\x00\\x00\\x1f\\x15\\xc4\\x89\\x00\\x00\\x00\\rIDATx\\x9cc\\xf8\\x0f\\x00\\x00\\x01\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x07:\\xb9Y\\x00\\x00\\x00\\x00IEND\\xaeB`\\x82'
-        return Response(
-            content=transparent_png,
-            media_type="image/png",
-            headers={"Cache-Control": "public, max-age=3600"}
-        )
+    if not (8 <= z <= 14):  # Support wider zoom range
+        return _transparent_tile()
     
-    # Look for elevation tile - use absolute paths to avoid confusion
-    base_path = "/Users/davidrose/git/floodmap"
-    tile_path = f"{base_path}/processed_data/tiles/{z}/{x}/{y}.png"
-    if not os.path.exists(tile_path):
-        tile_path = f"{base_path}/flood-map-v2/data/elevation_tiles/{z}/{x}/{y}.png"
+    if not (-10 <= water_level <= 50):  # Reasonable water level range
+        raise HTTPException(status_code=400, detail="Invalid water level")
     
-    if os.path.exists(tile_path):
-        try:
-            with open(tile_path, "rb") as f:
-                tile_content = f.read()
+    try:
+        # Check cache first
+        cached_tile = tile_cache.get(water_level, z, x, y)
+        if cached_tile is not None:
             return Response(
-                content=tile_content,
+                content=cached_tile,
                 media_type="image/png",
-                headers={"Cache-Control": "public, max-age=3600"}
+                headers={
+                    "Cache-Control": f"public, max-age=3600",
+                    "X-Water-Level": str(water_level),
+                    "X-Cache": "HIT"
+                }
             )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error reading tile: {e}")
-    
-    # Return transparent tile if no data available
-    transparent_png = b'\\x89PNG\\r\\n\\x1a\\n\\x00\\x00\\x00\\rIHDR\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x08\\x06\\x00\\x00\\x00\\x1f\\x15\\xc4\\x89\\x00\\x00\\x00\\rIDATx\\x9cc\\xf8\\x0f\\x00\\x00\\x01\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x07:\\xb9Y\\x00\\x00\\x00\\x00IEND\\xaeB`\\x82'
+        
+        # Load elevation data for this tile
+        elevation_data = elevation_loader.get_elevation_for_tile(x, y, z)
+        
+        if elevation_data is None:
+            logger.debug(f"No elevation data for tile {z}/{x}/{y}")
+            return _transparent_tile()
+        
+        # Convert elevation to contextual colors
+        rgba_array = color_mapper.elevation_array_to_rgba(
+            elevation_data, 
+            water_level,
+            no_data_value=-32768  # Common SRTM no-data value
+        )
+        
+        # Convert to PIL Image
+        img = Image.fromarray(rgba_array, 'RGBA')
+        
+        # Convert to PNG bytes
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG', optimize=True)
+        img_bytes.seek(0)
+        
+        tile_data = img_bytes.getvalue()
+        
+        # Cache the generated tile
+        tile_cache.put(water_level, z, x, y, tile_data)
+        
+        return Response(
+            content=tile_data,
+            media_type="image/png",
+            headers={
+                "Cache-Control": f"public, max-age=3600",
+                "X-Water-Level": str(water_level),
+                "X-Cache": "MISS"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating elevation tile {z}/{x}/{y} at water level {water_level}: {e}")
+        return _transparent_tile()
+
+
+def _transparent_tile() -> Response:
+    """Return a transparent PNG tile."""
+    transparent_png = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07:\xb9Y\x00\x00\x00\x00IEND\xaeB`\x82'
     return Response(
         content=transparent_png,
         media_type="image/png",
@@ -88,7 +135,7 @@ async def get_flood_tile(level: float, z: int, x: int, y: int):
     """Serve flood risk overlay tiles."""
     # TODO: Implement flood overlay generation
     # For now, return transparent tile
-    transparent_png = b'\\x89PNG\\r\\n\\x1a\\n\\x00\\x00\\x00\\rIHDR\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x08\\x06\\x00\\x00\\x00\\x1f\\x15\\xc4\\x89\\x00\\x00\\x00\\rIDATx\\x9cc\\xf8\\x0f\\x00\\x00\\x01\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x07:\\xb9Y\\x00\\x00\\x00\\x00IEND\\xaeB`\\x82'
+    transparent_png = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07:\xb9Y\x00\x00\x00\x00IEND\xaeB`\x82'
     return Response(
         content=transparent_png,
         media_type="image/png",
