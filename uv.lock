@@ -608,6 +608,7 @@ dependencies = [
     { name = "diskcache" },
     { name = "fastapi" },
     { name = "folium" },
+    { name = "gdal" },
     { name = "geopy" },
     { name = "googlemaps" },
     { name = "httptools" },
@@ -623,6 +624,7 @@ dependencies = [
     { name = "pyproj" },
     { name = "pytest-asyncio" },
     { name = "pytest-playwright" },
+    { name = "python-dotenv" },
     { name = "python-fasthtml" },
     { name = "rasterio" },
     { name = "redis" },
@@ -651,6 +653,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "fastapi", marker = "extra == 'test'", specifier = ">=0.104.0" },
     { name = "folium", specifier = ">=0.17.0" },
+    { name = "gdal", specifier = "==3.10.0" },
     { name = "geopy", specifier = ">=2.4.1" },
     { name = "googlemaps", specifier = ">=4.10.0" },
     { name = "httptools", git = "https://github.com/MagicStack/httptools" },
@@ -670,6 +673,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.23.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
     { name = "pytest-playwright", specifier = ">=0.7.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-fasthtml", specifier = ">=0.6.9" },
     { name = "rasterio", specifier = ">=1.4.1" },
     { name = "redis", specifier = ">=5.0.4" },
@@ -791,6 +795,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/00/f7/27f15d41f0ed38e8f
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bb/61/78c7b3851add1481b048b5fdc29067397a1784e2910592bc81bb3f608635/fsspec-2025.5.1-py3-none-any.whl", hash = "sha256:24d3a2e663d5fc735ab256263c4075f374a174c3410c0b25e5bd1970bceaa462", size = 199052, upload-time = "2025-05-24T12:03:21.66Z" },
 ]
+
+[[package]]
+name = "gdal"
+version = "3.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/86/1c4b3eb5b3d31584ebc694cd54b04e8cdba0d71018bbe65d4faefa489a9f/gdal-3.10.tar.gz", hash = "sha256:98fed53baca2b6ec35daa56773facf425a64cd9d1293eb8be28ef9458ea24820", size = 848086, upload-time = "2024-11-06T15:20:32.923Z" }
 
 [[package]]
 name = "geographiclib"
