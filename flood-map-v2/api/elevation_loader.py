@@ -44,42 +44,36 @@ class ElevationDataLoader:
     
     def find_elevation_files_for_tile(self, lat_top: float, lat_bottom: float, 
                                      lon_left: float, lon_right: float) -> list:
-        """Find elevation files that overlap with the given tile bounds."""
+        """Find elevation files that overlap with the given tile bounds using O(1) lookup."""
         overlapping_files = []
         
-        # Scan through available elevation files
-        for file_path in self.data_dir.glob("*.zst"):
-            # Parse coordinate from filename (e.g., n27_w082_1arc_v3.zst)
-            filename = file_path.stem
-            parts = filename.split('_')
-            
-            if len(parts) >= 2:
-                try:
-                    # Extract lat/lon from filename
-                    lat_str = parts[0]  # e.g., "n27" or "s27"
-                    lon_str = parts[1]  # e.g., "w082" or "e082"
+        # Calculate the range of 1-degree tiles that might overlap
+        lat_start = int(math.floor(lat_bottom))
+        lat_end = int(math.ceil(lat_top))
+        lon_start = int(math.floor(lon_left))
+        lon_end = int(math.ceil(lon_right))
+        
+        # Generate filenames directly using O(1) formula
+        for lat in range(lat_start, lat_end + 1):
+            for lon in range(lon_start, lon_end + 1):
+                # Generate filename using Carmack's O(1) approach
+                lat_letter = 'n' if lat >= 0 else 's'
+                lon_letter = 'w' if lon < 0 else 'e'
+                
+                filename = f"{lat_letter}{abs(lat):02d}_{lon_letter}{abs(lon):03d}_1arc_v3.zst"
+                file_path = self.data_dir / filename
+                
+                if file_path.exists():
+                    # Quick bounds check
+                    file_lat_top = lat + 1
+                    file_lat_bottom = lat
+                    file_lon_left = lon
+                    file_lon_right = lon + 1
                     
-                    file_lat = int(lat_str[1:])
-                    if lat_str[0] == 's':
-                        file_lat = -file_lat
-                        
-                    file_lon = int(lon_str[1:])
-                    if lon_str[0] == 'w':
-                        file_lon = -file_lon
-                    
-                    # Each file covers 1 degree
-                    file_lat_top = file_lat + 1
-                    file_lat_bottom = file_lat
-                    file_lon_left = file_lon
-                    file_lon_right = file_lon + 1
-                    
-                    # Check for overlap
+                    # Check for actual overlap
                     if (file_lat_bottom < lat_top and file_lat_top > lat_bottom and
                         file_lon_left < lon_right and file_lon_right > lon_left):
                         overlapping_files.append(file_path)
-                        
-                except (ValueError, IndexError):
-                    continue
                     
         return overlapping_files
     
@@ -236,19 +230,20 @@ class ElevationDataLoader:
         # Extract data
         tile_data = elevation_array[y_top:y_bottom, x_left:x_right]
         
-        # Resize to standard tile size using high-quality resampling
+        # Resize to standard tile size using simple numpy operations  
         if tile_data.shape != (tile_size, tile_size):
-            from PIL import Image
-            # Handle potential data type issues
-            if tile_data.dtype == np.int16:
-                # Convert to float for better interpolation, then back to int16
-                img = Image.fromarray(tile_data.astype(np.float32))
-                img = img.resize((tile_size, tile_size), Image.LANCZOS)  # Higher quality resampling
-                tile_data = np.array(img, dtype=np.int16)
+            # Use simple numpy indexing for fast resizing (nearest neighbor)
+            if tile_data.shape[0] > tile_size and tile_data.shape[1] > tile_size:
+                # Downsample using stride indexing
+                step_y = tile_data.shape[0] // tile_size
+                step_x = tile_data.shape[1] // tile_size
+                tile_data = tile_data[::step_y, ::step_x][:tile_size, :tile_size]
             else:
-                img = Image.fromarray(tile_data)
-                img = img.resize((tile_size, tile_size), Image.LANCZOS)
-                tile_data = np.array(img)
+                # For upsampling or complex cases, use PIL (but this should be rare)
+                from PIL import Image
+                img = Image.fromarray(tile_data.astype(np.float32))
+                img = img.resize((tile_size, tile_size), Image.NEAREST)  # Fast nearest neighbor
+                tile_data = np.array(img, dtype=np.int16)
         
         return tile_data
 
