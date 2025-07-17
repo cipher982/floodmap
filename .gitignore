@@ -210,3 +210,16 @@ test_screenshot.png
 .app.pid
 .tileserver.pid
 temp/
+# Temporary files and downloads
+test_*.py
+debug_*.py
+debug_*.png
+planetiler.jar
+ARCHIVED_DATA
+
+# Logs
+*.log
+/tmp/
+
+# OS files
+.DS_Store
