@@ -1,5 +1,5 @@
 # Flood Map - Clean Architecture Makefile
-.PHONY: help run start stop test process-data process-miami process-regions list-regions
+.PHONY: help run start stop test process-data process-miami process-regions list-regions status monitor download-region process-region
 
 # Default target
 help:
@@ -18,6 +18,12 @@ help:
 	@echo "📊 Data Processing:"
 	@echo "  make process-test  - Test pipeline with one tile"
 	@echo "  make process-all   - Process all USA elevation data"
+	@echo ""
+	@echo "🗺️ Regional Maps:"
+	@echo "  make download-region - Download specific region"
+	@echo "  make process-regions - Process priority regions"
+	@echo "  make status         - Show system status"
+	@echo "  make monitor        - Monitor system progress"
 
 # Main development commands
 run: start
@@ -51,23 +57,25 @@ test:
 
 # Service management
 tileserver:
-	@echo "🚀 Starting tileserver..."
+	@echo "🚀 Starting multi-region tileserver..."
 	@# Stop existing container
 	@if docker ps -a --format '{{.Names}}' | grep -q "^tileserver-local$$"; then \
 		echo "🛑 Stopping existing tileserver..."; \
 		docker stop tileserver-local 2>/dev/null || true; \
 		docker rm tileserver-local 2>/dev/null || true; \
 	fi
-	@# Check if data exists
-	@if [ ! -f "map_data/tampa.mbtiles" ]; then \
-		echo "❌ Tampa MBTiles not found in map_data/"; \
+	@# Check if config exists
+	@if [ ! -f "map_data/config.json" ]; then \
+		echo "❌ TileServer config not found in map_data/"; \
 		exit 1; \
 	fi
-	@# Start container
+	@# Update config with available regions
+	uv run python scripts/update_tileserver_config.py
+	@# Start container with config
 	docker run --rm --name tileserver-local \
 		-p 8080:8080 \
 		-v $(PWD)/map_data:/data \
-		maptiler/tileserver-gl tampa.mbtiles &
+		maptiler/tileserver-gl --config /data/config.json &
 
 stop-tileserver:
 	@echo "🛑 Stopping tileserver..."
@@ -88,3 +96,23 @@ process-all:
 	@echo "⚠️  This will take several hours and use significant disk space"
 	@read -p "Continue? (y/N) " confirm && [ "$$confirm" = "y" ]
 	uv run python scripts/process_elevation.py --all
+
+# Regional map processing
+download-region:
+	@echo "📍 Available regions: california, texas, new-york, florida, illinois"
+	@read -p "Enter region name: " region && \
+	export PATH="/opt/homebrew/opt/openjdk@21/bin:$$PATH" && \
+	uv run python scripts/download_regional_maps.py --region $$region
+
+process-regions:
+	@echo "🗺️ Processing priority regions..."
+	export PATH="/opt/homebrew/opt/openjdk@21/bin:$$PATH" && \
+	uv run python scripts/download_regional_maps.py --max-regions 3
+
+status:
+	@echo "📊 Flood Map System Status..."
+	uv run python system_status.py
+
+monitor:
+	@echo "🔄 Monitoring system (Press Ctrl+C to stop)..."
+	uv run python system_status.py --watch 5
