@@ -11,6 +11,13 @@ try:
 except ImportError:
     HEALTH_MONITORING = False
 
+# Import cache for statistics
+try:
+    from tile_cache import tile_cache
+    CACHE_STATS = True
+except ImportError:
+    CACHE_STATS = False
+
 router = APIRouter()
 
 @router.get("/health")
@@ -62,10 +69,10 @@ async def health_check():
 @router.get("/metrics")
 async def get_metrics():
     """Get detailed system metrics."""
-    if not HEALTH_MONITORING:
-        return {"error": "Health monitoring not available"}
+    stats = {}
     
-    stats = health_monitor.get_stats()
+    if HEALTH_MONITORING:
+        stats.update(health_monitor.get_stats())
     
     # Add system information
     stats.update({
@@ -74,7 +81,19 @@ async def get_metrics():
         "system_load": _get_system_load()
     })
     
+    # Add cache statistics
+    if CACHE_STATS:
+        stats["cache"] = tile_cache.stats()
+    
     return stats
+
+@router.get("/cache")
+async def get_cache_stats():
+    """Get tile cache statistics."""
+    if not CACHE_STATS:
+        return {"error": "Cache statistics not available"}
+    
+    return tile_cache.stats()
 
 @router.get("/status")
 async def detailed_status():

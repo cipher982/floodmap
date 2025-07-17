@@ -7,6 +7,8 @@ import io
 import logging
 from PIL import Image
 import numpy as np
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -23,6 +25,44 @@ logger = logging.getLogger(__name__)
 # Configuration
 TILESERVER_PORT = os.getenv("TILESERVER_PORT", "8080")
 TILESERVER_URL = f"http://localhost:{TILESERVER_PORT}"
+
+# Thread pool for CPU-intensive tile generation
+CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tile-cpu")
+
+def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> bytes:
+    """Synchronous tile generation for thread pool execution."""
+    try:
+        # Load elevation data for this tile
+        elevation_data = elevation_loader.get_elevation_for_tile(x, y, z)
+        
+        if elevation_data is None:
+            logger.debug(f"No elevation data for tile {z}/{x}/{y}")
+            return _transparent_tile_bytes()
+        
+        # Convert elevation to contextual colors
+        rgba_array = color_mapper.elevation_array_to_rgba(
+            elevation_data, 
+            water_level,
+            no_data_value=-32768  # Common SRTM no-data value
+        )
+        
+        # Convert to PIL Image
+        img = Image.fromarray(rgba_array, 'RGBA')
+        
+        # Convert to PNG bytes with fast compression
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG', optimize=True, compress_level=1)  # Fast compression
+        img_bytes.seek(0)
+        
+        return img_bytes.getvalue()
+        
+    except Exception as e:
+        logger.error(f"Error generating elevation tile {z}/{x}/{y} at water level {water_level}: {e}")
+        return _transparent_tile_bytes()
+
+def _transparent_tile_bytes() -> bytes:
+    """Return transparent PNG as bytes."""
+    return b'\\x89PNG\\r\\n\\x1a\\n\\x00\\x00\\x00\\rIHDR\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x08\\x06\\x00\\x00\\x00\\x1f\\x15\\xc4\\x89\\x00\\x00\\x00\\rIDATx\\x9cc\\xf8\\x0f\\x00\\x00\\x01\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x07:\\xb9Y\\x00\\x00\\x00\\x00IEND\\xaeB`\\x82'
 
 @router.get("/tiles/vector/{z}/{x}/{y}.pbf")
 async def get_vector_tile(z: int, x: int, y: int):
@@ -62,7 +102,7 @@ async def get_vector_tile(z: int, x: int, y: int):
 @safe_tile_generation
 @log_performance
 async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
-    """Generate contextual flood risk tiles dynamically."""
+    """Generate contextual flood risk tiles dynamically with async processing."""
     # Input validation
     if not (8 <= z <= 14):  # Support wider zoom range
         return _transparent_tile()
@@ -84,29 +124,13 @@ async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
                 }
             )
         
-        # Load elevation data for this tile
-        elevation_data = elevation_loader.get_elevation_for_tile(x, y, z)
-        
-        if elevation_data is None:
-            logger.debug(f"No elevation data for tile {z}/{x}/{y}")
-            return _transparent_tile()
-        
-        # Convert elevation to contextual colors
-        rgba_array = color_mapper.elevation_array_to_rgba(
-            elevation_data, 
-            water_level,
-            no_data_value=-32768  # Common SRTM no-data value
+        # Generate tile asynchronously using thread pool
+        loop = asyncio.get_event_loop()
+        tile_data = await loop.run_in_executor(
+            CPU_EXECUTOR,
+            generate_elevation_tile_sync,
+            water_level, z, x, y
         )
-        
-        # Convert to PIL Image
-        img = Image.fromarray(rgba_array, 'RGBA')
-        
-        # Convert to PNG bytes
-        img_bytes = io.BytesIO()
-        img.save(img_bytes, format='PNG', optimize=True)
-        img_bytes.seek(0)
-        
-        tile_data = img_bytes.getvalue()
         
         # Cache the generated tile
         tile_cache.put(water_level, z, x, y, tile_data)
