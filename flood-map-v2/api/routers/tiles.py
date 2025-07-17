@@ -7,6 +7,10 @@ import io
 import logging
 from PIL import Image
 import numpy as np
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 from color_mapping import color_mapper
 from elevation_loader import elevation_loader
@@ -17,7 +21,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Configuration
-TILESERVER_URL = "http://localhost:8080"
+TILESERVER_PORT = os.getenv("TILESERVER_PORT", "8080")
+TILESERVER_URL = f"http://localhost:{TILESERVER_PORT}"
 
 @router.get("/tiles/vector/{z}/{x}/{y}.pbf")
 async def get_vector_tile(z: int, x: int, y: int):

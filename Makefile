@@ -34,12 +34,12 @@ start:
 	@echo "⏳ Waiting for tileserver..."
 	@timeout=30; while [ $$timeout -gt 0 ] && ! curl -s http://localhost:8080 > /dev/null; do sleep 1; timeout=$$((timeout-1)); done
 	@echo "🌐 Starting website with elevation overlays..."
-	cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port 5002 --reload
+	cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port $${API_PORT:-5002} --reload
 
 website:
 	@echo "🌐 Starting website at http://localhost:5002"
 	@echo "💡 Make sure tileserver is running: make tileserver"
-	cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port 5002 --reload
+	cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port $${API_PORT:-5002} --reload
 
 stop:
 	@echo "🛑 Stopping all services..."
@@ -51,13 +51,17 @@ test:
 	@echo "🧪 Testing flood map..."
 	@echo "💡 Make sure services are running: make start"
 	@echo "🌐 Testing website..."
-	curl -s http://localhost:5002 > /dev/null && echo "✅ Website responds" || echo "❌ Website not responding"
+	curl -s http://localhost:$${API_PORT:-5002} > /dev/null && echo "✅ Website responds" || echo "❌ Website not responding"
 	@echo "🏔️ Testing elevation tiles..."
-	curl -s http://localhost:5002/tiles/elevation/12/1103/1709.png > /dev/null && echo "✅ Elevation tiles work" || echo "❌ Elevation tiles failing"
+	curl -s http://localhost:$${API_PORT:-5002}/api/tiles/elevation/1/12/1103/1709.png > /dev/null && echo "✅ Elevation tiles work" || echo "❌ Elevation tiles failing"
+
+test-integration:
+	@echo "🔧 Running complete integration tests (starts/stops services)..."
+	uv run python -m pytest tests/test_integration_complete.py -v -s
 
 # Service management
 tileserver:
-	@echo "🚀 Starting multi-region tileserver..."
+	@echo "🚀 Starting multi-region tileserver on port $${TILESERVER_PORT:-8080}..."
 	@# Stop existing container
 	@if docker ps -a --format '{{.Names}}' | grep -q "^tileserver-local$$"; then \
 		echo "🛑 Stopping existing tileserver..."; \
@@ -73,7 +77,7 @@ tileserver:
 	uv run python scripts/update_tileserver_config.py
 	@# Start container with config
 	docker run --rm --name tileserver-local \
-		-p 8080:8080 \
+		-p $${TILESERVER_PORT:-8080}:8080 \
 		-v $(PWD)/map_data:/data \
 		maptiler/tileserver-gl --config /data/config.json &
 
