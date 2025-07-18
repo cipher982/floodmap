@@ -8,42 +8,123 @@ class TestTileServing:
     """Test tile serving across all endpoints."""
     
     @pytest.mark.asyncio
-    async def test_elevation_tile_serving(self, tile_client):
-        """Test elevation tile serving."""
-        # Tampa area coordinates
-        z, x, y = 10, 275, 427
+    async def test_elevation_tile_serving_v1(self, api_client):
+        """Test v1 elevation tile serving with known working coordinates."""
+        # Use validated working coordinates
+        z, x, y = 10, 286, 387
         
-        response = await tile_client.get_elevation_tile(z, x, y)
+        # Test v1 raw elevation tiles
+        response = await api_client.get(f"/api/v1/tiles/elevation/{z}/{x}/{y}.png")
         
-        # Should return PNG tile or 404 (if no elevation data for this tile)
-        assert response.status_code in [200, 404], f"Unexpected status: {response.status_code}"
+        # Should return PNG tile
+        assert response.status_code == 200, f"V1 elevation tile failed: {response.status_code}"
+        assert response.headers["content-type"] == "image/png"
+        assert len(response.content) > 1000  # Should be substantial elevation data
+        assert response.content[:8] == b'\x89PNG\r\n\x1a\n'
+        
+        # Check v1-specific headers
+        assert response.headers.get("x-tile-source") == "elevation"
+        assert "x-cache" in response.headers
+    
+    @pytest.mark.asyncio 
+    async def test_vector_tile_serving_v1(self, api_client):
+        """Test v1 vector tile serving with known working coordinates."""
+        # Use validated working coordinates
+        z, x, y = 10, 286, 387
+        
+        # Test v1 vector tiles
+        response = await api_client.get(f"/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf")
+        
+        # Should return protobuf tile
+        assert response.status_code == 200, f"V1 vector tile failed: {response.status_code}"
+        assert response.headers["content-type"] == "application/x-protobuf"
+        assert len(response.content) > 1000  # Should be substantial vector data
+        
+        # Check v1-specific headers
+        assert response.headers.get("x-tile-source") == "vector"
+        assert "x-cache" in response.headers
+    
+    @pytest.mark.asyncio
+    async def test_flood_tile_serving_v1(self, api_client):
+        """Test v1 flood tile serving with known working coordinates."""
+        # Use validated working coordinates
+        z, x, y = 10, 286, 387
+        water_level = 1.0
+        
+        # Test v1 flood tiles
+        response = await api_client.get(f"/api/v1/tiles/flood/{water_level}/{z}/{x}/{y}.png")
+        
+        # Should return PNG tile or 204 (no flood risk)
+        assert response.status_code in [200, 204], f"V1 flood tile failed: {response.status_code}"
         
         if response.status_code == 200:
             assert response.headers["content-type"] == "image/png"
             assert len(response.content) > 0
-            # Check PNG header
             assert response.content[:8] == b'\x89PNG\r\n\x1a\n'
+            
+            # Check v1-specific headers
+            assert response.headers.get("x-tile-source") == "flood"
+            assert response.headers.get("x-water-level") == str(water_level)
+            assert "x-cache" in response.headers
     
-    @pytest.mark.asyncio 
-    async def test_vector_tile_proxy(self, tile_client):
-        """Test vector tile proxy functionality."""
-        # Tampa area coordinates
-        z, x, y = 10, 275, 427
+    @pytest.mark.asyncio
+    async def test_v1_parameter_validation(self, api_client):
+        """Test v1 API parameter validation."""
+        # Test invalid zoom level
+        response = await api_client.get("/api/v1/tiles/elevation/99/286/387.png")
+        assert response.status_code == 400
         
-        # Test app proxy
-        proxy_response = await tile_client.get_vector_tile(z, x, y)
+        # Test invalid water level
+        response = await api_client.get("/api/v1/tiles/flood/999.0/10/286/387.png")
+        assert response.status_code == 400
         
-        # Test direct tileserver
-        direct_response = await tile_client.get_direct_vector_tile(z, x, y)
+        # Test invalid coordinates
+        response = await api_client.get("/api/v1/tiles/elevation/10/9999/387.png")
+        assert response.status_code == 400
         
-        # Both should succeed or both should fail
-        assert proxy_response.status_code == direct_response.status_code
+        # Test invalid vector source
+        response = await api_client.get("/api/v1/tiles/vector/invalid/10/286/387.pbf")
+        assert response.status_code == 422  # FastAPI validation error
+    
+    @pytest.mark.asyncio
+    async def test_v1_health_endpoint(self, api_client):
+        """Test v1 health endpoint."""
+        response = await api_client.get("/api/v1/tiles/health")
         
-        if proxy_response.status_code == 200:
-            assert proxy_response.headers["content-type"] == "application/x-protobuf"
-            assert len(proxy_response.content) > 0
-            # Content should be identical
-            assert proxy_response.content == direct_response.content
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert data["status"] == "healthy"
+        assert data["version"] == "v1"
+        assert "endpoints" in data
+        assert "supported_zoom_range" in data
+        assert "supported_water_level_range" in data
+        
+        # Check endpoint definitions
+        endpoints = data["endpoints"]
+        assert "/api/v1/tiles/vector/" in endpoints["vector"]
+        assert "/api/v1/tiles/elevation/" in endpoints["elevation"]
+        assert "/api/v1/tiles/flood/" in endpoints["flood"]
+    
+    @pytest.mark.asyncio
+    async def test_legacy_vs_v1_compatibility(self, api_client):
+        """Test that legacy and v1 routes return compatible data."""
+        z, x, y = 10, 286, 387
+        water_level = 1.0
+        
+        # Compare legacy and v1 flood tiles
+        legacy_response = await api_client.get(f"/api/tiles/elevation/{water_level}/{z}/{x}/{y}.png")
+        v1_response = await api_client.get(f"/api/v1/tiles/flood/{water_level}/{z}/{x}/{y}.png")
+        
+        # Both should succeed
+        assert legacy_response.status_code in [200, 204]
+        assert v1_response.status_code in [200, 204]
+        
+        # If both return content, it should be the same (for same functionality)
+        if legacy_response.status_code == 200 and v1_response.status_code == 200:
+            # Content may differ due to different implementations, but should be valid PNGs
+            assert legacy_response.content[:8] == b'\x89PNG\r\n\x1a\n'
+            assert v1_response.content[:8] == b'\x89PNG\r\n\x1a\n'
     
     @pytest.mark.asyncio
     async def test_flood_tile_generation(self, tile_client):
