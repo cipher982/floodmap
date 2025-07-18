@@ -104,16 +104,35 @@ class FloodRiskColorMapper:
         else:
             valid_mask = np.ones_like(elevation_data, dtype=bool)
         
-        # Vectorized color mapping
-        for y in range(height):
-            for x in range(width):
-                if valid_mask[y, x]:
-                    elevation = elevation_data[y, x]
-                    risk_level = self.elevation_to_risk_level(elevation, water_level)
-                    rgba_array[y, x] = self.risk_to_color(risk_level)
-                else:
-                    # Transparent for no-data areas
-                    rgba_array[y, x] = (0, 0, 0, 0)
+        # True vectorized color mapping using NumPy operations
+        # Calculate risk levels for all pixels at once
+        risk_levels = np.zeros_like(elevation_data, dtype=np.int8)
+        
+        # Vectorized risk level calculation
+        flooded_mask = elevation_data < (water_level + self.DANGER_THRESHOLD)
+        danger_mask = (elevation_data >= (water_level + self.DANGER_THRESHOLD)) & (elevation_data < (water_level + self.CAUTION_THRESHOLD))
+        caution_mask = (elevation_data >= (water_level + self.CAUTION_THRESHOLD)) & (elevation_data < (water_level + self.SAFE_THRESHOLD))
+        safe_mask = elevation_data >= (water_level + self.SAFE_THRESHOLD)
+        
+        risk_levels[flooded_mask & valid_mask] = 0  # FLOODED
+        risk_levels[danger_mask & valid_mask] = 1   # DANGER  
+        risk_levels[caution_mask & valid_mask] = 2  # CAUTION
+        risk_levels[safe_mask & valid_mask] = 3     # SAFE
+        
+        # Create color lookup array for vectorized assignment
+        colors = np.array([
+            self.FLOODED_COLOR,  # 0
+            self.DANGER_COLOR,   # 1  
+            self.CAUTION_COLOR,  # 2
+            self.SAFE_COLOR,     # 3
+            (0, 0, 0, 0)        # 4 - invalid/no-data (transparent)
+        ], dtype=np.uint8)
+        
+        # Set invalid pixels to index 4 (transparent)
+        risk_levels[~valid_mask] = 4
+        
+        # Vectorized color assignment
+        rgba_array = colors[risk_levels]
         
         return rgba_array
     

@@ -150,7 +150,7 @@ class PersistentElevationCache:
                 self.cache.move_to_end(cache_key)
                 self.stats['hits'] += 1
                 
-                return (entry.array.copy(), entry.metadata)  # Return copy for safety
+                return (entry.array, entry.metadata)  # Direct reference - read-only
         
         # Cache miss - load the file
         self.stats['misses'] += 1
@@ -165,7 +165,67 @@ class PersistentElevationCache:
             self.current_memory_usage += entry.file_size_mb * 1024 * 1024
             self._enforce_memory_limit()
         
-        return (entry.array.copy(), entry.metadata)
+        return (entry.array, entry.metadata)  # Direct reference - read-only
+    
+    def extract_tile_from_cached_array(self, file_path: Path, lat_top: float, lat_bottom: float,
+                                     lon_left: float, lon_right: float, tile_size: int = 256) -> Optional[np.ndarray]:
+        """
+        OPTIMIZED: Extract tile directly from cached elevation array without re-decompression.
+        This replaces the slow elevation_loader._extract_tile_from_file() path.
+        """
+        cached_data = self.get_elevation_array(file_path)
+        if cached_data is None:
+            return None
+            
+        elevation_array, metadata = cached_data
+        
+        # Convert tile bounds to array indices using cached metadata
+        file_bounds = metadata['bounds']
+        file_lat_top = file_bounds['top']
+        file_lat_bottom = file_bounds['bottom'] 
+        file_lon_left = file_bounds['left']
+        file_lon_right = file_bounds['right']
+        
+        # Calculate overlap region
+        overlap_lat_top = min(lat_top, file_lat_top)
+        overlap_lat_bottom = max(lat_bottom, file_lat_bottom)
+        overlap_lon_left = max(lon_left, file_lon_left)
+        overlap_lon_right = min(lon_right, file_lon_right)
+        
+        # Check if there's actual overlap
+        if overlap_lat_bottom >= overlap_lat_top or overlap_lon_left >= overlap_lon_right:
+            return None
+        
+        # Calculate array indices for overlap region
+        height, width = elevation_array.shape
+        
+        # Map overlap bounds to array indices
+        y_top = max(0, int((file_lat_top - overlap_lat_top) / (file_lat_top - file_lat_bottom) * height))
+        y_bottom = min(height, int((file_lat_top - overlap_lat_bottom) / (file_lat_top - file_lat_bottom) * height))
+        x_left = max(0, int((overlap_lon_left - file_lon_left) / (file_lon_right - file_lon_left) * width))
+        x_right = min(width, int((overlap_lon_right - file_lon_left) / (file_lon_right - file_lon_left) * width))
+        
+        # Extract overlap region from cached array (no file I/O!)
+        if y_bottom <= y_top or x_right <= x_left:
+            return None
+            
+        overlap_data = elevation_array[y_top:y_bottom, x_left:x_right]
+        
+        # Resize to standard tile size if needed
+        if overlap_data.shape != (tile_size, tile_size):
+            from PIL import Image
+            # Convert to PIL for efficient resizing
+            pil_img = Image.fromarray(overlap_data, mode='I;16')
+            pil_img = pil_img.resize((tile_size, tile_size), Image.LANCZOS)
+            result_tile = np.array(pil_img, dtype=np.int16)
+        else:
+            result_tile = overlap_data.copy()
+        
+        # Return None if all NoData
+        if np.all(result_tile == -32768):
+            return None
+            
+        return result_tile
     
     def _load_elevation_file(self, file_path: Path) -> Optional[ElevationCacheEntry]:
         """Load and decompress elevation file."""
