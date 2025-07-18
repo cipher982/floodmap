@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import routers
-from routers import tiles, risk, health
+from routers import tiles, tiles_v1, risk, health
 
 # Create FastAPI app
 app = FastAPI(
@@ -24,7 +24,8 @@ app = FastAPI(
 
 # Include API routers
 app.include_router(health.router, prefix="/api", tags=["health"])
-app.include_router(tiles.router, prefix="/api", tags=["tiles"])
+app.include_router(tiles.router, prefix="/api", tags=["tiles"])  # Legacy routes
+app.include_router(tiles_v1.router, tags=["tiles-v1"])  # New v1 routes (already prefixed)
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 
 # Serve static frontend files
