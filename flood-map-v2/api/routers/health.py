@@ -18,6 +18,14 @@ try:
 except ImportError:
     CACHE_STATS = False
 
+# Import multi-core systems for statistics
+try:
+    from persistent_elevation_cache import persistent_elevation_cache
+    from predictive_preloader import predictive_preloader
+    MULTICORE_STATS = True
+except ImportError:
+    MULTICORE_STATS = False
+
 router = APIRouter()
 
 @router.get("/health")
@@ -84,6 +92,11 @@ async def get_metrics():
     # Add cache statistics
     if CACHE_STATS:
         stats["cache"] = tile_cache.stats()
+    
+    # Add multi-core system statistics
+    if MULTICORE_STATS:
+        stats["elevation_cache"] = persistent_elevation_cache.get_stats()
+        stats["predictive_preloader"] = predictive_preloader.get_stats()
     
     return stats
 
