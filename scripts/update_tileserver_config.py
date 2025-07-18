@@ -50,29 +50,22 @@ def update_tileserver_config():
         logger.warning("No .mbtiles files found!")
         return False
     
-    # Read existing config or create new one
+    # Create working tileserver config using simple "data" format
+    # Convert sources to data format that actually works
+    data_sources = {}
+    for source_name, source_config in sources.items():
+        data_sources[source_name] = {
+            "mbtiles": source_config["path"]
+        }
+    
     config = {
         "options": {
             "paths": {
                 "root": "/data",
-                "fonts": "fonts",
-                "sprites": "sprites",
-                "styles": "styles",
                 "mbtiles": "/data"
-            },
-            "serveAllFonts": True,
-            "domains": ["*"]
-        },
-        "sources": sources,
-        "styles": {
-            "basic": {
-                "style": "basic",
-                "tilejson": {
-                    "format": "pbf",
-                    "bounds": [-180, -85, 180, 85]
-                }
             }
-        }
+        },
+        "data": data_sources
     }
     
     # Write updated config
