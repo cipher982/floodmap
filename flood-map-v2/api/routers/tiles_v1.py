@@ -176,18 +176,15 @@ def generate_elevation_tile_sync(z: int, x: int, y: int) -> bytes:
             logger.debug(f"No elevation files for tile {z}/{x}/{y}")
             return get_transparent_tile_bytes()
         
-        # Get elevation data from persistent cache
+        # OPTIMIZED: Get elevation data from persistent cache with direct extraction
         elevation_data = None
         for file_path in overlapping_files:
-            cached_data = persistent_elevation_cache.get_elevation_array(file_path)
-            if cached_data is not None:
-                elevation_array, metadata = cached_data
-                # Extract tile from the cached array
-                elevation_data = elevation_loader._extract_tile_from_file(
-                    file_path, lat_top, lat_bottom, lon_left, lon_right, TILE_SIZE
-                )
-                if elevation_data is not None:
-                    break
+            # Use optimized cached extraction - no zstd decompression!
+            elevation_data = persistent_elevation_cache.extract_tile_from_cached_array(
+                file_path, lat_top, lat_bottom, lon_left, lon_right, TILE_SIZE
+            )
+            if elevation_data is not None:
+                break
         
         if elevation_data is None:
             logger.debug(f"No elevation data for tile {z}/{x}/{y}")
@@ -282,17 +279,15 @@ def generate_flood_tile_sync(water_level: float, z: int, x: int, y: int) -> byte
         if not overlapping_files:
             return get_transparent_tile_bytes()
         
-        # Get elevation data from persistent cache
+        # OPTIMIZED: Get elevation data from persistent cache with direct extraction
         elevation_data = None
         for file_path in overlapping_files:
-            cached_data = persistent_elevation_cache.get_elevation_array(file_path)
-            if cached_data is not None:
-                elevation_array, metadata = cached_data
-                elevation_data = elevation_loader._extract_tile_from_file(
-                    file_path, lat_top, lat_bottom, lon_left, lon_right, TILE_SIZE
-                )
-                if elevation_data is not None:
-                    break
+            # Use optimized cached extraction - no zstd decompression!
+            elevation_data = persistent_elevation_cache.extract_tile_from_cached_array(
+                file_path, lat_top, lat_bottom, lon_left, lon_right, TILE_SIZE
+            )
+            if elevation_data is not None:
+                break
         
         if elevation_data is None:
             return get_transparent_tile_bytes()
