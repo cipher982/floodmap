@@ -1,122 +1,80 @@
-# Flood Map - Clean Architecture Makefile
-.PHONY: help run start stop test process-data process-miami process-regions list-regions status monitor download-region process-region
+# Flood Map - Simplified Makefile (No Dynamic Config Generation)
+.PHONY: help start stop test tileserver website clean
 
 # Default target
 help:
-	@echo "🌊 Flood Map Commands:"
+	@echo "🌊 Flood Map - Simplified Commands:"
 	@echo ""
 	@echo "🚀 Main Commands:"
-	@echo "  make run           - Start website with elevation overlays (localhost:5002)"
-	@echo "  make start         - Start tileserver + website"
-	@echo "  make stop          - Stop all services"
-	@echo "  make test          - Test website functionality"
+	@echo "  make start    - Start tileserver + API server"
+	@echo "  make stop     - Stop all services"
+	@echo "  make test     - Test tile endpoints"
+	@echo "  make clean    - Clean up containers and processes"
 	@echo ""
 	@echo "🔧 Individual Services:"
-	@echo "  make tileserver    - Start tileserver only"
-	@echo "  make website       - Start website only (requires tileserver)"
-	@echo ""
-	@echo "📊 Data Processing:"
-	@echo "  make process-test  - Test pipeline with one tile"
-	@echo "  make process-all   - Process all USA elevation data"
-	@echo ""
-	@echo "🗺️ Regional Maps:"
-	@echo "  make download-region - Download specific region"
-	@echo "  make process-regions - Process priority regions"
-	@echo "  make status         - Show system status"
-	@echo "  make monitor        - Monitor system progress"
+	@echo "  make tileserver - Start tileserver only"
+	@echo "  make website    - Start API server only"
 
-# Main development commands
-run: start
-
+# Main command - start everything
 start:
 	@echo "🚀 Starting flood map services..."
-	$(MAKE) tileserver
+	@$(MAKE) tileserver
 	@echo "⏳ Waiting for tileserver..."
 	@timeout=30; while [ $$timeout -gt 0 ] && ! curl -s http://localhost:8080 > /dev/null; do sleep 1; timeout=$$((timeout-1)); done
-	@echo "🌐 Starting website with elevation overlays..."
-	cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port $${API_PORT:-5002} --reload
+	@echo "🌐 Starting API server..."
+	@cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
+# Start tileserver with static config (no dynamic generation)
+tileserver:
+	@echo "🚀 Starting tileserver on port 8080..."
+	@# Stop existing container if running
+	@docker stop tileserver-local 2>/dev/null || true
+	@docker rm tileserver-local 2>/dev/null || true
+	@# Ensure we have the static config
+	@if [ ! -f "map_data/config.json" ]; then \
+		echo "📝 Creating static tileserver config..."; \
+		echo '{"options":{"paths":{"root":"/data","mbtiles":"/data"}},"data":{"usa-complete":{"mbtiles":"usa-complete.mbtiles"},"tampa":{"mbtiles":"tampa.mbtiles"}}}' > map_data/config.json; \
+	fi
+	@# Start tileserver container  
+	@docker run -d --name tileserver-local \
+		-p 8080:8080 \
+		-v $(PWD)/map_data:/data \
+		maptiler/tileserver-gl
+
+# Start API server only
 website:
-	@echo "🌐 Starting website at http://localhost:5002"
+	@echo "🌐 Starting API server at http://localhost:8000"
 	@echo "💡 Make sure tileserver is running: make tileserver"
-	cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port $${API_PORT:-5002} --reload
+	@cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
+# Stop all services
 stop:
 	@echo "🛑 Stopping all services..."
-	$(MAKE) stop-tileserver
-	-pkill -f "uvicorn main:app"
+	@docker stop tileserver-local 2>/dev/null || true
+	@docker rm tileserver-local 2>/dev/null || true
+	@pkill -f "uvicorn main:app" 2>/dev/null || true
 	@echo "✅ All services stopped"
 
+# Test endpoints
 test:
-	@echo "🧪 Testing flood map..."
-	@echo "💡 Make sure services are running: make start"
-	@echo "🌐 Testing website..."
-	curl -s http://localhost:$${API_PORT:-5002} > /dev/null && echo "✅ Website responds" || echo "❌ Website not responding"
+	@echo "🧪 Testing flood map endpoints..."
+	@echo "🌐 Testing API server..."
+	@curl -s http://localhost:8000/api/v1/tiles/health > /dev/null && echo "✅ API server responds" || echo "❌ API server not responding"
+	@echo "🗺️ Testing vector tiles..."
+	@curl -s http://localhost:8000/api/v1/tiles/vector/usa/10/286/387.pbf > /dev/null && echo "✅ Vector tiles work" || echo "❌ Vector tiles failing"
 	@echo "🏔️ Testing elevation tiles..."
-	curl -s http://localhost:$${API_PORT:-5002}/api/tiles/elevation/1/12/1103/1709.png > /dev/null && echo "✅ Elevation tiles work" || echo "❌ Elevation tiles failing"
+	@curl -s http://localhost:8000/api/v1/tiles/elevation/10/286/387.png > /dev/null && echo "✅ Elevation tiles work" || echo "❌ Elevation tiles failing"
+	@echo "🌊 Testing flood tiles..."  
+	@curl -s http://localhost:8000/api/v1/tiles/flood/1.0/10/286/387.png > /dev/null && echo "✅ Flood tiles work" || echo "❌ Flood tiles failing"
 
-test-integration:
-	@echo "🔧 Running complete integration tests (starts/stops services)..."
-	uv run python -m pytest tests/test_integration_complete.py -v -s
+# Clean up everything
+clean:
+	@echo "🧹 Cleaning up containers and processes..."
+	@docker stop tileserver-local 2>/dev/null || true
+	@docker rm tileserver-local 2>/dev/null || true
+	@pkill -f "uvicorn main:app" 2>/dev/null || true
+	@docker system prune -f
+	@echo "✅ Cleanup complete"
 
-# Service management
-tileserver:
-	@echo "🚀 Starting multi-region tileserver on port $${TILESERVER_PORT:-8080}..."
-	@# Stop existing container
-	@if docker ps -a --format '{{.Names}}' | grep -q "^tileserver-local$$"; then \
-		echo "🛑 Stopping existing tileserver..."; \
-		docker stop tileserver-local 2>/dev/null || true; \
-		docker rm tileserver-local 2>/dev/null || true; \
-	fi
-	@# Check if config exists
-	@if [ ! -f "map_data/config.json" ]; then \
-		echo "❌ TileServer config not found in map_data/"; \
-		exit 1; \
-	fi
-	@# Update config with available regions
-	uv run python scripts/update_tileserver_config.py
-	@# Start container with config
-	docker run --rm --name tileserver-local \
-		-p $${TILESERVER_PORT:-8080}:8080 \
-		-v $(PWD)/map_data:/data \
-		maptiler/tileserver-gl --config /data/config.json &
-
-stop-tileserver:
-	@echo "🛑 Stopping tileserver..."
-	@if docker ps --format '{{.Names}}' | grep -q "^tileserver-local$$"; then \
-		docker stop tileserver-local; \
-	fi
-	@if docker ps -a --format '{{.Names}}' | grep -q "^tileserver-local$$"; then \
-		docker rm tileserver-local; \
-	fi
-
-# Data processing commands
-process-test:
-	@echo "🧪 Testing pipeline with one tile..."
-	uv run python scripts/process_elevation.py --test
-
-process-all:
-	@echo "🇺🇸 Processing all USA elevation data..."
-	@echo "⚠️  This will take several hours and use significant disk space"
-	@read -p "Continue? (y/N) " confirm && [ "$$confirm" = "y" ]
-	uv run python scripts/process_elevation.py --all
-
-# Regional map processing
-download-region:
-	@echo "📍 Available regions: california, texas, new-york, florida, illinois"
-	@read -p "Enter region name: " region && \
-	export PATH="/opt/homebrew/opt/openjdk@21/bin:$$PATH" && \
-	uv run python scripts/download_regional_maps.py --region $$region
-
-process-regions:
-	@echo "🗺️ Processing priority regions..."
-	export PATH="/opt/homebrew/opt/openjdk@21/bin:$$PATH" && \
-	uv run python scripts/download_regional_maps.py --max-regions 3
-
-status:
-	@echo "📊 Flood Map System Status..."
-	uv run python system_status.py
-
-monitor:
-	@echo "🔄 Monitoring system (Press Ctrl+C to stop)..."
-	uv run python system_status.py --watch 5
+# Legacy compatibility
+run: start
