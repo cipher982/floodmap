@@ -20,32 +20,37 @@ open http://localhost:8000
 ### Process Elevation Data (Terrain for flood calculations)
 ```bash
 # Test with samples
-uv run python process_elevation_usa.py --input /Volumes/Storage/floodmap-archive/srtm-raw --output compressed_data/test --samples 5 --dry-run
+uv run python src/process_elevation_usa.py --input /Volumes/Storage/floodmap-archive/srtm-raw --output data/processed/elevation --samples 5 --dry-run
 
 # Full USA processing
-uv run python process_elevation_usa.py --input /Volumes/Storage/floodmap-archive/srtm-raw --output compressed_data/usa
+uv run python src/process_elevation_usa.py --input /Volumes/Storage/floodmap-archive/srtm-raw --output data/processed/elevation
 ```
 
 ### Process Map Data (Roads, borders, cities)
 ```bash
 # Test with reduced zoom
-uv run python process_maps_usa.py --dry-run --maxzoom 8
+uv run python src/process_maps_usa.py --dry-run --maxzoom 8
 
 # Full USA processing
-uv run python process_maps_usa.py
+uv run python src/process_maps_usa.py
 ```
 
 ## Project Structure
 
 ```
-├── process_elevation_usa.py    # Elevation/terrain processing
-├── process_maps_usa.py         # Map tiles (roads, borders, cities)
-├── flood-map-v2/              # Main application
-├── compressed_data/           # Processed elevation data
-├── map_data/                  # Processed map tiles
-├── scripts/                   # Utility scripts
+├── src/                       # Source code
+│   ├── process_elevation_usa.py    # Elevation/terrain processing
+│   ├── process_maps_usa.py         # Map tiles (roads, borders, cities)  
+│   └── main.py                     # Main application
+├── flood-map-v2/              # FastAPI application
+├── data/                      # Data directory
+│   ├── processed/             # Processed data
+│   │   ├── elevation/         # Compressed elevation data
+│   │   └── maps/              # Processed map tiles
+│   └── raw/                   # Raw data and temporary files
+├── utils/                     # Utility scripts and tools
 ├── tests/                     # Test suites
-└── cleanup/                   # Archived files
+└── docs/                      # Documentation and archived files
 ```
 
 ## Development
@@ -53,7 +58,8 @@ uv run python process_maps_usa.py
 - **Main app**: `flood-map-v2/api/` (FastAPI)
 - **Frontend**: Static files in `flood-map-v2/static/`
 - **Tests**: `pytest tests/`
-- **Archived files**: `cleanup/` and `archive/`
+- **Utilities**: `utils/` directory
+- **Archived files**: `docs/cleanup/` and `docs/archive/`
 
 ## Data Sources
 
