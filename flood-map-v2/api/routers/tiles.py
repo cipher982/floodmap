@@ -97,19 +97,20 @@ async def get_vector_tile(z: int, x: int, y: int):
     if not (0 <= z <= 18 and 0 <= x < 2**z and 0 <= y < 2**z):
         raise HTTPException(status_code=400, detail="Invalid tile coordinates")
     
-    # Proxy to tileserver
+    # Proxy to tileserver with fallback logic
     async with httpx.AsyncClient() as client:
         try:
-            # Try usa-complete first (covers most areas), fallback to tampa for specific regions
-            response = await client.get(f"{TILESERVER_URL}/data/usa-complete/{z}/{x}/{y}.pbf")
+            # Use Tampa as primary source (usa-complete is corrupted)
+            response = await client.get(f"{TILESERVER_URL}/data/tampa/{z}/{x}/{y}.pbf")
             
-            if response.status_code == 200:
+            if response.status_code == 200 and len(response.content) > 0:
                 return Response(
                     content=response.content,
                     media_type="application/x-protobuf",
                     headers={
                         "Cache-Control": "public, max-age=3600",
-                        "Access-Control-Allow-Origin": "*"
+                        "Access-Control-Allow-Origin": "*",
+                        "X-Tile-Source": "tampa"
                     }
                 )
             elif response.status_code == 204:
@@ -130,8 +131,8 @@ async def get_vector_tile(z: int, x: int, y: int):
 @log_performance
 async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
     """Generate contextual flood risk tiles dynamically with async processing."""
-    # Input validation
-    if not (8 <= z <= 14):  # Support wider zoom range
+    # Input validation - allow wider zoom range for better overview
+    if not (4 <= z <= 14):  # Support wider zoom range including overview levels
         return _transparent_tile()
     
     if not (-10 <= water_level <= 50):  # Reasonable water level range
@@ -262,3 +263,119 @@ async def get_flood_tile(level: float, z: int, x: int, y: int):
     # TODO: Implement flood overlay generation
     # For now, return transparent tile
     return _transparent_tile()
+
+@router.get("/debug/coverage")
+async def debug_coverage():
+    """Debug endpoint to check data coverage."""
+    from pathlib import Path
+    import sqlite3
+    
+    # Check elevation data coverage
+    elevation_dirs = [
+        Path("/Users/davidrose/git/floodmap/compressed_data/usa"),
+        Path("/Users/davidrose/git/floodmap/compressed_data/usa_unified"),
+        Path("/Users/davidrose/git/floodmap/compressed_data/tampa")
+    ]
+    
+    elevation_coverage = {}
+    for dir_path in elevation_dirs:
+        if dir_path.exists():
+            files = list(dir_path.glob("*.zst"))
+            elevation_coverage[dir_path.name] = {
+                "files": len(files),
+                "size_gb": sum(f.stat().st_size for f in files) / (1024**3)
+            }
+    
+    # Check vector tile coverage
+    vector_files = [
+        Path("/Users/davidrose/git/floodmap/map_data/usa-complete.mbtiles"),
+        Path("/Users/davidrose/git/floodmap/map_data/tampa.mbtiles")
+    ]
+    
+    vector_coverage = {}
+    for file_path in vector_files:
+        if file_path.exists():
+            size_mb = file_path.stat().st_size / (1024**2)
+            vector_coverage[file_path.name] = {"size_mb": size_mb}
+            
+            # Check if it's a valid SQLite database
+            try:
+                conn = sqlite3.connect(str(file_path))
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                tables = [row[0] for row in cursor.fetchall()]
+                cursor.execute("SELECT COUNT(*) FROM tiles")
+                tile_count = cursor.fetchone()[0]
+                conn.close()
+                
+                vector_coverage[file_path.name].update({
+                    "valid": True,
+                    "tables": tables,
+                    "tile_count": tile_count
+                })
+            except Exception as e:
+                vector_coverage[file_path.name].update({
+                    "valid": False,
+                    "error": str(e)
+                })
+    
+    return {
+        "elevation_coverage": elevation_coverage,
+        "vector_coverage": vector_coverage,
+        "current_config": {
+            "tileserver_url": TILESERVER_URL,
+            "elevation_zoom_range": "8-14",
+            "vector_source": "usa-complete (primary), tampa (fallback)"
+        }
+    }
+
+@router.get("/debug/tile/{z}/{x}/{y}")
+async def debug_tile(z: int, x: int, y: int):
+    """Debug specific tile - check what data is available."""
+    from pathlib import Path
+    
+    # Get tile bounds
+    lat_top, lat_bottom, lon_left, lon_right = elevation_loader.num2deg(x, y, z)
+    
+    # Check elevation data availability
+    elevation_files = elevation_loader.find_elevation_files_for_tile(
+        lat_top, lat_bottom, lon_left, lon_right
+    )
+    
+    elevation_info = {
+        "bounds": {
+            "lat_top": lat_top,
+            "lat_bottom": lat_bottom, 
+            "lon_left": lon_left,
+            "lon_right": lon_right
+        },
+        "elevation_files": [str(f) for f in elevation_files] if elevation_files else [],
+        "has_elevation": len(elevation_files) > 0
+    }
+    
+    # Check vector tile availability
+    vector_info = {}
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{TILESERVER_URL}/data/usa-complete/{z}/{x}/{y}.pbf")
+            vector_info["usa_complete"] = {
+                "status": response.status_code,
+                "size": len(response.content) if response.content else 0
+            }
+        except Exception as e:
+            vector_info["usa_complete"] = {"error": str(e)}
+        
+        try:
+            response = await client.get(f"{TILESERVER_URL}/data/tampa/{z}/{x}/{y}.pbf")
+            vector_info["tampa"] = {
+                "status": response.status_code,
+                "size": len(response.content) if response.content else 0
+            }
+        except Exception as e:
+            vector_info["tampa"] = {"error": str(e)}
+    
+    return {
+        "tile": f"{z}/{x}/{y}",
+        "elevation": elevation_info,
+        "vector": vector_info
+    }

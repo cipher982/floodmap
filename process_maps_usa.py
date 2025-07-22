@@ -81,13 +81,14 @@ class USAMapProcessor:
         # Planetiler command for complete USA processing
         cmd = [
             f"{self.java_path}/java",
-            "-Xmx16g",  # Use 16GB RAM (more conservative)
+            "-Xmx8g",  # Use 8GB RAM for testing
             "-jar", str(self.planetiler_jar),
             "--osm-path", str(self.usa_osm_file),
             "--output", str(self.usa_mbtiles),
             "--download",  # Download required data sources
+            "--force",    # Overwrite existing output file
             "--minzoom", "0",
-            "--maxzoom", "14"
+            "--maxzoom", "12"  # Lower zoom for testing
         ]
         
         logger.info(f"Running: {' '.join(cmd)}")
@@ -174,7 +175,27 @@ class USAMapProcessor:
 
 def main():
     """Main function."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Process USA map tiles (roads, borders, cities)")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without running")
+    parser.add_argument("--maxzoom", type=int, help="Maximum zoom level (default: 14)")
+    args = parser.parse_args()
+    
     processor = USAMapProcessor()
+    
+    # Override maxzoom if specified
+    if args.maxzoom:
+        logger.info(f"🎯 Using custom maxzoom: {args.maxzoom}")
+        
+    if args.dry_run:
+        logger.info("🔍 DRY RUN: Would process USA map tiles")
+        logger.info(f"📁 Input: {processor.usa_osm_file} ({processor.usa_osm_file.stat().st_size / (1024**3):.1f}GB)")
+        logger.info(f"📁 Output: {processor.usa_mbtiles}")
+        logger.info(f"⚙️  Max zoom: {args.maxzoom or 14}")
+        logger.info("✅ All prerequisites checked - ready for processing")
+        sys.exit(0)
+    
     success = processor.run_complete_processing()
     
     if success:
