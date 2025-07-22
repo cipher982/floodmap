@@ -22,7 +22,7 @@ start:
 	@echo "⏳ Waiting for tileserver..."
 	@timeout=30; while [ $$timeout -gt 0 ] && ! curl -s http://localhost:8080 > /dev/null; do sleep 1; timeout=$$((timeout-1)); done
 	@echo "🌐 Starting API server..."
-	@cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+	@cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 # Start tileserver with static config (no dynamic generation)
 tileserver:
@@ -30,22 +30,22 @@ tileserver:
 	@# Stop existing container if running
 	@docker stop tileserver-local 2>/dev/null || true
 	@docker rm tileserver-local 2>/dev/null || true
-	@# Ensure we have the static config
-	@if [ ! -f "map_data/config.json" ]; then \
-		echo "📝 Creating static tileserver config..."; \
-		echo '{"options":{"paths":{"root":"/data","mbtiles":"/data"}},"data":{"usa-complete":{"mbtiles":"usa-complete.mbtiles"},"tampa":{"mbtiles":"tampa.mbtiles"}}}' > map_data/config.json; \
+	@# Use existing config from data/processed/maps
+	@if [ ! -f "data/processed/maps/config.json" ]; then \
+		echo "❌ Missing config file at data/processed/maps/config.json"; \
+		exit 1; \
 	fi
 	@# Start tileserver container  
 	@docker run -d --name tileserver-local \
 		-p 8080:8080 \
-		-v $(PWD)/map_data:/data \
+		-v $(PWD)/data/processed/maps:/data \
 		maptiler/tileserver-gl
 
 # Start API server only
 website:
 	@echo "🌐 Starting API server at http://localhost:8000"
 	@echo "💡 Make sure tileserver is running: make tileserver"
-	@cd flood-map-v2/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+	@cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 # Stop all services
 stop:
