@@ -146,7 +146,7 @@ def estimate_processing_time(tif_files: list, sample_size: int = 3) -> float:
     return estimated_total
 
 
-def compress_directory(input_dir: Path, output_dir: Path, test_decompression_flag: bool = True, max_workers: int = None):
+def compress_directory(input_dir: Path, output_dir: Path, test_decompression_flag: bool = True, max_workers: int = None, sample_count: int = None):
     """Compress all SRTM tiles in a directory with progress tracking and memory efficiency."""
     
     # Create output directory
@@ -159,7 +159,13 @@ def compress_directory(input_dir: Path, output_dir: Path, test_decompression_fla
         logging.error(f"No TIF files found in {input_dir}")
         return
     
-    logging.info(f"Found {len(tif_files)} TIF files to compress")
+    # Sample files if requested
+    if sample_count and sample_count < len(tif_files):
+        import random
+        tif_files = random.sample(tif_files, sample_count)
+        logging.info(f"🧪 SAMPLE MODE: Processing {len(tif_files)} random files out of {len(list(input_dir.glob('*.tif')))} total")
+    else:
+        logging.info(f"Found {len(tif_files)} TIF files to compress")
     
     # Estimate processing time
     estimate_processing_time(tif_files)
@@ -262,6 +268,9 @@ def main():
     parser.add_argument("--compression-level", type=int, default=3, help="ZSTD compression level (1-22)")
     parser.add_argument("--no-test", action="store_true", help="Skip decompression testing")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
+    parser.add_argument("--workers", type=int, help="Number of parallel workers")
+    parser.add_argument("--samples", type=int, help="Process only N random sample files (for testing)")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without running")
     
     args = parser.parse_args()
     
@@ -279,13 +288,28 @@ def main():
         logging.error(f"Input directory does not exist: {input_dir}")
         return
     
+    if args.dry_run:
+        tif_files = list(input_dir.glob("*.tif"))
+        sample_count = args.samples or len(tif_files)
+        
+        logging.info(f"🔍 DRY RUN: Would process USA elevation data")
+        logging.info(f"📁 Input: {input_dir} ({len(tif_files)} SRTM tiles)")
+        logging.info(f"📁 Output: {output_dir}")
+        logging.info(f"🎯 Samples: {min(sample_count, len(tif_files))}/{len(tif_files)} files")
+        logging.info(f"⚙️  Workers: {args.workers or 'auto'}")
+        logging.info(f"🗜️  Compression: ZSTD level {args.compression_level}")
+        logging.info("✅ Ready for processing")
+        return
+    
     logging.info(f"Compressing elevation data from {input_dir} to {output_dir}")
     logging.info(f"Using ZSTD compression level {args.compression_level}")
     
     compress_directory(
         input_dir, 
         output_dir, 
-        test_decompression_flag=not args.no_test
+        test_decompression_flag=not args.no_test,
+        max_workers=args.workers,
+        sample_count=args.samples
     )
 
 

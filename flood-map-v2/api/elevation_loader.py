@@ -232,18 +232,12 @@ class ElevationDataLoader:
         
         # Resize to standard tile size using simple numpy operations  
         if tile_data.shape != (tile_size, tile_size):
-            # Use simple numpy indexing for fast resizing (nearest neighbor)
-            if tile_data.shape[0] > tile_size and tile_data.shape[1] > tile_size:
-                # Downsample using stride indexing
-                step_y = tile_data.shape[0] // tile_size
-                step_x = tile_data.shape[1] // tile_size
-                tile_data = tile_data[::step_y, ::step_x][:tile_size, :tile_size]
-            else:
-                # For upsampling or complex cases, use PIL (but this should be rare)
-                from PIL import Image
-                img = Image.fromarray(tile_data.astype(np.float32))
-                img = img.resize((tile_size, tile_size), Image.NEAREST)  # Fast nearest neighbor
-                tile_data = np.array(img, dtype=np.int16)
+            # FIXED: Use consistent high-quality resampling instead of stride indexing
+            from PIL import Image
+            # Convert to PIL for proper resampling (handles both up/downsampling)
+            pil_img = Image.fromarray(tile_data, mode='I;16')
+            pil_img = pil_img.resize((tile_size, tile_size), Image.LANCZOS)
+            tile_data = np.array(pil_img, dtype=np.int16)
         
         return tile_data
 
