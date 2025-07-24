@@ -21,14 +21,15 @@ logger = logging.getLogger(__name__)
 class USAMapProcessor:
     def __init__(self):
         self.base_dir = Path("/Users/davidrose/git/floodmap")
-        self.storage_dir = Path("/Volumes/Storage/floodmap-archive/usa-complete")
-        self.output_dir = self.base_dir / "map_data"
+        self.input_dir = Path("/Volumes/Storage/floodmap-archive/maps-raw")
+        self.output_dir = self.base_dir / "output"
         self.java_path = "/opt/homebrew/opt/openjdk@21/bin"
         
         # File paths
-        self.usa_osm_file = self.storage_dir / "us-latest.osm.pbf"
+        self.usa_osm_file = self.input_dir / "us-latest.osm.pbf"
         self.usa_mbtiles = self.output_dir / "usa-complete.mbtiles"
-        self.planetiler_jar = self.base_dir / "planetiler.jar"
+        self.planetiler_jar = self.base_dir / "utils" / "planetiler.jar"
+        self.auxiliary_data = self.input_dir / "auxiliary-data"
         
     def check_prerequisites(self):
         """Check that all required files and tools are available."""
@@ -69,11 +70,12 @@ class USAMapProcessor:
         
         return True
     
-    def process_usa_mbtiles(self):
+    def process_usa_mbtiles(self, maxzoom=12, memory_gb=8):
         """Process the complete USA OSM file into .mbtiles using Planetiler."""
         logger.info("🏗️ Processing USA OSM data with Planetiler...")
         logger.info(f"Input: {self.usa_osm_file} ({self.usa_osm_file.stat().st_size / (1024**3):.1f}GB)")
         logger.info(f"Output: {self.usa_mbtiles}")
+        logger.info(f"Settings: maxzoom={maxzoom}, memory={memory_gb}GB")
         
         # Ensure output directory exists
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -81,14 +83,14 @@ class USAMapProcessor:
         # Planetiler command for complete USA processing
         cmd = [
             f"{self.java_path}/java",
-            "-Xmx8g",  # Use 8GB RAM for testing
+            f"-Xmx{memory_gb}g",  # Configurable memory
             "-jar", str(self.planetiler_jar),
             "--osm-path", str(self.usa_osm_file),
             "--output", str(self.usa_mbtiles),
-            "--download",  # Download required data sources
+            "--download-dir", str(self.auxiliary_data),  # Use existing auxiliary data
             "--force",    # Overwrite existing output file
             "--minzoom", "0",
-            "--maxzoom", "12"  # Lower zoom for testing
+            "--maxzoom", str(maxzoom)  # Use parameter
         ]
         
         logger.info(f"Running: {' '.join(cmd)}")
@@ -151,7 +153,7 @@ class USAMapProcessor:
             logger.warning("⚠️ TileServer config script not found")
             return False
     
-    def run_complete_processing(self):
+    def run_complete_processing(self, maxzoom=12, memory_gb=8):
         """Run the complete USA processing pipeline."""
         logger.info("🇺🇸 Starting complete USA map processing...")
         
@@ -161,7 +163,7 @@ class USAMapProcessor:
             return False
         
         # Step 2: Process USA data
-        if not self.process_usa_mbtiles():
+        if not self.process_usa_mbtiles(maxzoom=maxzoom, memory_gb=memory_gb):
             logger.error("❌ USA processing failed")
             return False
         
@@ -179,24 +181,24 @@ def main():
     
     parser = argparse.ArgumentParser(description="Process USA map tiles (roads, borders, cities)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without running")
-    parser.add_argument("--maxzoom", type=int, help="Maximum zoom level (default: 14)")
+    parser.add_argument("--maxzoom", type=int, default=12, help="Maximum zoom level (default: 12)")
+    parser.add_argument("--memory", type=int, default=8, help="Memory allocation in GB (default: 8)")
     args = parser.parse_args()
     
     processor = USAMapProcessor()
     
-    # Override maxzoom if specified
-    if args.maxzoom:
-        logger.info(f"🎯 Using custom maxzoom: {args.maxzoom}")
+    logger.info(f"🎯 Settings: maxzoom={args.maxzoom}, memory={args.memory}GB")
         
     if args.dry_run:
         logger.info("🔍 DRY RUN: Would process USA map tiles")
         logger.info(f"📁 Input: {processor.usa_osm_file} ({processor.usa_osm_file.stat().st_size / (1024**3):.1f}GB)")
         logger.info(f"📁 Output: {processor.usa_mbtiles}")
-        logger.info(f"⚙️  Max zoom: {args.maxzoom or 14}")
+        logger.info(f"⚙️  Max zoom: {args.maxzoom}")
+        logger.info(f"💾 Memory: {args.memory}GB")
         logger.info("✅ All prerequisites checked - ready for processing")
         sys.exit(0)
     
-    success = processor.run_complete_processing()
+    success = processor.run_complete_processing(maxzoom=args.maxzoom, memory_gb=args.memory)
     
     if success:
         logger.info("🚀 Ready for nationwide flood mapping!")
