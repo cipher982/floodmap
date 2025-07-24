@@ -233,3 +233,6 @@ ARCHIVED_DATA
 # Local environment files
 .env.local
 .env.*.local
+
+# Generated output data (can be regenerated from source)
+output/

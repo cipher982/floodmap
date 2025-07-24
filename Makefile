@@ -1,11 +1,15 @@
-# Flood Map - Simplified Makefile (No Dynamic Config Generation)
-.PHONY: help start stop test tileserver website clean
+# Flood Map - Clean Pipeline + Services
+.PHONY: help start stop test tileserver website clean process-maps process-elevation
 
 # Default target
 help:
-	@echo "🌊 Flood Map - Simplified Commands:"
+	@echo "🌊 Flood Map - Clean Pipeline + Services:"
 	@echo ""
-	@echo "🚀 Main Commands:"
+	@echo "🏗️ Data Processing:"
+	@echo "  make process-maps     - Generate map tiles (use ZOOM=4 for test)"
+	@echo "  make process-elevation - Process elevation data"
+	@echo ""
+	@echo "🚀 Services:"
 	@echo "  make start    - Start tileserver + API server"
 	@echo "  make stop     - Stop all services"
 	@echo "  make test     - Test tile endpoints"
@@ -14,6 +18,10 @@ help:
 	@echo "🔧 Individual Services:"
 	@echo "  make tileserver - Start tileserver only"
 	@echo "  make website    - Start API server only"
+	@echo ""
+	@echo "💡 Examples:"
+	@echo "  make process-maps ZOOM=4   # Quick test"
+	@echo "  make process-maps ZOOM=12  # Production"
 
 # Main command - start everything
 start:
@@ -30,15 +38,17 @@ tileserver:
 	@# Stop existing container if running
 	@docker stop tileserver-local 2>/dev/null || true
 	@docker rm tileserver-local 2>/dev/null || true
-	@# Use existing config from data/processed/maps
-	@if [ ! -f "data/processed/maps/config.json" ]; then \
-		echo "❌ Missing config file at data/processed/maps/config.json"; \
+	@# Use output directory with generated tiles
+	@if [ ! -f "output/usa-complete.mbtiles" ]; then \
+		echo "❌ No map tiles found. Run: make process-maps ZOOM=4"; \
 		exit 1; \
 	fi
+	@# Create simple config for tileserver
+	@echo '{"options":{"paths":{"root":"/data","mbtiles":"/data"}},"data":{"usa-complete":{"mbtiles":"usa-complete.mbtiles"}}}' > output/config.json
 	@# Start tileserver container  
 	@docker run -d --name tileserver-local \
 		-p 8080:8080 \
-		-v $(PWD)/data/processed/maps:/data \
+		-v $(PWD)/output:/data \
 		maptiler/tileserver-gl
 
 # Start API server only
@@ -75,6 +85,15 @@ clean:
 	@pkill -f "uvicorn main:app" 2>/dev/null || true
 	@docker system prune -f
 	@echo "✅ Cleanup complete"
+
+# Data processing pipelines
+process-maps:
+	@echo "🗺️ Processing USA map tiles..."
+	@cd src && uv run python process_maps_usa.py --maxzoom=$(or $(ZOOM),8)
+
+process-elevation:
+	@echo "🏔️ Processing elevation data..."
+	@cd src && uv run python process_elevation_usa.py --input /Volumes/Storage/floodmap-archive/elevation-raw --output ../output/elevation --workers 12
 
 # Legacy compatibility
 run: start
