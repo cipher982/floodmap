@@ -35,7 +35,7 @@ TILESERVER_URL = f"http://localhost:{TILESERVER_PORT}"
 CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tile-cpu-v1")
 
 # Constants
-SUPPORTED_ZOOM_RANGE = (8, 14)
+SUPPORTED_ZOOM_RANGE = (0, 18)
 SUPPORTED_WATER_LEVEL_RANGE = (-10.0, 50.0)
 MAX_CACHE_AGE = 3600  # 1 hour
 TILE_SIZE = 256
@@ -173,8 +173,11 @@ def generate_elevation_tile_sync(z: int, x: int, y: int) -> bytes:
         )
         
         if not overlapping_files:
-            logger.debug(f"No elevation files for tile {z}/{x}/{y}")
-            return get_transparent_tile_bytes()
+            logger.error(f"No elevation files found for tile {z}/{x}/{y}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Elevation data not available. Run 'make process-elevation' to generate required data files."
+            )
         
         # OPTIMIZED: Get elevation data from persistent cache with direct extraction
         elevation_data = None
@@ -187,8 +190,11 @@ def generate_elevation_tile_sync(z: int, x: int, y: int) -> bytes:
                 break
         
         if elevation_data is None:
-            logger.debug(f"No elevation data for tile {z}/{x}/{y}")
-            return get_transparent_tile_bytes()
+            logger.error(f"No elevation data could be extracted for tile {z}/{x}/{y}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Elevation data extraction failed. Run 'make process-elevation' to generate required data files."
+            )
         
         # Convert elevation to grayscale visualization (no water level)
         # Use elevation values directly for visualization
@@ -210,7 +216,6 @@ def generate_elevation_tile_sync(z: int, x: int, y: int) -> bytes:
         return get_transparent_tile_bytes()
 
 @router.get("/elevation/{z}/{x}/{y}.png")
-@safe_tile_generation
 @log_performance
 async def get_elevation_tile(
     z: int = Path(..., description="Zoom level"),
@@ -277,7 +282,11 @@ def generate_flood_tile_sync(water_level: float, z: int, x: int, y: int) -> byte
         )
         
         if not overlapping_files:
-            return get_transparent_tile_bytes()
+            logger.error(f"No elevation files found for flood tile {water_level}m/{z}/{x}/{y}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Elevation data not available. Run 'make process-elevation' to generate required data files."
+            )
         
         # OPTIMIZED: Get elevation data from persistent cache with direct extraction
         elevation_data = None
@@ -290,7 +299,11 @@ def generate_flood_tile_sync(water_level: float, z: int, x: int, y: int) -> byte
                 break
         
         if elevation_data is None:
-            return get_transparent_tile_bytes()
+            logger.error(f"No elevation data could be extracted for flood tile {water_level}m/{z}/{x}/{y}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Elevation data extraction failed. Run 'make process-elevation' to generate required data files."
+            )
         
         # Convert elevation to flood overlay using color mapper
         rgba_array = color_mapper.elevation_array_to_rgba(
@@ -315,7 +328,6 @@ def generate_flood_tile_sync(water_level: float, z: int, x: int, y: int) -> byte
         return get_transparent_tile_bytes()
 
 @router.get("/flood/{water_level}/{z}/{x}/{y}.png")
-@safe_tile_generation
 @log_performance
 async def get_flood_tile(
     water_level: float = Path(..., description="Water level in meters"),
@@ -396,6 +408,80 @@ async def get_composite_tile(
 # ============================================================================
 # HEALTH & DIAGNOSTICS
 # ============================================================================
+
+@router.get("/metadata")
+async def get_tiles_metadata():
+    """Get dynamic metadata for all tile types based on actual available data."""
+    import sqlite3
+    from pathlib import Path
+    
+    metadata = {
+        "vector_tiles": {},
+        "elevation_tiles": {
+            "available_zoom_levels": list(range(SUPPORTED_ZOOM_RANGE[0], SUPPORTED_ZOOM_RANGE[1] + 1)),
+            "min_zoom": SUPPORTED_ZOOM_RANGE[0],
+            "max_zoom": SUPPORTED_ZOOM_RANGE[1],
+            "url_template": "/api/v1/tiles/elevation/{z}/{x}/{y}.png"
+        },
+        "flood_tiles": {
+            "available_zoom_levels": list(range(SUPPORTED_ZOOM_RANGE[0], SUPPORTED_ZOOM_RANGE[1] + 1)),
+            "min_zoom": SUPPORTED_ZOOM_RANGE[0],
+            "max_zoom": SUPPORTED_ZOOM_RANGE[1],
+            "water_level_range": SUPPORTED_WATER_LEVEL_RANGE,
+            "url_template": "/api/v1/tiles/flood/{water_level}/{z}/{x}/{y}.png"
+        }
+    }
+    
+    # Query actual MBTiles files for vector tile metadata
+    mbtiles_path = Path("/Users/davidrose/git/floodmap/output/usa-complete.mbtiles")
+    
+    if mbtiles_path.exists():
+        try:
+            conn = sqlite3.connect(str(mbtiles_path))
+            cursor = conn.cursor()
+            
+            # Get metadata from MBTiles
+            cursor.execute("SELECT name, value FROM metadata")
+            mbtiles_metadata = dict(cursor.fetchall())
+            
+            # Get actual zoom levels from tiles table
+            cursor.execute("SELECT DISTINCT zoom_level FROM tiles ORDER BY zoom_level")
+            available_zooms = [row[0] for row in cursor.fetchall()]
+            
+            conn.close()
+            
+            # Constrain to actual elevation data coverage area (N09-N31, W060-W119)
+            elevation_bounds = [-119, 9, -60, 31]  # [west, south, east, north]
+            elevation_center = [-89.5, 20]  # Center of elevation coverage area
+            
+            metadata["vector_tiles"] = {
+                "available_zoom_levels": available_zooms,
+                "min_zoom": min(available_zooms) if available_zooms else 0,
+                "max_zoom": max(available_zooms) if available_zooms else 0,
+                "bounds": elevation_bounds,  # Constrain to elevation coverage
+                "center": elevation_center,  # Center on elevation coverage  
+                "url_template": "/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf",
+                "sources": ["usa"]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error reading MBTiles metadata: {e}")
+            # Fallback if database can't be read
+            metadata["vector_tiles"] = {
+                "available_zoom_levels": [],
+                "min_zoom": 0,
+                "max_zoom": 0,
+                "error": "Could not read vector tile metadata"
+            }
+    else:
+        metadata["vector_tiles"] = {
+            "available_zoom_levels": [],
+            "min_zoom": 0,
+            "max_zoom": 0,
+            "error": "No vector tiles available"
+        }
+    
+    return metadata
 
 @router.get("/health")
 async def tiles_v1_health():

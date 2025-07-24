@@ -48,8 +48,11 @@ def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> 
         )
         
         if not overlapping_files:
-            logger.debug(f"No elevation files for tile {z}/{x}/{y}")
-            return _transparent_tile_bytes()
+            logger.error(f"No elevation files found for tile {z}/{x}/{y}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Elevation data not available. Run 'make process-elevation' to generate required data files."
+            )
         
         # OPTIMIZED: Get elevation data from persistent cache with direct extraction
         elevation_data = None
@@ -62,8 +65,11 @@ def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> 
                 break
         
         if elevation_data is None:
-            logger.debug(f"No elevation data for tile {z}/{x}/{y}")
-            return _transparent_tile_bytes()
+            logger.error(f"No elevation data could be extracted for tile {z}/{x}/{y}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Elevation data extraction failed. Run 'make process-elevation' to generate required data files."
+            )
         
         # Convert elevation to contextual colors
         rgba_array = color_mapper.elevation_array_to_rgba(
@@ -84,7 +90,10 @@ def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> 
         
     except Exception as e:
         logger.error(f"Error generating elevation tile {z}/{x}/{y} at water level {water_level}: {e}")
-        return _transparent_tile_bytes()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Elevation tile generation failed: {str(e)}"
+        )
 
 def _transparent_tile_bytes() -> bytes:
     """Return transparent PNG as bytes."""
@@ -127,13 +136,10 @@ async def get_vector_tile(z: int, x: int, y: int):
             raise HTTPException(status_code=503, detail="Tileserver unavailable")
 
 @router.get("/tiles/elevation/{water_level}/{z}/{x}/{y}.png")
-@safe_tile_generation
 @log_performance
 async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
     """Generate contextual flood risk tiles dynamically with async processing."""
-    # Input validation - allow wider zoom range for better overview
-    if not (4 <= z <= 14):  # Support wider zoom range including overview levels
-        return _transparent_tile()
+    # No zoom restrictions - elevation data works at any zoom level
     
     if not (-10 <= water_level <= 50):  # Reasonable water level range
         raise HTTPException(status_code=400, detail="Invalid water level")
@@ -178,7 +184,10 @@ async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
         
     except Exception as e:
         logger.error(f"Error generating elevation tile {z}/{x}/{y} at water level {water_level}: {e}")
-        return _transparent_tile()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Elevation tile generation failed: {str(e)}"
+        )
 
 
 def _transparent_tile() -> Response:

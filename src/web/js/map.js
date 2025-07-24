@@ -16,8 +16,35 @@ class FloodMap {
         this.loadUserLocation();
     }
 
-    initializeMap() {
-        // Create map with clean configuration
+    async initializeMap() {
+        // Fetch dynamic tile metadata
+        let metadata;
+        try {
+            const response = await fetch('/api/v1/tiles/metadata');
+            metadata = await response.json();
+        } catch (error) {
+            console.warn('Could not fetch tile metadata, using defaults:', error);
+            metadata = {
+                vector_tiles: { min_zoom: 0, max_zoom: 4, available_zoom_levels: [0,1,2,3,4] },
+                elevation_tiles: { min_zoom: 8, max_zoom: 14 }
+            };
+        }
+
+        // Determine best zoom configuration
+        const vectorZoom = metadata.vector_tiles;
+        const hasVectorTiles = vectorZoom.available_zoom_levels && vectorZoom.available_zoom_levels.length > 0;
+        
+        // Choose initial zoom and bounds based on available data
+        const initialZoom = hasVectorTiles ? Math.min(vectorZoom.max_zoom, 8) : 8;
+        const minZoom = hasVectorTiles ? vectorZoom.min_zoom : 0;
+        const maxZoom = hasVectorTiles ? vectorZoom.max_zoom : 4;
+        
+        console.log(`Vector tiles: ${vectorZoom.min_zoom}-${vectorZoom.max_zoom}`);
+        console.log(`Setting map bounds: ${minZoom}-${maxZoom}, initial: ${initialZoom}`);
+        
+        console.log(`Configuring map: zoom=${initialZoom}, range=${minZoom}-${maxZoom}, vector tiles available:`, hasVectorTiles);
+
+        // Create map with dynamic configuration
         this.map = new maplibregl.Map({
             container: 'map',
             style: {
@@ -25,7 +52,7 @@ class FloodMap {
                 sources: {
                     'vector-tiles': {
                         type: 'vector',
-                        tiles: [window.location.origin + '/api/tiles/vector/{z}/{x}/{y}.pbf']
+                        tiles: [window.location.origin + '/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf']
                     },
                     'elevation-tiles': {
                         type: 'raster',
@@ -39,22 +66,22 @@ class FloodMap {
                         type: 'background',
                         paint: { 'background-color': '#f8f9fa' }
                     },
-                    // Water bodies
-                    {
+                    // Water bodies (only add if vector tiles available)
+                    ...(hasVectorTiles ? [{
                         id: 'water',
                         type: 'fill',
                         source: 'vector-tiles',
                         'source-layer': 'water',
                         paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.6 }
-                    },
-                    // Roads
-                    {
+                    }] : []),
+                    // Roads (only add if vector tiles available)
+                    ...(hasVectorTiles ? [{
                         id: 'roads',
                         type: 'line',
                         source: 'vector-tiles',
                         'source-layer': 'transportation',
                         paint: { 'line-color': '#6b7280', 'line-width': 1 }
-                    },
+                    }] : []),
                     // Contextual flood risk elevation overlay
                     {
                         id: 'elevation',
@@ -64,10 +91,10 @@ class FloodMap {
                     }
                 ]
             },
-            center: [-82.4572, 27.9506], // Tampa
-            zoom: 11,
-            minZoom: 8,
-            maxZoom: 16
+            center: [-89.5, 20], // Center of elevation coverage area (Florida/Gulf Coast)
+            zoom: initialZoom,
+            minZoom: minZoom,
+            maxZoom: maxZoom
         });
 
         // Add navigation controls
@@ -124,7 +151,8 @@ class FloodMap {
                     const lng = position.coords.longitude;
                     
                     this.map.setCenter([lng, lat]);
-                    this.map.setZoom(12);
+                    // Use maximum available zoom level for location
+                    this.map.setZoom(this.map.getMaxZoom());
                     this.assessLocationRisk(lat, lng);
                 },
                 (error) => {
