@@ -35,7 +35,7 @@ class PersistentElevationCache:
     """
     
     def __init__(self, 
-                 data_dir: str = "/Users/davidrose/git/floodmap/compressed_data/usa",
+                 data_dir: str = "/Users/davidrose/git/floodmap/output/elevation",
                  max_memory_gb: float = 4.0,  # Use up to 4GB for cache
                  preload_cores: int = None):
         
