@@ -56,7 +56,7 @@ class FloodMap {
                     },
                     'elevation-tiles': {
                         type: 'raster',
-                        tiles: [window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png']
+                        tiles: [window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png?v=' + Date.now()]
                     },
                 },
                 layers: [
@@ -126,7 +126,7 @@ class FloodMap {
     updateFloodLayer() {
         // Update elevation tiles with new water level for contextual coloring
         this.map.getSource('elevation-tiles').setTiles([
-            window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png'
+            window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png?v=' + Date.now()
         ]);
     }
 

@@ -157,7 +157,7 @@ class PersistentElevationCache:
         entry = self._load_elevation_file(file_path)
         
         if entry is None:
-            return None
+            raise ValueError(f"Failed to load elevation file: {file_path}")
         
         # Add to cache
         with self.cache_lock:
@@ -175,7 +175,7 @@ class PersistentElevationCache:
         """
         cached_data = self.get_elevation_array(file_path)
         if cached_data is None:
-            return None
+            raise ValueError(f"No cached elevation data available for {file_path}")
             
         elevation_array, metadata = cached_data
         
@@ -194,7 +194,7 @@ class PersistentElevationCache:
         
         # Check if there's actual overlap
         if overlap_lat_bottom >= overlap_lat_top or overlap_lon_left >= overlap_lon_right:
-            return None
+            raise ValueError(f"No overlap between tile bounds and cached elevation file {file_path.name}")
         
         # Calculate array indices for overlap region
         height, width = elevation_array.shape
@@ -207,7 +207,7 @@ class PersistentElevationCache:
         
         # Extract overlap region from cached array (no file I/O!)
         if y_bottom <= y_top or x_right <= x_left:
-            return None
+            raise ValueError(f"Invalid array indices: y={y_top}:{y_bottom}, x={x_left}:{x_right} for cached {file_path.name}")
             
         overlap_data = elevation_array[y_top:y_bottom, x_left:x_right]
         
@@ -215,15 +215,17 @@ class PersistentElevationCache:
         if overlap_data.shape != (tile_size, tile_size):
             from PIL import Image
             # Convert to PIL for efficient resizing
-            pil_img = Image.fromarray(overlap_data, mode='I;16')
+            # Convert int16 to float32 for PIL compatibility, then back
+            overlap_data_float = overlap_data.astype(np.float32)
+            pil_img = Image.fromarray(overlap_data_float, mode='F')
             pil_img = pil_img.resize((tile_size, tile_size), Image.LANCZOS)
             result_tile = np.array(pil_img, dtype=np.int16)
         else:
             result_tile = overlap_data.copy()
         
-        # Return None if all NoData
+        # Fail if all NoData - indicates serious data problem
         if np.all(result_tile == -32768):
-            return None
+            raise ValueError(f"Cached tile extraction result is all NoData (-32768) for {file_path.name}")
             
         return result_tile
     
@@ -239,23 +241,48 @@ class PersistentElevationCache:
             # Load metadata
             metadata_path = file_path.with_suffix('.json')
             if not metadata_path.exists():
-                logger.warning(f"No metadata found for {file_path}")
-                return None
+                raise FileNotFoundError(f"Required metadata file missing for cache: {metadata_path}")
             
             with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
             
-            # Decompress elevation data
-            dctx = zstd.ZstdDecompressor()
-            decompressed = dctx.decompress(compressed_data)
-            
-            # Handle both metadata formats
+            # Decompress elevation data with size guard to avoid segfaults on
+            # corrupted frames.
             if 'shape' in metadata:
                 height, width = metadata['shape']
             else:
                 height, width = metadata['height'], metadata['width']
+
+            expected_bytes = int(height) * int(width) * 2
+            dctx = zstd.ZstdDecompressor()
+            decompressed = dctx.decompress(compressed_data)
             
-            elevation_array = np.frombuffer(decompressed, dtype=np.int16).reshape(height, width)
+            # Handle both metadata formats
+            elevation_array = np.frombuffer(decompressed, dtype=np.int16).reshape(int(height), int(width))
+
+            # ------------------------------------------------------------------
+            # Some of the pre-generated 1-degree SRTM tiles in our dataset were
+            # discovered to contain large leading / trailing paddings that are
+            # filled entirely with zeros (sea-level).  These columns / rows do
+            # not represent real measured data and break the coordinate
+            # transformation logic further downstream because the accompanying
+            # geo-metadata still describes the full one-degree extent.
+            #
+            # To make the cached arrays spatially consistent with the metadata
+            # we detect any fully-zero padding bands at the western / eastern /
+            # northern / southern edges and crop them out on load while at the
+            # same time adjusting the bounds in the metadata structure.  This
+            # fixes the infamous "solid blue tile" problem caused by tiles that
+            # only sampled the ocean part of a padded array.
+            # ------------------------------------------------------------------
+
+            # NOTE: Previously we attempted to auto-crop fully-zero padding
+            # bands at the edges of some SRTM tiles. Unfortunately that approach
+            # changed the geographic extent of the rasters on the fly and broke
+            # the alignment between the elevation overlay and the underlying
+            # basemap.  The auto-crop logic has therefore been removed.  We will
+            # address the ‘all-zero strip’ problem in a different way (see
+            # issue #1723) without mutating the source bounds.
             
             # Calculate memory usage
             array_size_mb = elevation_array.nbytes / (1024 * 1024)
@@ -276,7 +303,7 @@ class PersistentElevationCache:
             
         except Exception as e:
             logger.error(f"Failed to load elevation data from {file_path}: {e}")
-            return None
+            raise ValueError(f"Elevation file loading failed: {file_path}") from e
     
     def _enforce_memory_limit(self):
         """Enforce memory limit by evicting least recently used entries."""
