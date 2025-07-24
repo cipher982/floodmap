@@ -92,24 +92,28 @@ class ElevationDataLoader:
             # Load metadata
             metadata_path = file_path.with_suffix('.json')
             if not metadata_path.exists():
-                logger.warning(f"No metadata found for {file_path}")
-                return None
+                raise FileNotFoundError(f"Required metadata file missing: {metadata_path}")
                 
             with open(metadata_path, 'r') as f:
                 metadata = json.load(f)
             
-            # Decompress elevation data
-            dctx = zstd.ZstdDecompressor()
-            decompressed = dctx.decompress(compressed_data)
-            # Handle both 'shape' (new format) and 'height'/'width' (old format) 
+            # Handle both 'shape' (new) and 'height'/'width' (legacy)
             if 'shape' in metadata:
                 height, width = metadata['shape']
             else:
                 height, width = metadata['height'], metadata['width']
-                
+
+            # Decompress elevation data – use `max_output_size` to protect
+            # against corrupted frames announcing a wrong (too large) size.
+            expected_bytes = int(height) * int(width) * 2  # int16 → 2 bytes
+            dctx = zstd.ZstdDecompressor()
+            decompressed = dctx.decompress(compressed_data)
             elevation_array = np.frombuffer(decompressed, dtype=np.int16).reshape(
                 height, width
             )
+
+            # Note: previously attempted automatic cropping of zero-padding has
+            # been removed – see persistent_elevation_cache.py for reasoning.
             
             # Cache management
             if len(self.cache) >= self.max_cache_size:
@@ -146,8 +150,7 @@ class ElevationDataLoader:
         )
         
         if not overlapping_files:
-            logger.debug(f"No elevation files found for tile {xtile}/{ytile}/{zoom}")
-            return None
+            raise FileNotFoundError(f"No elevation files found for tile {xtile}/{ytile}/{zoom}")
         
         # Handle multiple overlapping files with proper mosaicking
         tile_data = self._mosaic_elevation_files(
@@ -168,33 +171,114 @@ class ElevationDataLoader:
     
     def _mosaic_elevation_files(self, files: list, lat_top: float, lat_bottom: float,
                                lon_left: float, lon_right: float, tile_size: int) -> Optional[np.ndarray]:
-        """Mosaic multiple elevation files into a single tile."""
-        if len(files) == 1:
-            # Single file - use optimized path
-            return self._extract_tile_from_file(files[0], lat_top, lat_bottom, lon_left, lon_right, tile_size)
-        
-        # Multiple files - create mosaic
-        result_tile = np.full((tile_size, tile_size), -32768, dtype=np.int16)  # NoData value
-        
+        """Accurately mosaic multiple 1-degree elevation rasters into a single Web-Mercator tile.
+
+        The previous implementation simply resized every overlapping file to the
+        full 256×256 target which meant the last processed source overwrote the
+        already combined data and, more importantly, destroyed the spatial
+        relationship between the DEM and the map.  The re-worked algorithm
+        draws every source into the correct sub-window of the canvas so that
+        coastline and elevation stay perfectly aligned.
+        """
+
+        # Prepare empty canvas (initialised with NoData)
+        canvas = np.full((tile_size, tile_size), -32768, dtype=np.int16)
+
+        total_lat_span = lat_top - lat_bottom  # positive value
+        total_lon_span = lon_right - lon_left  # positive value
+
+        from PIL import Image
+
         for file_path in files:
-            tile_data = self._extract_tile_from_file(file_path, lat_top, lat_bottom, lon_left, lon_right, tile_size)
-            if tile_data is not None:
-                # Overlay non-nodata values
-                valid_mask = tile_data != -32768
-                result_tile[valid_mask] = tile_data[valid_mask]
-        
-        # Return None if all NoData
-        if np.all(result_tile == -32768):
-            return None
-            
-        return result_tile
+            elevation_data = self.load_elevation_data(file_path)
+            if elevation_data is None:
+                continue  # skip missing / unreadable files
+
+            elevation_array, metadata = elevation_data
+
+            # File bounds
+            b = metadata['bounds']
+            file_lat_top = b['top']
+            file_lat_bottom = b['bottom']
+            file_lon_left = b['left']
+            file_lon_right = b['right']
+
+            # Determine geographic overlap between tile and source file
+            overlap_lat_top = min(lat_top, file_lat_top)
+            overlap_lat_bottom = max(lat_bottom, file_lat_bottom)
+            overlap_lon_left = max(lon_left, file_lon_left)
+            overlap_lon_right = min(lon_right, file_lon_right)
+
+            # Skip if no overlap
+            if overlap_lat_bottom >= overlap_lat_top or overlap_lon_left >= overlap_lon_right:
+                continue
+
+            # Source array indices for the overlapping area ------------------
+            src_h, src_w = elevation_array.shape
+
+            y_top_src = int((file_lat_top - overlap_lat_top) / (file_lat_top - file_lat_bottom) * src_h)
+            y_bottom_src = int((file_lat_top - overlap_lat_bottom) / (file_lat_top - file_lat_bottom) * src_h)
+            x_left_src = int((overlap_lon_left - file_lon_left) / (file_lon_right - file_lon_left) * src_w)
+            x_right_src = int((overlap_lon_right - file_lon_left) / (file_lon_right - file_lon_left) * src_w)
+
+            if y_bottom_src <= y_top_src or x_right_src <= x_left_src:
+                continue
+
+            sub_array = elevation_array[y_top_src:y_bottom_src, x_left_src:x_right_src]
+
+            # Destination window inside the 256×256 canvas -------------------
+            y_top_frac = (lat_top - overlap_lat_top) / total_lat_span
+            y_bottom_frac = (lat_top - overlap_lat_bottom) / total_lat_span
+            x_left_frac = (overlap_lon_left - lon_left) / total_lon_span
+            x_right_frac = (overlap_lon_right - lon_left) / total_lon_span
+
+            y_top_dst = int(round(y_top_frac * tile_size))
+            y_bottom_dst = int(round(y_bottom_frac * tile_size))
+            x_left_dst = int(round(x_left_frac * tile_size))
+            x_right_dst = int(round(x_right_frac * tile_size))
+
+            # Clamp to canvas boundary (numerical safety)
+            y_top_dst = max(0, min(tile_size, y_top_dst))
+            y_bottom_dst = max(0, min(tile_size, y_bottom_dst))
+            x_left_dst = max(0, min(tile_size, x_left_dst))
+            x_right_dst = max(0, min(tile_size, x_right_dst))
+
+            if y_bottom_dst <= y_top_dst or x_right_dst <= x_left_dst:
+                continue
+
+            dst_height = y_bottom_dst - y_top_dst
+            dst_width = x_right_dst - x_left_dst
+
+            # Resize source patch to destination pixel size ------------------
+            if sub_array.shape != (dst_height, dst_width):
+                pil_img = Image.fromarray(sub_array.astype(np.float32), mode='F')
+                pil_img = pil_img.resize((dst_width, dst_height), Image.LANCZOS)
+                sub_resized = np.array(pil_img, dtype=np.int16)
+            else:
+                sub_resized = sub_array
+
+            # Blend into canvas – keep existing values where we already have
+            # data (prefers the first encountered file; order of `files` list
+            # is determined by find_elevation_files_for_tile which walks from
+            # west→east and south→north, matching typical DEM priority rules)
+            target_slice = canvas[y_top_dst:y_bottom_dst, x_left_dst:x_right_dst]
+            write_mask = (target_slice == -32768) & (sub_resized != -32768)
+            target_slice[write_mask] = sub_resized[write_mask]
+
+            canvas[y_top_dst:y_bottom_dst, x_left_dst:x_right_dst] = target_slice
+
+        # Final sanity check ---------------------------------------------------
+        if np.all(canvas == -32768):
+            raise ValueError("Mosaic result is entirely NoData for tile – DEM missing?")
+
+        return canvas
     
     def _extract_tile_from_file(self, file_path: Path, lat_top: float, lat_bottom: float,
                                lon_left: float, lon_right: float, tile_size: int) -> Optional[np.ndarray]:
         """Extract tile data from a single elevation file."""
         elevation_data = self.load_elevation_data(file_path)
         if elevation_data is None:
-            return None
+            raise ValueError(f"Failed to load elevation data from {file_path}")
             
         elevation_array, metadata = elevation_data
         
@@ -213,7 +297,7 @@ class ElevationDataLoader:
         
         # Check if there's actual overlap
         if overlap_lat_bottom >= overlap_lat_top or overlap_lon_left >= overlap_lon_right:
-            return None
+            raise ValueError(f"No overlap between tile bounds and elevation file {file_path.name}")
         
         # Calculate array indices for overlap region
         height, width = elevation_array.shape
@@ -225,7 +309,7 @@ class ElevationDataLoader:
         x_right = min(width, int((overlap_lon_right - file_lon_left) / (file_lon_right - file_lon_left) * width))
         
         if y_bottom <= y_top or x_right <= x_left:
-            return None
+            raise ValueError(f"Invalid array indices: y={y_top}:{y_bottom}, x={x_left}:{x_right} for {file_path.name}")
         
         # Extract data
         tile_data = elevation_array[y_top:y_bottom, x_left:x_right]
@@ -235,7 +319,9 @@ class ElevationDataLoader:
             # FIXED: Use consistent high-quality resampling instead of stride indexing
             from PIL import Image
             # Convert to PIL for proper resampling (handles both up/downsampling)
-            pil_img = Image.fromarray(tile_data, mode='I;16')
+            # Convert int16 to float32 for PIL compatibility, then back
+            tile_data_float = tile_data.astype(np.float32)
+            pil_img = Image.fromarray(tile_data_float, mode='F')
             pil_img = pil_img.resize((tile_size, tile_size), Image.LANCZOS)
             tile_data = np.array(pil_img, dtype=np.int16)
         

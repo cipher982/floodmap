@@ -20,10 +20,10 @@ class FloodRiskColorMapper:
         self.DANGER_COLOR = (244, 67, 54, 200)    # Red, prominent
         self.FLOODED_COLOR = (33, 150, 243, 220)  # Blue, very visible
         
-        # Risk zone thresholds (meters relative to water level)
-        self.SAFE_THRESHOLD = 10.0      # 10m+ above water = safe
-        self.CAUTION_THRESHOLD = 3.0    # 3-10m above water = caution
-        self.DANGER_THRESHOLD = 0.5     # 0.5-3m above water = danger
+        # Risk zone thresholds (meters relative to water level) - REALISTIC FLOOD ZONES
+        self.SAFE_THRESHOLD = 5.0       # 5m+ above water = safe  
+        self.CAUTION_THRESHOLD = 2.0    # 2-5m above water = caution   
+        self.DANGER_THRESHOLD = 0.5     # 0.5-2m above water = danger
         # Below 0.5m = flooded
         
     def elevation_to_risk_level(self, elevation: float, water_level: float) -> float:
