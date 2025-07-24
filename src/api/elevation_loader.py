@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ElevationDataLoader:
     """Load and query elevation data for tile generation."""
     
-    def __init__(self, data_dir: str = "/Users/davidrose/git/floodmap/compressed_data/usa"):
+    def __init__(self, data_dir: str = "/Users/davidrose/git/floodmap/output/elevation"):
         self.data_dir = Path(data_dir)
         self.cache = {}  # Simple in-memory cache for loaded tiles
         self.max_cache_size = 50  # Keep 50 elevation arrays in memory
