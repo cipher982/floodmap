@@ -28,9 +28,12 @@
                     </div>
                 </div>
                 <div class="control-group" id="water-level-controls">
-                    <label for="water-level">Water Level (m):</label>
-                    <input type="range" id="water-level" min="0" max="5" step="0.1" value="1.0">
-                    <span id="water-level-display">1.0m</span>
+                    <label for="water-level">Water Level:</label>
+                    <input type="range" id="water-level" min="0" max="100" step="1" value="30">
+                    <div id="water-level-display-container">
+                        <span id="water-level-display">1.0m</span>
+                        <span id="water-level-vibe"></span>
+                    </div>
                 </div>
                 <button id="find-location">📍 Find My Location</button>
             </div>
