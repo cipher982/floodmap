@@ -19,6 +19,15 @@
         <div class="sidebar">
             <div id="controls">
                 <div class="control-group">
+                    <label>View Mode:</label>
+                    <div class="segmented-control" id="view-mode">
+                        <input type="radio" name="view-mode" id="elevation-mode" value="elevation" checked>
+                        <label for="elevation-mode">🗻 Elevation</label>
+                        <input type="radio" name="view-mode" id="flood-mode" value="flood">
+                        <label for="flood-mode">🌊 Flood Risk</label>
+                    </div>
+                </div>
+                <div class="control-group" id="water-level-controls">
                     <label for="water-level">Water Level (m):</label>
                     <input type="range" id="water-level" min="0" max="5" step="0.1" value="1.0">
                     <span id="water-level-display">1.0m</span>

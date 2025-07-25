@@ -20,6 +20,20 @@ class FloodRiskColorMapper:
         self.DANGER_COLOR = (244, 67, 54, 200)    # Red, prominent
         self.FLOODED_COLOR = (33, 150, 243, 220)  # Blue, very visible
         
+        # Elevation color scheme for topographical visualization
+        self.ELEVATION_COLORS = [
+            (33, 150, 243, 255),   # Blue: Sea level / very low (0-5m)
+            (76, 175, 80, 255),    # Green: Low elevation (5-50m)
+            (139, 195, 74, 255),   # Light green: Medium-low (50-100m) 
+            (255, 235, 59, 255),   # Yellow: Medium (100-200m)
+            (255, 152, 0, 255),    # Orange: Medium-high (200-500m)
+            (121, 85, 72, 255),    # Brown: High (500-1000m)
+            (158, 158, 158, 255),  # Gray: Very high (1000m+)
+        ]
+        
+        # Elevation thresholds in meters
+        self.ELEVATION_THRESHOLDS = [0, 5, 50, 100, 200, 500, 1000, 3000]
+        
         # Risk zone thresholds (meters relative to water level) - REALISTIC FLOOD ZONES
         self.SAFE_THRESHOLD = 5.0       # 5m+ above water = safe  
         self.CAUTION_THRESHOLD = 2.0    # 2-5m above water = caution   
@@ -133,6 +147,46 @@ class FloodRiskColorMapper:
         
         # Vectorized color assignment
         rgba_array = colors[risk_levels]
+        
+        return rgba_array
+    
+    def elevation_array_to_topographical_rgba(self, elevation_data: np.ndarray, 
+                                            no_data_value: Optional[float] = None) -> np.ndarray:
+        """
+        Convert 2D elevation array to topographical RGBA colors (absolute elevation).
+        
+        Args:
+            elevation_data: 2D numpy array of elevation values
+            no_data_value: Value representing missing data (becomes transparent)
+            
+        Returns:
+            3D numpy array (height, width, 4) with RGBA values
+        """
+        height, width = elevation_data.shape
+        rgba_array = np.zeros((height, width, 4), dtype=np.uint8)
+        
+        # Handle no-data values
+        if no_data_value is not None:
+            valid_mask = elevation_data != no_data_value
+        else:
+            valid_mask = np.ones_like(elevation_data, dtype=bool)
+        
+        # Assign colors based on elevation thresholds
+        for i in range(len(self.ELEVATION_THRESHOLDS) - 1):
+            min_elev = self.ELEVATION_THRESHOLDS[i]
+            max_elev = self.ELEVATION_THRESHOLDS[i + 1]
+            
+            # Create mask for this elevation band
+            band_mask = (elevation_data >= min_elev) & (elevation_data < max_elev) & valid_mask
+            
+            # Assign color to this band
+            rgba_array[band_mask] = self.ELEVATION_COLORS[i]
+        
+        # Handle highest elevation band (above last threshold)
+        highest_mask = (elevation_data >= self.ELEVATION_THRESHOLDS[-1]) & valid_mask
+        rgba_array[highest_mask] = self.ELEVATION_COLORS[-1]
+        
+        # Invalid pixels remain transparent (initialized as zeros)
         
         return rgba_array
     

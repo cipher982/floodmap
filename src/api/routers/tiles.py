@@ -78,6 +78,92 @@ def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> 
             detail=f"Elevation tile generation failed: {str(e)}"
         )
 
+def generate_topographical_tile_sync(z: int, x: int, y: int) -> bytes:
+    """Generate topographical tile showing absolute elevation colors."""
+    try:
+        # Get elevation data using the same optimized mosaicking
+        elevation_data = elevation_loader.get_elevation_for_tile(x, y, z, tile_size=256)
+        
+        # Handle case where no elevation data is available
+        if elevation_data is None:
+            logger.warning(f"No elevation data available for topographical tile {z}/{x}/{y}")
+            # Return transparent tile
+            return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07:\xb9Y\x00\x00\x00\x00IEND\xaeB`\x82'
+        
+        # Convert elevation to topographical colors (absolute elevation)
+        rgba_array = color_mapper.elevation_array_to_topographical_rgba(
+            elevation_data, 
+            no_data_value=-32768  # Common SRTM no-data value
+        )
+        
+        # Convert to PIL Image
+        img = Image.fromarray(rgba_array, 'RGBA')
+        
+        # Convert to PNG bytes with fast compression
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG', optimize=True, compress_level=1)  # Fast compression
+        img_bytes.seek(0)
+        
+        return img_bytes.getvalue()
+        
+    except Exception as e:
+        logger.error(f"Error generating topographical tile {z}/{x}/{y}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Topographical tile generation failed: {str(e)}"
+        )
+
+@router.get("/tiles/topographical/{z}/{x}/{y}.png")
+@log_performance
+async def get_topographical_tile(z: int, x: int, y: int):
+    """Generate topographical tiles showing absolute elevation colors."""
+    # Input validation
+    if not (0 <= z <= 18 and 0 <= x < 2**z and 0 <= y < 2**z):
+        raise HTTPException(status_code=400, detail="Invalid tile coordinates")
+    
+    try:
+        # Check cache first (using special cache key for topographical tiles)
+        cache_key_water_level = -888.0  # Special value for topographical tiles
+        cached_tile = tile_cache.get(cache_key_water_level, z, x, y)
+        if cached_tile is not None:
+            return Response(
+                content=cached_tile,
+                media_type="image/png",
+                headers={
+                    "Cache-Control": f"public, max-age=3600",
+                    "X-Tile-Type": "topographical",
+                    "X-Cache": "HIT"
+                }
+            )
+        
+        # Generate tile asynchronously using thread pool
+        loop = asyncio.get_event_loop()
+        tile_data = await loop.run_in_executor(
+            CPU_EXECUTOR,
+            generate_topographical_tile_sync,
+            z, x, y
+        )
+        
+        # Cache the generated tile
+        tile_cache.put(cache_key_water_level, z, x, y, tile_data)
+        
+        return Response(
+            content=tile_data,
+            media_type="image/png",
+            headers={
+                "Cache-Control": f"public, max-age=3600",
+                "X-Tile-Type": "topographical",
+                "X-Cache": "MISS"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error generating topographical tile {z}/{x}/{y}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Topographical tile generation failed: {str(e)}"
+        )
+
 def _transparent_tile_bytes() -> bytes:
     """Return transparent PNG as bytes."""
     return b'\\x89PNG\\r\\n\\x1a\\n\\x00\\x00\\x00\\rIHDR\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x08\\x06\\x00\\x00\\x00\\x1f\\x15\\xc4\\x89\\x00\\x00\\x00\\rIDATx\\x9cc\\xf8\\x0f\\x00\\x00\\x01\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x07:\\xb9Y\\x00\\x00\\x00\\x00IEND\\xaeB`\\x82'

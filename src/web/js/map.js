@@ -7,6 +7,7 @@ class FloodMap {
     constructor() {
         this.map = null;
         this.currentWaterLevel = 1.0;
+        this.viewMode = 'elevation'; // 'elevation' or 'flood'
         this.init();
     }
 
@@ -56,7 +57,7 @@ class FloodMap {
                     },
                     'elevation-tiles': {
                         type: 'raster',
-                        tiles: [window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png?v=' + Date.now()]
+                        tiles: [this.getElevationTileURL()]
                     },
                 },
                 layers: [
@@ -107,6 +108,15 @@ class FloodMap {
     }
 
     setupEventListeners() {
+        // View mode radio buttons
+        const viewModeRadios = document.querySelectorAll('input[name="view-mode"]');
+        viewModeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.viewMode = e.target.value;
+                this.updateViewMode();
+            });
+        });
+
         // Water level slider
         const waterLevelSlider = document.getElementById('water-level');
         const waterLevelDisplay = document.getElementById('water-level-display');
@@ -121,13 +131,44 @@ class FloodMap {
         document.getElementById('find-location').addEventListener('click', () => {
             this.findUserLocation();
         });
+
+        // Initialize UI state
+        this.updateViewMode();
+    }
+
+    getElevationTileURL() {
+        if (this.viewMode === 'elevation') {
+            return window.location.origin + '/api/tiles/topographical/{z}/{x}/{y}.png?v=' + Date.now();
+        } else {
+            return window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png?v=' + Date.now();
+        }
+    }
+
+    updateViewMode() {
+        // Show/hide water level controls based on mode with smooth transition
+        const waterLevelControls = document.getElementById('water-level-controls');
+        
+        if (this.viewMode === 'elevation') {
+            waterLevelControls.style.opacity = '0';
+            waterLevelControls.style.transform = 'translateY(-10px)';
+            setTimeout(() => {
+                waterLevelControls.style.display = 'none';
+            }, 200);
+        } else {
+            waterLevelControls.style.display = 'block';
+            setTimeout(() => {
+                waterLevelControls.style.opacity = '1';
+                waterLevelControls.style.transform = 'translateY(0)';
+            }, 10);
+        }
+
+        // Update map tiles
+        this.updateFloodLayer();
     }
 
     updateFloodLayer() {
-        // Update elevation tiles with new water level for contextual coloring
-        this.map.getSource('elevation-tiles').setTiles([
-            window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png?v=' + Date.now()
-        ]);
+        // Update elevation tiles based on current mode
+        this.map.getSource('elevation-tiles').setTiles([this.getElevationTileURL()]);
     }
 
     async loadUserLocation() {
