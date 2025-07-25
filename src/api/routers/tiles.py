@@ -42,54 +42,17 @@ def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> 
         # Use persistent elevation cache instead of slow elevation_loader
         # This eliminates the 23ms zstd decompression bottleneck
         
-        # Use EXACT same method as working point-click API but sample at grid points
-        lat_top, lat_bottom, lon_left, lon_right = elevation_loader.num2deg(x, y, z)
+        # CARMACK-STYLE FIX: Use existing mosaicking code instead of 24x24 sampling
+        # This eliminates the 576 individual point samples and uses the proper
+        # vectorized mosaicking that already handles coordinate transformation correctly
         
-        elevation_data = np.zeros((256, 256), dtype=np.int16)
+        elevation_data = elevation_loader.get_elevation_for_tile(x, y, z, tile_size=256)
         
-        # Sample at a 24x24 grid for balanced accuracy and performance
-        # 576 samples per tile (vs original 1,024) with caching for ~2-3x speedup
-        sample_size = 24
-        elevation_cache = {}  # Cache elevation lookups to avoid duplicates
-        
-        for sample_y in range(sample_size):
-            for sample_x in range(sample_size):
-                # Convert sample point to lat/lon
-                lat = lat_top - (sample_y / (sample_size - 1)) * (lat_top - lat_bottom)
-                lon = lon_left + (sample_x / (sample_size - 1)) * (lon_right - lon_left)
-                
-                # Use zoom 14 (same as working point-click API)
-                elevation_zoom = 14
-                elev_x, elev_y = elevation_loader.deg2num(lat, lon, elevation_zoom)
-                
-                # Check cache first to avoid duplicate elevation lookups
-                cache_key = (elev_x, elev_y)
-                if cache_key in elevation_cache:
-                    elevation_value = elevation_cache[cache_key]
-                else:
-                    try:
-                        elevation_array = elevation_loader.get_elevation_for_tile(elev_x, elev_y, elevation_zoom)
-                        if elevation_array is not None:
-                            # Extract center pixel value (same as point-click API)
-                            center_y, center_x = elevation_array.shape[0] // 2, elevation_array.shape[1] // 2
-                            elevation_value = elevation_array[center_y, center_x]
-                            if elevation_value == -32768:  # NoData
-                                elevation_value = 0
-                        else:
-                            elevation_value = 0
-                            
-                    except Exception:
-                        elevation_value = 0
-                    
-                    elevation_cache[cache_key] = elevation_value
-                
-                # Fill corresponding tile region with this elevation
-                pixel_y_start = (sample_y * 256) // sample_size
-                pixel_y_end = ((sample_y + 1) * 256) // sample_size
-                pixel_x_start = (sample_x * 256) // sample_size
-                pixel_x_end = ((sample_x + 1) * 256) // sample_size
-                
-                elevation_data[pixel_y_start:pixel_y_end, pixel_x_start:pixel_x_end] = elevation_value
+        # Handle case where no elevation data is available
+        if elevation_data is None:
+            logger.warning(f"No elevation data available for tile {z}/{x}/{y}")
+            # Return transparent tile
+            return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07:\xb9Y\x00\x00\x00\x00IEND\xaeB`\x82'
         
         # Convert elevation to contextual colors
         rgba_array = color_mapper.elevation_array_to_rgba(
