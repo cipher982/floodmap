@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Logarithmic Slider Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .slider-container { margin: 20px 0; }
+        .vibe { padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+        .vibe-normal { background: #dbeafe; color: #1e40af; }
+        .vibe-concerning { background: #fef3c7; color: #d97706; }
+        .vibe-dangerous { background: #fee2e2; color: #dc2626; }
+        .vibe-extreme { background: #f3e8ff; color: #7c3aed; }
+        .vibe-apocalyptic { background: #ef4444; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Logarithmic Water Level Slider Test</h1>
+    
+    <div class="slider-container">
+        <label for="water-level">Water Level (Logarithmic):</label>
+        <input type="range" id="water-level" min="0" max="100" step="1" value="30">
+        <div>
+            <span id="water-level-display">1.0m</span>
+            <span id="water-level-vibe" class="vibe"></span>
+        </div>
+    </div>
+
+    <div id="test-results">
+        <h2>Test Results:</h2>
+        <div id="conversion-tests"></div>
+    </div>
+
+    <script>
+        function sliderToWaterLevel(sliderValue) {
+            const waterLevel = 0.1 * Math.pow(10, sliderValue / 25);
+            return Math.round(waterLevel * 10) / 10;
+        }
+
+        function updateWaterLevelVibe(waterLevel, vibeElement) {
+            vibeElement.className = 'vibe';
+            
+            let vibeText = '';
+            let vibeClass = '';
+            
+            if (waterLevel <= 2) {
+                vibeText = 'Normal';
+                vibeClass = 'vibe-normal';
+            } else if (waterLevel <= 5) {
+                vibeText = 'Concerning';
+                vibeClass = 'vibe-concerning';
+            } else if (waterLevel <= 20) {
+                vibeText = 'Dangerous';
+                vibeClass = 'vibe-dangerous';
+            } else if (waterLevel <= 100) {
+                vibeText = 'EXTREME';
+                vibeClass = 'vibe-extreme';
+            } else {
+                vibeText = 'APOCALYPTIC';
+                vibeClass = 'vibe-apocalyptic';
+            }
+            
+            vibeElement.textContent = vibeText;
+            vibeElement.className = 'vibe ' + vibeClass;
+        }
+
+        // Setup slider
+        const waterLevelSlider = document.getElementById('water-level');
+        const waterLevelDisplay = document.getElementById('water-level-display');
+        const waterLevelVibe = document.getElementById('water-level-vibe');
+        
+        waterLevelSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat(e.target.value);
+            const waterLevel = sliderToWaterLevel(sliderValue);
+            
+            waterLevelDisplay.textContent = waterLevel + 'm';
+            updateWaterLevelVibe(waterLevel, waterLevelVibe);
+        });
+
+        // Initialize
+        const initialWaterLevel = sliderToWaterLevel(30);
+        waterLevelDisplay.textContent = initialWaterLevel + 'm';
+        updateWaterLevelVibe(initialWaterLevel, waterLevelVibe);
+
+        // Run conversion tests
+        const testResults = document.getElementById('conversion-tests');
+        const testValues = [0, 25, 50, 75, 100];
+        
+        testResults.innerHTML = '<h3>Conversion Test Results:</h3>';
+        testValues.forEach(sliderVal => {
+            const waterLevel = sliderToWaterLevel(sliderVal);
+            testResults.innerHTML += `<div>Slider ${sliderVal} → ${waterLevel}m</div>`;
+        });
+    </script>
+</body>
+</html>

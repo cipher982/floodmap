@@ -210,7 +210,7 @@ async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
     """Generate contextual flood risk tiles dynamically with async processing."""
     # No zoom restrictions - elevation data works at any zoom level
     
-    if not (-10 <= water_level <= 50):  # Reasonable water level range
+    if not (-10 <= water_level <= 1000):  # Extended range for extreme scenarios
         raise HTTPException(status_code=400, detail="Invalid water level")
     
     try:

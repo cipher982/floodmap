@@ -14,7 +14,8 @@ class FloodMap {
     init() {
         this.initializeMap();
         this.setupEventListeners();
-        this.loadUserLocation();
+        // Don't automatically load user location - keep Tampa Bay as default
+        // this.loadUserLocation();
     }
 
     async initializeMap() {
@@ -92,7 +93,7 @@ class FloodMap {
                     }
                 ]
             },
-            center: [-89.5, 20], // Center of elevation coverage area (Florida/Gulf Coast)
+            center: [-82.46, 27.95], // Tampa Bay, Florida
             zoom: initialZoom,
             minZoom: minZoom,
             maxZoom: maxZoom
@@ -117,15 +118,28 @@ class FloodMap {
             });
         });
 
-        // Water level slider
+        // Water level slider (logarithmic)
         const waterLevelSlider = document.getElementById('water-level');
         const waterLevelDisplay = document.getElementById('water-level-display');
+        const waterLevelVibe = document.getElementById('water-level-vibe');
         
         waterLevelSlider.addEventListener('input', (e) => {
-            this.currentWaterLevel = parseFloat(e.target.value);
+            // Convert slider value (0-100) to logarithmic water level (0.1-1000m)
+            const sliderValue = parseFloat(e.target.value);
+            this.currentWaterLevel = this.sliderToWaterLevel(sliderValue);
+            
+            // Update display
             waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
+            this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
+            
+            // Update map
             this.updateFloodLayer();
         });
+        
+        // Initialize with default value
+        this.currentWaterLevel = this.sliderToWaterLevel(30); // Default to ~1m
+        waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
+        this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
 
         // Find location button
         document.getElementById('find-location').addEventListener('click', () => {
@@ -164,6 +178,41 @@ class FloodMap {
 
         // Update map tiles
         this.updateFloodLayer();
+    }
+
+    sliderToWaterLevel(sliderValue) {
+        // Convert slider value (0-100) to logarithmic water level (0.1-1000m)
+        // Using exponential mapping: y = 0.1 * (10^(x/25))
+        const waterLevel = 0.1 * Math.pow(10, sliderValue / 25);
+        return Math.round(waterLevel * 10) / 10; // Round to 1 decimal place
+    }
+
+    updateWaterLevelVibe(waterLevel, vibeElement) {
+        // Remove all existing vibe classes
+        vibeElement.className = '';
+        
+        let vibeText = '';
+        let vibeClass = '';
+        
+        if (waterLevel <= 2) {
+            vibeText = 'Normal';
+            vibeClass = 'vibe-normal';
+        } else if (waterLevel <= 5) {
+            vibeText = 'Concerning';
+            vibeClass = 'vibe-concerning';
+        } else if (waterLevel <= 20) {
+            vibeText = 'Dangerous';
+            vibeClass = 'vibe-dangerous';
+        } else if (waterLevel <= 100) {
+            vibeText = 'EXTREME';
+            vibeClass = 'vibe-extreme';
+        } else {
+            vibeText = 'APOCALYPTIC';
+            vibeClass = 'vibe-apocalyptic';
+        }
+        
+        vibeElement.textContent = vibeText;
+        vibeElement.className = vibeClass;
     }
 
     updateFloodLayer() {

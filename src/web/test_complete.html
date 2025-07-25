@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Complete Flood Map Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; border: 1px solid #ddd; padding: 15px; }
+        .pass { color: green; font-weight: bold; }
+        .fail { color: red; font-weight: bold; }
+        .slider-container { margin: 10px 0; }
+        .vibe { padding: 4px 8px; border-radius: 4px; font-weight: bold; margin-left: 10px; }
+        .vibe-normal { background: #dbeafe; color: #1e40af; }
+        .vibe-concerning { background: #fef3c7; color: #d97706; }
+        .vibe-dangerous { background: #fee2e2; color: #dc2626; }
+        .vibe-extreme { background: #f3e8ff; color: #7c3aed; animation: pulse 2s infinite; }
+        .vibe-apocalyptic { background: #ef4444; color: white; animation: shake 0.5s infinite; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+    </style>
+</head>
+<body>
+    <h1>Complete Flood Map Implementation Test</h1>
+    
+    <div class="test-section">
+        <h2>1. Logarithmic Slider Conversion Test</h2>
+        <div id="slider-test-results"></div>
+        
+        <div class="slider-container">
+            <label for="test-slider">Test Slider (0-100):</label>
+            <input type="range" id="test-slider" min="0" max="100" step="1" value="30">
+            <span id="test-display">1.0m</span>
+            <span id="test-vibe" class="vibe"></span>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. API Validation Test</h2>
+        <div id="validation-test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Color Mapping Test</h2>
+        <div id="color-test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Extreme Scenarios Test</h2>
+        <div id="extreme-test-results"></div>
+    </div>
+
+    <script>
+        // Core functions (copied from map.js)
+        function sliderToWaterLevel(sliderValue) {
+            const waterLevel = 0.1 * Math.pow(10, sliderValue / 25);
+            return Math.round(waterLevel * 10) / 10;
+        }
+
+        function updateWaterLevelVibe(waterLevel, vibeElement) {
+            vibeElement.className = 'vibe';
+            
+            let vibeText = '';
+            let vibeClass = '';
+            
+            if (waterLevel <= 2) {
+                vibeText = 'Normal';
+                vibeClass = 'vibe-normal';
+            } else if (waterLevel <= 5) {
+                vibeText = 'Concerning';
+                vibeClass = 'vibe-concerning';
+            } else if (waterLevel <= 20) {
+                vibeText = 'Dangerous';
+                vibeClass = 'vibe-dangerous';
+            } else if (waterLevel <= 100) {
+                vibeText = 'EXTREME';
+                vibeClass = 'vibe-extreme';
+            } else {
+                vibeText = 'APOCALYPTIC';
+                vibeClass = 'vibe-apocalyptic';
+            }
+            
+            vibeElement.textContent = vibeText;
+            vibeElement.className = 'vibe ' + vibeClass;
+        }
+
+        function validateWaterLevel(water_level) {
+            return -10 <= water_level <= 1000;
+        }
+
+        // Test 1: Logarithmic Slider Conversion
+        function testSliderConversion() {
+            const results = document.getElementById('slider-test-results');
+            const expectedValues = [
+                {slider: 0, expected: 0.1},
+                {slider: 25, expected: 1.0},
+                {slider: 50, expected: 10.0},
+                {slider: 75, expected: 100.0},
+                {slider: 100, expected: 1000.0}
+            ];
+            
+            let allPassed = true;
+            let output = '<h3>Logarithmic Conversion Results:</h3>';
+            
+            expectedValues.forEach(test => {
+                const actual = sliderToWaterLevel(test.slider);
+                const passed = Math.abs(actual - test.expected) < 0.01;
+                allPassed = allPassed && passed;
+                
+                output += `<div>Slider ${test.slider} → ${actual}m (expected ${test.expected}m) `;
+                output += `<span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span></div>`;
+            });
+            
+            output += `<div><strong>Overall: <span class="${allPassed ? 'pass' : 'fail'}">${allPassed ? 'PASS' : 'FAIL'}</span></strong></div>`;
+            results.innerHTML = output;
+        }
+
+        // Test 2: API Validation
+        function testAPIValidation() {
+            const results = document.getElementById('validation-test-results');
+            const testValues = [
+                {value: 0.1, expected: true},
+                {value: 1, expected: true},
+                {value: 50, expected: true},
+                {value: 100, expected: true},
+                {value: 500, expected: true},
+                {value: 1000, expected: true},
+                {value: 1001, expected: false},
+                {value: -10, expected: true},
+                {value: -11, expected: false}
+            ];
+            
+            let allPassed = true;
+            let output = '<h3>API Validation Results:</h3>';
+            
+            testValues.forEach(test => {
+                const actual = validateWaterLevel(test.value);
+                const passed = actual === test.expected;
+                allPassed = allPassed && passed;
+                
+                output += `<div>${test.value}m → ${actual ? 'Valid' : 'Invalid'} `;
+                output += `<span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span></div>`;
+            });
+            
+            output += `<div><strong>Overall: <span class="${allPassed ? 'pass' : 'fail'}">${allPassed ? 'PASS' : 'FAIL'}</span></strong></div>`;
+            results.innerHTML = output;
+        }
+
+        // Test 3: Vibe System
+        function testVibeSystem() {
+            const results = document.getElementById('color-test-results');
+            const testValues = [
+                {water: 1, expected: 'Normal'},
+                {water: 3, expected: 'Concerning'},
+                {water: 10, expected: 'Dangerous'},
+                {water: 50, expected: 'EXTREME'},
+                {water: 500, expected: 'APOCALYPTIC'}
+            ];
+            
+            let allPassed = true;
+            let output = '<h3>Vibe System Results:</h3>';
+            
+            testValues.forEach(test => {
+                const testElement = document.createElement('span');
+                updateWaterLevelVibe(test.water, testElement);
+                const actual = testElement.textContent;
+                const passed = actual === test.expected;
+                allPassed = allPassed && passed;
+                
+                output += `<div>${test.water}m → "${actual}" `;
+                output += `<span class="${passed ? 'pass' : 'fail'}">${passed ? 'PASS' : 'FAIL'}</span></div>`;
+            });
+            
+            output += `<div><strong>Overall: <span class="${allPassed ? 'pass' : 'fail'}">${allPassed ? 'PASS' : 'FAIL'}</span></strong></div>`;
+            results.innerHTML = output;
+        }
+
+        // Test 4: Extreme Scenarios
+        function testExtremeScenarios() {
+            const results = document.getElementById('extreme-test-results');
+            let output = '<h3>Extreme Scenarios:</h3>';
+            
+            // Test "drown all of USA" scenario
+            const usaScenario = sliderToWaterLevel(100); // Max slider
+            const usaValid = validateWaterLevel(usaScenario);
+            
+            output += `<div><strong>"Drown all of USA" scenario:</strong></div>`;
+            output += `<div>Max slider (100) → ${usaScenario}m water level</div>`;
+            output += `<div>API accepts this level: <span class="${usaValid ? 'pass' : 'fail'}">${usaValid ? 'YES' : 'NO'}</span></div>`;
+            
+            // Test realistic vs extreme range
+            const realistic = sliderToWaterLevel(30); // Default
+            const extreme = sliderToWaterLevel(90);
+            
+            output += `<div><strong>Range Test:</strong></div>`;
+            output += `<div>Realistic flooding (slider 30): ${realistic}m</div>`;
+            output += `<div>Extreme flooding (slider 90): ${extreme}m</div>`;
+            output += `<div>Range ratio: ${Math.round(extreme/realistic)}x difference</div>`;
+            
+            results.innerHTML = output;
+        }
+
+        // Setup interactive slider
+        const testSlider = document.getElementById('test-slider');
+        const testDisplay = document.getElementById('test-display');
+        const testVibe = document.getElementById('test-vibe');
+        
+        testSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat(e.target.value);
+            const waterLevel = sliderToWaterLevel(sliderValue);
+            
+            testDisplay.textContent = waterLevel + 'm';
+            updateWaterLevelVibe(waterLevel, testVibe);
+        });
+
+        // Initialize
+        const initialWaterLevel = sliderToWaterLevel(30);
+        testDisplay.textContent = initialWaterLevel + 'm';
+        updateWaterLevelVibe(initialWaterLevel, testVibe);
+
+        // Run all tests
+        testSliderConversion();
+        testAPIValidation();
+        testVibeSystem();
+        testExtremeScenarios();
+    </script>
+</body>
+</html>

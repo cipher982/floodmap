@@ -96,10 +96,68 @@ header h1 {
     width: 100%;
 }
 
+#water-level-display-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+}
+
 #water-level-display {
     font-weight: bold;
     color: #1e40af;
     font-size: 0.9rem;
+    min-width: 60px;
+}
+
+#water-level-vibe {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Water level vibe styles */
+.vibe-normal {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.vibe-concerning {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.vibe-dangerous {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.vibe-extreme {
+    background: #f3e8ff;
+    color: #7c3aed;
+    animation: pulse 2s infinite;
+}
+
+.vibe-apocalyptic {
+    background: linear-gradient(45deg, #ef4444, #dc2626);
+    color: white;
+    animation: shake 0.5s infinite;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
 }
 
 button {
