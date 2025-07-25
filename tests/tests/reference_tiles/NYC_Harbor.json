@@ -1,0 +1,24 @@
+{
+  "tile": {
+    "name": "NYC Harbor",
+    "z": 11,
+    "x": 603,
+    "y": 770,
+    "water_level": 2.0,
+    "location": "New York Harbor",
+    "expected_type": "mixed"
+  },
+  "hash": "12da5fca6dc994578804ef0755adf35b",
+  "analysis": {
+    "width": 256,
+    "height": 256,
+    "is_rgba": true,
+    "total_pixels": 65536,
+    "transparent_pixels": 0,
+    "transparency_ratio": 0.0,
+    "unique_colors": 4,
+    "has_variation": true,
+    "is_solid_color": false
+  },
+  "created_at": 1753433365.527348
+}

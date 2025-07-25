@@ -1,0 +1,24 @@
+{
+  "tile": {
+    "name": "Miami Beach",
+    "z": 11,
+    "x": 559,
+    "y": 895,
+    "water_level": 1.5,
+    "location": "Miami Beach, FL",
+    "expected_type": "mixed"
+  },
+  "hash": "b6d26fdf37c197fcc38af5575a927ded",
+  "analysis": {
+    "width": 256,
+    "height": 256,
+    "is_rgba": true,
+    "total_pixels": 65536,
+    "transparent_pixels": 0,
+    "transparency_ratio": 0.0,
+    "unique_colors": 3,
+    "has_variation": true,
+    "is_solid_color": false
+  },
+  "created_at": 1753433366.01833
+}

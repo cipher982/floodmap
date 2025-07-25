@@ -1,0 +1,24 @@
+{
+  "tile": {
+    "name": "Manhattan",
+    "z": 12,
+    "x": 1206,
+    "y": 1540,
+    "water_level": 1.0,
+    "location": "Manhattan, NY",
+    "expected_type": "land"
+  },
+  "hash": "2043b5f2096843d3fd916891e83c0ff7",
+  "analysis": {
+    "width": 256,
+    "height": 256,
+    "is_rgba": true,
+    "total_pixels": 65536,
+    "transparent_pixels": 0,
+    "transparency_ratio": 0.0,
+    "unique_colors": 3,
+    "has_variation": true,
+    "is_solid_color": false
+  },
+  "created_at": 1753433365.6536698
+}
