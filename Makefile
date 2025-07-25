@@ -12,8 +12,13 @@ help:
 	@echo "🚀 Services:"
 	@echo "  make start    - Start tileserver + API server"
 	@echo "  make stop     - Stop all services"
-	@echo "  make test     - Test tile endpoints"
 	@echo "  make clean    - Clean up containers and processes"
+	@echo ""
+	@echo "🧪 Testing:"
+	@echo "  make test          - Basic endpoint tests"
+	@echo "  make test-visual   - Visual regression tests"
+	@echo "  make test-references - Save reference tiles"
+	@echo "  make test-all      - Run all tests"
 	@echo ""
 	@echo "🔧 Individual Services:"
 	@echo "  make tileserver - Start tileserver only"
@@ -76,6 +81,19 @@ test:
 	@curl -s http://localhost:8000/api/v1/tiles/elevation/10/286/387.png > /dev/null && echo "✅ Elevation tiles work" || echo "❌ Elevation tiles failing"
 	@echo "🌊 Testing flood tiles..."  
 	@curl -s http://localhost:8000/api/v1/tiles/flood/1.0/10/286/387.png > /dev/null && echo "✅ Flood tiles work" || echo "❌ Flood tiles failing"
+
+# Visual regression testing
+test-visual:
+	@echo "🎨 Running visual regression tests..."
+	@cd tests && uv run python visual_regression_test.py
+
+# Save reference tiles for visual testing
+test-references:
+	@echo "📸 Saving reference tiles..."
+	@cd tests && uv run python visual_regression_test.py --save-references
+
+# Full test suite
+test-all: test test-visual
 
 # Clean up everything
 clean:
