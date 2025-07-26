@@ -24,13 +24,18 @@ from tile_cache import tile_cache
 from error_handling import safe_tile_generation, log_performance, health_monitor
 from persistent_elevation_cache import persistent_elevation_cache
 from predictive_preloader import predictive_preloader
+from config import (
+    TILESERVER_URL,
+    ELEVATION_DIRS,
+    VECTOR_TILE_PATHS,
+    NODATA_VALUE,
+    MIN_WATER_LEVEL,
+    MAX_WATER_LEVEL,
+    MAX_ZOOM
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Configuration
-TILESERVER_PORT = os.getenv("TILESERVER_PORT", "8080")
-TILESERVER_URL = f"http://localhost:{TILESERVER_PORT}"
 
 # Thread pool for CPU-intensive tile generation
 CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tile-cpu")
@@ -58,7 +63,7 @@ def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> 
         rgba_array = color_mapper.elevation_array_to_rgba(
             elevation_data, 
             water_level,
-            no_data_value=-32768  # Common SRTM no-data value
+            no_data_value=NODATA_VALUE
         )
         
         # Convert to PIL Image
@@ -93,7 +98,7 @@ def generate_topographical_tile_sync(z: int, x: int, y: int) -> bytes:
         # Convert elevation to topographical colors (absolute elevation)
         rgba_array = color_mapper.elevation_array_to_topographical_rgba(
             elevation_data, 
-            no_data_value=-32768  # Common SRTM no-data value
+            no_data_value=NODATA_VALUE
         )
         
         # Convert to PIL Image
@@ -118,7 +123,7 @@ def generate_topographical_tile_sync(z: int, x: int, y: int) -> bytes:
 async def get_topographical_tile(z: int, x: int, y: int):
     """Generate topographical tiles showing absolute elevation colors."""
     # Input validation
-    if not (0 <= z <= 18 and 0 <= x < 2**z and 0 <= y < 2**z):
+    if not (0 <= z <= MAX_ZOOM and 0 <= x < 2**z and 0 <= y < 2**z):
         raise HTTPException(status_code=400, detail="Invalid tile coordinates")
     
     try:
@@ -172,7 +177,7 @@ def _transparent_tile_bytes() -> bytes:
 async def get_vector_tile(z: int, x: int, y: int):
     """Serve vector tiles from tileserver."""
     # Input validation
-    if not (0 <= z <= 18 and 0 <= x < 2**z and 0 <= y < 2**z):
+    if not (0 <= z <= MAX_ZOOM and 0 <= x < 2**z and 0 <= y < 2**z):
         raise HTTPException(status_code=400, detail="Invalid tile coordinates")
     
     # Proxy to tileserver with fallback logic
@@ -210,7 +215,7 @@ async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
     """Generate contextual flood risk tiles dynamically with async processing."""
     # No zoom restrictions - elevation data works at any zoom level
     
-    if not (-10 <= water_level <= 1000):  # Extended range for extreme scenarios
+    if not (MIN_WATER_LEVEL <= water_level <= MAX_WATER_LEVEL):
         raise HTTPException(status_code=400, detail="Invalid water level")
     
     try:
@@ -349,11 +354,7 @@ async def debug_coverage():
     import sqlite3
     
     # Check elevation data coverage
-    elevation_dirs = [
-        Path("/Users/davidrose/git/floodmap/compressed_data/usa"),
-        Path("/Users/davidrose/git/floodmap/compressed_data/usa_unified"),
-        Path("/Users/davidrose/git/floodmap/compressed_data/tampa")
-    ]
+    elevation_dirs = ELEVATION_DIRS
     
     elevation_coverage = {}
     for dir_path in elevation_dirs:
@@ -365,10 +366,7 @@ async def debug_coverage():
             }
     
     # Check vector tile coverage
-    vector_files = [
-        Path("/Users/davidrose/git/floodmap/map_data/usa-complete.mbtiles"),
-        Path("/Users/davidrose/git/floodmap/map_data/tampa.mbtiles")
-    ]
+    vector_files = VECTOR_TILE_PATHS
     
     vector_coverage = {}
     for file_path in vector_files:
@@ -402,7 +400,7 @@ async def debug_coverage():
         "vector_coverage": vector_coverage,
         "current_config": {
             "tileserver_url": TILESERVER_URL,
-            "elevation_zoom_range": "8-14",
+            "elevation_zoom_range": f"0-{MAX_ZOOM}",
             "vector_source": "usa-complete (primary), tampa (fallback)"
         }
     }
