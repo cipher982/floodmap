@@ -11,6 +11,8 @@ import numpy as np
 from pathlib import Path
 from typing import Optional, Tuple, Dict
 import logging
+import httpx
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,15 @@ class ElevationDataLoader:
         self.data_dir = Path(data_dir)
         self.cache = {}  # Simple in-memory cache for loaded tiles
         self.max_cache_size = 50  # Keep 50 elevation arrays in memory
+        
+    async def _check_vector_tile(self, xtile: int, ytile: int, zoom: int) -> bool:
+        """Check if vector tile exists for this location (indicates geographic features)."""
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(f"http://localhost:8080/data/usa-complete/{zoom}/{xtile}/{ytile}.pbf")
+                return response.status_code == 200 and len(response.content) > 100
+            except:
+                return False
         
     def deg2num(self, lat_deg: float, lon_deg: float, zoom: int) -> Tuple[int, int]:
         """Convert lat/lon to tile numbers using Web Mercator projection."""
@@ -150,7 +161,20 @@ class ElevationDataLoader:
         )
         
         if not overlapping_files:
-            raise FileNotFoundError(f"No elevation files found for tile {xtile}/{ytile}/{zoom}")
+            try:
+                # Check if vector tile exists (indicates geographic features)
+                loop = asyncio.get_event_loop()
+                has_vector_data = loop.run_until_complete(self._check_vector_tile(xtile, ytile, zoom))
+                
+                if has_vector_data:
+                    logger.warning(f"Missing elevation data for tile {xtile}/{ytile}/{zoom} with vector features (bounds: {lat_bottom:.3f}-{lat_top:.3f}N, {lon_left:.3f}-{lon_right:.3f}W) - potential data gap")
+                else:
+                    logger.debug(f"No elevation files for tile {xtile}/{ytile}/{zoom} (likely ocean area)")
+                    
+            except Exception as e:
+                logger.info(f"No elevation files found for tile {xtile}/{ytile}/{zoom} (bounds: {lat_bottom:.3f}-{lat_top:.3f}N, {lon_left:.3f}-{lon_right:.3f}W)")
+            
+            return None
         
         # Handle multiple overlapping files with proper mosaicking
         tile_data = self._mosaic_elevation_files(
