@@ -4,6 +4,8 @@ from datetime import datetime
 import os
 from pathlib import Path
 
+from config import ELEVATION_DATA_DIR, MAP_DATA_DIR, HEALTH_CHECK_DIRS
+
 # Import health monitor if available
 try:
     from error_handling import health_monitor
@@ -54,9 +56,8 @@ async def health_check():
             health_data["status"] = "unhealthy"
     
     # Check elevation data availability
-    elevation_data_dir = Path("/Users/davidrose/git/floodmap/compressed_data/usa")
-    if elevation_data_dir.exists():
-        elevation_files = list(elevation_data_dir.glob("*.zst"))
+    if ELEVATION_DATA_DIR.exists():
+        elevation_files = list(ELEVATION_DATA_DIR.glob("*.zst"))
         health_data["elevation_files_available"] = len(elevation_files)
     else:
         health_data["elevation_files_available"] = 0
@@ -64,10 +65,9 @@ async def health_check():
             health_data["status"] = "degraded"
     
     # Check map data availability
-    map_data_dir = Path("/Users/davidrose/git/floodmap/map_data")
-    if map_data_dir.exists():
-        mbtiles_files = list(map_data_dir.glob("*.mbtiles"))
-        regional_files = list((map_data_dir / "regions").glob("*.mbtiles")) if (map_data_dir / "regions").exists() else []
+    if MAP_DATA_DIR.exists():
+        mbtiles_files = list(MAP_DATA_DIR.glob("*.mbtiles"))
+        regional_files = list((MAP_DATA_DIR / "regions").glob("*.mbtiles")) if (MAP_DATA_DIR / "regions").exists() else []
         health_data["map_tiles_available"] = len(mbtiles_files) + len(regional_files)
     else:
         health_data["map_tiles_available"] = 0
@@ -131,10 +131,7 @@ def _get_disk_usage() -> dict:
     """Get disk usage for key directories."""
     usage = {}
     
-    key_dirs = [
-        "/Users/davidrose/git/floodmap/compressed_data",
-        "/Users/davidrose/git/floodmap/map_data"
-    ]
+    key_dirs = HEALTH_CHECK_DIRS
     
     for dir_path in key_dirs:
         if os.path.exists(dir_path):
