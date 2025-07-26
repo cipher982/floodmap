@@ -17,6 +17,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from collections import OrderedDict
 
+from config import ELEVATION_DATA_DIR
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -35,11 +37,11 @@ class PersistentElevationCache:
     """
     
     def __init__(self, 
-                 data_dir: str = "/Users/davidrose/git/floodmap/output/elevation",
+                 data_dir: Path = ELEVATION_DATA_DIR,
                  max_memory_gb: float = 4.0,  # Use up to 4GB for cache
                  preload_cores: int = None):
         
-        self.data_dir = Path(data_dir)
+        self.data_dir = data_dir
         self.max_memory_bytes = int(max_memory_gb * 1024 * 1024 * 1024)
         self.preload_cores = preload_cores or min(8, os.cpu_count())
         

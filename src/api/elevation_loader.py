@@ -14,23 +14,31 @@ import logging
 import httpx
 import asyncio
 
+from config import (
+    ELEVATION_DATA_DIR,
+    TILESERVER_URL,
+    ELEVATION_CACHE_SIZE,
+    NODATA_VALUE,
+    VECTOR_TILE_MIN_SIZE
+)
+
 logger = logging.getLogger(__name__)
 
 
 class ElevationDataLoader:
     """Load and query elevation data for tile generation."""
     
-    def __init__(self, data_dir: str = "/Users/davidrose/git/floodmap/output/elevation"):
-        self.data_dir = Path(data_dir)
+    def __init__(self, data_dir: Path = ELEVATION_DATA_DIR):
+        self.data_dir = data_dir
         self.cache = {}  # Simple in-memory cache for loaded tiles
-        self.max_cache_size = 50  # Keep 50 elevation arrays in memory
+        self.max_cache_size = ELEVATION_CACHE_SIZE
         
     async def _check_vector_tile(self, xtile: int, ytile: int, zoom: int) -> bool:
         """Check if vector tile exists for this location (indicates geographic features)."""
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.get(f"http://localhost:8080/data/usa-complete/{zoom}/{xtile}/{ytile}.pbf")
-                return response.status_code == 200 and len(response.content) > 100
+                response = await client.get(f"{TILESERVER_URL}/data/usa-complete/{zoom}/{xtile}/{ytile}.pbf")
+                return response.status_code == 200 and len(response.content) > VECTOR_TILE_MIN_SIZE
             except:
                 return False
         
@@ -206,7 +214,7 @@ class ElevationDataLoader:
         """
 
         # Prepare empty canvas (initialised with NoData)
-        canvas = np.full((tile_size, tile_size), -32768, dtype=np.int16)
+        canvas = np.full((tile_size, tile_size), NODATA_VALUE, dtype=np.int16)
 
         total_lat_span = lat_top - lat_bottom  # positive value
         total_lon_span = lon_right - lon_left  # positive value
@@ -286,13 +294,13 @@ class ElevationDataLoader:
             # is determined by find_elevation_files_for_tile which walks from
             # west→east and south→north, matching typical DEM priority rules)
             target_slice = canvas[y_top_dst:y_bottom_dst, x_left_dst:x_right_dst]
-            write_mask = (target_slice == -32768) & (sub_resized != -32768)
+            write_mask = (target_slice == NODATA_VALUE) & (sub_resized != NODATA_VALUE)
             target_slice[write_mask] = sub_resized[write_mask]
 
             canvas[y_top_dst:y_bottom_dst, x_left_dst:x_right_dst] = target_slice
 
         # Final sanity check ---------------------------------------------------
-        if np.all(canvas == -32768):
+        if np.all(canvas == NODATA_VALUE):
             raise ValueError("Mosaic result is entirely NoData for tile – DEM missing?")
 
         return canvas
