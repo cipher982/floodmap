@@ -23,22 +23,26 @@ from tile_cache import tile_cache
 from error_handling import safe_tile_generation, log_performance, health_monitor
 from persistent_elevation_cache import persistent_elevation_cache
 from predictive_preloader import predictive_preloader
+from config import (
+    TILESERVER_URL,
+    PROJECT_ROOT,
+    MIN_WATER_LEVEL,
+    MAX_WATER_LEVEL,
+    MAX_ZOOM,
+    MIN_ZOOM,
+    TILE_SIZE
+)
 
 router = APIRouter(prefix="/api/v1/tiles", tags=["tiles-v1"])
 logger = logging.getLogger(__name__)
-
-# Configuration
-TILESERVER_PORT = os.getenv("TILESERVER_PORT", "8080")
-TILESERVER_URL = f"http://localhost:{TILESERVER_PORT}"
 
 # Thread pool for CPU-intensive tile generation
 CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tile-cpu-v1")
 
 # Constants
-SUPPORTED_ZOOM_RANGE = (0, 18)
-SUPPORTED_WATER_LEVEL_RANGE = (-10.0, 50.0)
+SUPPORTED_ZOOM_RANGE = (MIN_ZOOM, MAX_ZOOM)
+SUPPORTED_WATER_LEVEL_RANGE = (MIN_WATER_LEVEL, MAX_WATER_LEVEL)
 MAX_CACHE_AGE = 3600  # 1 hour
-TILE_SIZE = 256
 
 def validate_tile_coordinates(z: int, x: int, y: int) -> None:
     """Validate tile coordinates according to TMS/XYZ standards."""
@@ -433,7 +437,7 @@ async def get_tiles_metadata():
     }
     
     # Query actual MBTiles files for vector tile metadata
-    mbtiles_path = Path("/Users/davidrose/git/floodmap/output/usa-complete.mbtiles")
+    mbtiles_path = PROJECT_ROOT / "output" / "usa-complete.mbtiles"
     
     if mbtiles_path.exists():
         try:
