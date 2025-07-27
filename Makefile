@@ -70,30 +70,14 @@ stop:
 	@pkill -f "uvicorn main:app" 2>/dev/null || true
 	@echo "✅ All services stopped"
 
-# Test endpoints
+# Testing
 test:
-	@echo "🧪 Testing flood map endpoints..."
-	@echo "🌐 Testing API server..."
-	@curl -s http://localhost:8000/api/v1/tiles/health > /dev/null && echo "✅ API server responds" || echo "❌ API server not responding"
-	@echo "🗺️ Testing vector tiles..."
-	@curl -s http://localhost:8000/api/v1/tiles/vector/usa/10/286/387.pbf > /dev/null && echo "✅ Vector tiles work" || echo "❌ Vector tiles failing"
-	@echo "🏔️ Testing elevation tiles..."
-	@curl -s http://localhost:8000/api/v1/tiles/elevation/10/286/387.png > /dev/null && echo "✅ Elevation tiles work" || echo "❌ Elevation tiles failing"
-	@echo "🌊 Testing flood tiles..."  
-	@curl -s http://localhost:8000/api/v1/tiles/flood/1.0/10/286/387.png > /dev/null && echo "✅ Flood tiles work" || echo "❌ Flood tiles failing"
+	@echo "🧪 Running unit tests..."
+	@uv run pytest tests/unit/ -v
 
-# Visual regression testing
-test-visual:
-	@echo "🎨 Running visual regression tests..."
-	@cd tests && uv run python visual_regression_test.py
-
-# Save reference tiles for visual testing
-test-references:
-	@echo "📸 Saving reference tiles..."
-	@cd tests && uv run python visual_regression_test.py --save-references
-
-# Full test suite
-test-all: test test-visual
+test-integration:
+	@echo "🔗 Running integration tests..."
+	@uv run pytest tests/integration/ tests/performance/ tests/e2e/ -v
 
 # Clean up everything
 clean:
