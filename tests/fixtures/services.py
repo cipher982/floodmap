@@ -12,7 +12,7 @@ from typing import Dict, Optional
 def service_urls():
     """URLs for test services."""
     return {
-        "app": "http://localhost:5001",
+        "app": "http://localhost:8001",
         "tileserver": "http://localhost:8080",
         "redis": "redis://localhost:6379"
     }

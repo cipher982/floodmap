@@ -14,7 +14,7 @@ async def test_homepage_loads(map_page: MapPage):
     
     # Check that the page title is correct
     title = await map_page.page.title()
-    assert "Flood Buddy" in title
+    assert "Flood Risk Map" in title
     
     # Check for main heading
     heading = await map_page.page.locator("h2").first.text_content()
@@ -125,7 +125,7 @@ async def test_flood_tile_generation(map_page: MapPage):
     ]
     
     for z, x, y in test_tiles:
-        response = await map_page.page.request.get(f"/flood_tiles/{water_level}/{z}/{x}/{y}")
+        response = await map_page.page.request.get(f"{map_page.page.base_url}/flood_tiles/{water_level}/{z}/{x}/{y}")
         
         # Should return either 200 (flood tile) or 204 (no flood in this tile)
         assert response.status in [200, 204], f"Unexpected status {response.status} for tile {z}/{x}/{y}"
@@ -170,15 +170,15 @@ async def test_error_handling(map_page: MapPage):
     await map_page.goto_homepage()
     
     # Test invalid tile request
-    response = await map_page.page.request.get("/tiles/99/999/999")
+    response = await map_page.page.request.get(f"{map_page.page.base_url}/tiles/99/999/999")
     assert response.status == 404
     
     # Test invalid flood tile request  
-    response = await map_page.page.request.get("/flood_tiles/invalid/10/100/100")
+    response = await map_page.page.request.get(f"{map_page.page.base_url}/flood_tiles/invalid/10/100/100")
     assert response.status in [400, 422]  # Bad request or validation error
     
     # Test out of bounds tile request
-    response = await map_page.page.request.get("/flood_tiles/10/10/99999/99999")
+    response = await map_page.page.request.get(f"{map_page.page.base_url}/flood_tiles/10/10/99999/99999")
     assert response.status == 400
 
 
