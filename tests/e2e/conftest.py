@@ -13,34 +13,48 @@ from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 # Application configuration
 APP_HOST = "localhost"
-APP_PORT = 5001
+APP_PORT = 8001  # Use different port for tests
 BASE_URL = f"http://{APP_HOST}:{APP_PORT}"
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def app_server():
     """Start the application server for testing."""
+    import os
+    
+    # Set environment for test server
+    env = os.environ.copy()
+    env["API_PORT"] = str(APP_PORT)
+    
     # Start the server process
     process = subprocess.Popen(
         ["uv", "run", "python", "main.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        cwd="/Users/davidrose/git/floodmap"
+        cwd="/Users/davidrose/git/floodmap/src/api",
+        env=env
     )
     
     # Wait for server to be ready
     max_retries = 30
-    for _ in range(max_retries):
+    for i in range(max_retries):
         try:
-            response = requests.get(f"{BASE_URL}/healthz", timeout=2)
+            response = requests.get(f"{BASE_URL}/api/health", timeout=2)
             if response.status_code == 200:
                 break
         except requests.exceptions.RequestException:
             time.sleep(1)
+        
+        # Check if process died
+        if process.poll() is not None:
+            stdout, stderr = process.communicate()
+            raise RuntimeError(f"Server process died: stdout={stdout}, stderr={stderr}")
     else:
+        stdout, stderr = process.communicate()
         process.terminate()
-        raise RuntimeError("Failed to start application server")
+        process.wait()
+        raise RuntimeError(f"Failed to start application server after {max_retries} tries: stdout={stdout}, stderr={stderr}")
     
     yield BASE_URL
     
@@ -49,7 +63,7 @@ def app_server():
     process.wait()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 async def browser():
     """Launch browser for testing."""
     playwright = await async_playwright().start()
@@ -82,6 +96,9 @@ async def page(context: BrowserContext, app_server: str) -> Page:
     page.base_url = app_server
     
     yield page
+    
+    # Ensure all connections are closed
+    await page.close()
 
 
 class MapPage:
@@ -92,7 +109,7 @@ class MapPage:
     
     async def goto_homepage(self):
         """Navigate to the application homepage."""
-        await self.page.goto("/")
+        await self.page.goto(self.page.base_url + "/")
         await self.page.wait_for_load_state("networkidle")
     
     async def wait_for_map_load(self):
@@ -169,7 +186,7 @@ class MapPage:
     async def get_flood_risk_data(self, water_level: float = 10.0):
         """Test flood risk endpoint."""
         # Navigate to risk endpoint
-        response = await self.page.request.get(f"/risk/{water_level}")
+        response = await self.page.request.get(f"{self.page.base_url}/risk/{water_level}")
         
         if response.status == 200:
             return await response.json()

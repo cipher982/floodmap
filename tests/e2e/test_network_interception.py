@@ -56,7 +56,7 @@ class TestNetworkInterception:
         
         # Load the page
         start_time = asyncio.get_event_loop().time()
-        await page.goto("http://localhost:5001/")
+        await page.goto("http://localhost:8001/")
         
         # Wait for initial load
         await page.wait_for_selector("#map", timeout=15000)
@@ -167,7 +167,7 @@ class TestNetworkInterception:
         page.on("console", handle_console)
         
         # Navigate and wait
-        await page.goto("http://localhost:5001/")
+        await page.goto("http://localhost:8001/")
         await page.wait_for_selector("#map")
         
         # Inject debugging JavaScript

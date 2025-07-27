@@ -124,7 +124,7 @@ async def test_flood_overlay_visual(map_page: MapPage):
 async def test_error_state_visual(map_page: MapPage):
     """Test visual rendering of error states."""
     # Navigate to a page that might show errors
-    await map_page.page.goto("/nonexistent")
+    await map_page.page.goto(f"{map_page.page.base_url}/nonexistent")
     
     # Take screenshot of error state
     screenshot = await map_page.page.screenshot(
@@ -139,7 +139,7 @@ async def test_error_state_visual(map_page: MapPage):
 async def test_loading_states_visual(map_page: MapPage):
     """Test visual rendering of loading states."""
     # Start loading the page but capture intermediate states
-    await map_page.page.goto("/")
+    await map_page.page.goto(f"{map_page.page.base_url}/")
     
     # Take screenshot during initial load
     screenshot1 = await map_page.page.screenshot(

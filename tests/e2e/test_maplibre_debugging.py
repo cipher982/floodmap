@@ -55,7 +55,7 @@ class TestMapLibreAutomated:
         
         # Navigate to the homepage
         print("🌐 Loading homepage...")
-        await page.goto("http://localhost:5001/")
+        await page.goto("http://localhost:8001/")
         
         # Wait for map to initialize
         print("⏳ Waiting for map initialization...")
@@ -108,7 +108,7 @@ class TestMapLibreAutomated:
         print("🔍 Analyzing MapLibre HTML generation...")
         
         # Navigate to homepage
-        await page.goto("http://localhost:5001/")
+        await page.goto("http://localhost:8001/")
         await page.wait_for_selector("#map")
         
         # Get the page content
@@ -172,7 +172,7 @@ class TestMapLibreAutomated:
         
         print("🔧 Testing JavaScript execution...")
         
-        await page.goto("http://localhost:5001/")
+        await page.goto("http://localhost:8001/")
         await page.wait_for_selector("#map")
         
         # Wait for MapLibre to load
@@ -238,7 +238,7 @@ class TestMapLibreAutomated:
         
         page.on("response", handle_response)
         
-        await page.goto("http://localhost:5001/")
+        await page.goto("http://localhost:8001/")
         await page.wait_for_selector("#map")
         
         # Wait for tile requests
