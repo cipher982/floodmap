@@ -13,7 +13,7 @@ from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 # Application configuration
 APP_HOST = "localhost"
-APP_PORT = 8001  # Use different port for tests
+APP_PORT = 8002  # Use different port for tests
 BASE_URL = f"http://{APP_HOST}:{APP_PORT}"
 
 
