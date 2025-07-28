@@ -1,35 +1,18 @@
 # Flood Map - Clean Pipeline + Services
-.PHONY: help start stop test tileserver website clean process-maps process-elevation
+.PHONY: help start stop test test-integration test-visual test-references test-all tileserver website clean process-maps process-elevation run
 
 # Default target
-help:
+help: ## Show this help
 	@echo "🌊 Flood Map - Clean Pipeline + Services:"
 	@echo ""
-	@echo "🏗️ Data Processing:"
-	@echo "  make process-maps     - Generate map tiles (use ZOOM=4 for test)"
-	@echo "  make process-elevation - Process elevation data"
-	@echo ""
-	@echo "🚀 Services:"
-	@echo "  make start    - Start tileserver + API server"
-	@echo "  make stop     - Stop all services"
-	@echo "  make clean    - Clean up containers and processes"
-	@echo ""
-	@echo "🧪 Testing:"
-	@echo "  make test          - Basic endpoint tests"
-	@echo "  make test-visual   - Visual regression tests"
-	@echo "  make test-references - Save reference tiles"
-	@echo "  make test-all      - Run all tests"
-	@echo ""
-	@echo "🔧 Individual Services:"
-	@echo "  make tileserver - Start tileserver only"
-	@echo "  make website    - Start API server only"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "💡 Examples:"
 	@echo "  make process-maps ZOOM=4   # Quick test"
 	@echo "  make process-maps ZOOM=12  # Production"
 
 # Main command - start everything
-start:
+start: ## 🚀 Start tileserver + API server
 	@echo "🚀 Starting flood map services..."
 	@$(MAKE) tileserver
 	@echo "⏳ Waiting for tileserver..."
@@ -38,7 +21,7 @@ start:
 	@cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 # Start tileserver with static config (no dynamic generation)
-tileserver:
+tileserver: ## 🔧 Start tileserver only
 	@echo "🚀 Starting tileserver on port 8080..."
 	@# Stop existing container if running
 	@docker stop tileserver-local 2>/dev/null || true
@@ -57,13 +40,13 @@ tileserver:
 		maptiler/tileserver-gl
 
 # Start API server only
-website:
+website: ## 🔧 Start API server only
 	@echo "🌐 Starting API server at http://localhost:8000"
 	@echo "💡 Make sure tileserver is running: make tileserver"
 	@cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 # Stop all services
-stop:
+stop: ## 🛑 Stop all services
 	@echo "🛑 Stopping all services..."
 	@docker stop tileserver-local 2>/dev/null || true
 	@docker rm tileserver-local 2>/dev/null || true
@@ -71,16 +54,16 @@ stop:
 	@echo "✅ All services stopped"
 
 # Testing
-test:
+test: ## 🧪 Run basic endpoint tests
 	@echo "🧪 Running unit tests..."
 	@uv run pytest tests/unit/ -v
 
-test-integration:
+test-integration: ## 🔗 Run integration, performance, and E2E tests
 	@echo "🔗 Running integration tests..."
 	@uv run pytest tests/integration/ tests/performance/ tests/e2e/ -v
 
 # Clean up everything
-clean:
+clean: ## 🧹 Clean up containers and processes
 	@echo "🧹 Cleaning up containers and processes..."
 	@docker stop tileserver-local 2>/dev/null || true
 	@docker rm tileserver-local 2>/dev/null || true
@@ -89,13 +72,13 @@ clean:
 	@echo "✅ Cleanup complete"
 
 # Data processing pipelines
-process-maps:
+process-maps: ## 🗺️ Generate map tiles (use ZOOM=4 for test)
 	@echo "🗺️ Processing USA map tiles..."
 	@cd src && uv run python process_maps_usa.py --maxzoom=$(or $(ZOOM),8)
 
-process-elevation:
+process-elevation: ## 🏔️ Process elevation data
 	@echo "🏔️ Processing elevation data..."
 	@cd src && uv run python process_elevation_usa.py --input /Volumes/Storage/floodmap-archive/elevation-raw --output ../output/elevation --workers 12
 
 # Legacy compatibility
-run: start
+run: start ## 🚀 Legacy alias for start
