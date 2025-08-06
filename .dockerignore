@@ -1,0 +1,48 @@
+# Docker ignore file - excludes files from Docker build context
+
+# Data directories (mounted as volumes instead)
+output/elevation/
+output/*.mbtiles
+
+# Development files
+.git/
+.env
+.pytest_cache/
+.venv/
+*.pyc
+__pycache__/
+.DS_Store
+
+# Debug and temporary files
+debug/
+debug_*.py
+temp_*/
+*.tmp
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+*.md
+docs/
+
+# Test files
+tests/
+pytest.ini
+
+# Scripts not needed in container
+scripts/
+utils/
+
+# Archive data
+ARCHIVED_DATA/
+srtm_missing_tiles/
+
+# Build artifacts
+*.egg-info/
+build/
+dist/

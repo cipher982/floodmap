@@ -8,38 +8,14 @@ version = "0.1.0"
 description = "floodmap based on your location"
 readme = "README.md"
 requires-python = ">=3.12"
+# Core dependencies for API serving (minimal runtime)
 dependencies = [
-    "diskcache>=5.6.3",
-    "folium>=0.17.0",
-    "geopy>=2.4.1",
-    "googlemaps>=4.10.0",
-    "ipykernel>=6.29.5",
-    "matplotlib>=3.9.2",
-    "numpy>=2.1.2",
-    "pyproj>=3.7.0",
-    "python-fasthtml>=0.6.9",
-    "rasterio>=1.4.1",
-    "scipy>=1.14.1",
-    "tqdm>=4.66.5",
-    "s3fs>=2024.3.1",
-    "prometheus-client>=0.20.0",
-    "redis>=5.0.4",
-    "Pillow>=10.3.0",
-    "psutil>=5.9.0",
-    "aiofiles>=23.0.0",
-    "httpx>=0.25.0",
-    "httptools @ git+https://github.com/MagicStack/httptools",
-    "cryptography<46",
-    "setuptools>=69.0.0",
-    "wheel>=0.43.0",
-    "playwright>=1.53.0",
-    "pytest-playwright>=0.7.0",
-    "lz4>=4.4.4",
-    "zstandard>=0.23.0",
     "fastapi>=0.116.1",
     "uvicorn>=0.30.0",
-    "pytest-asyncio>=1.0.0",
-    "gdal==3.10.0",
+    "numpy>=2.1.2",
+    "Pillow>=10.3.0",
+    "zstandard>=0.23.0",
+    "httpx>=0.25.0",
     "python-dotenv>=1.0.0",
     "opentelemetry-api>=1.20.0",
     "opentelemetry-sdk>=1.20.0",
@@ -49,12 +25,42 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Data processing dependencies (for offline data preparation)
+processing = [
+    "gdal==3.10.0",
+    "rasterio>=1.4.1",
+    "pyproj>=3.7.0",
+    "matplotlib>=3.9.2",
+    "scipy>=1.14.1",
+    "tqdm>=4.66.5",
+    "s3fs>=2024.3.1",
+]
+
+# Development dependencies (notebooks, analysis, etc.)
+dev = [
+    "diskcache>=5.6.3",
+    "folium>=0.17.0",
+    "geopy>=2.4.1",
+    "googlemaps>=4.10.0",
+    "ipykernel>=6.29.5",
+    "python-fasthtml>=0.6.9",
+    "redis>=5.0.4",
+    "aiofiles>=23.0.0",
+    "httptools>=0.6.0",
+    "cryptography<46",
+    "setuptools>=69.0.0",
+    "wheel>=0.43.0",
+    "lz4>=4.4.4",
+    "prometheus-client>=0.20.0",
+]
+
+# Testing dependencies
 test = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.0.0",
-    "fastapi>=0.104.0",
-    "httpx>=0.25.0",
+    "playwright>=1.53.0",
+    "pytest-playwright>=0.7.0",
 ]
 
 [tool.setuptools]

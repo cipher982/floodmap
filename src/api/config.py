@@ -17,7 +17,7 @@ COMPRESSED_DATA_DIR = PROJECT_ROOT / os.getenv("COMPRESSED_DATA_DIR", "compresse
 MAP_DATA_DIR = PROJECT_ROOT / os.getenv("MAP_DATA_DIR", "map_data")
 
 # Server configuration
-API_PORT = int(os.getenv("API_PORT", "5003"))
+API_PORT = int(os.getenv("API_PORT", "8000"))
 TILESERVER_PORT = int(os.getenv("TILESERVER_PORT", "8080"))
 FRONTEND_PORT = int(os.getenv("FRONTEND_PORT", "3000"))
 TILESERVER_URL = os.getenv("TILESERVER_URL", f"http://localhost:{TILESERVER_PORT}")

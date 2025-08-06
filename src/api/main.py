@@ -92,7 +92,7 @@ if __name__ == "__main__":
     import os
     
     # Get port from environment or use default
-    port = int(os.getenv("API_PORT", "5002"))
+    port = int(os.getenv("API_PORT", "8000"))
     
     uvicorn.run(
         "main:app",

@@ -1,0 +1,80 @@
+services:
+  # Map tile server
+  tileserver:
+    image: maptiler/tileserver-gl:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
+    ports:
+      # Expose port only if TILESERVER_PORT is set (for local dev)
+      - "${TILESERVER_PORT:-}:8080"
+    volumes:
+      - ${MAP_DATA_PATH:-./output}:/data:ro
+      - ${MAP_DATA_PATH:-./output}/config.json:/config.json:ro
+    environment:
+      - TILESERVER_CONFIG=/config.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # FloodMap API server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-api
+    ports:
+      # Expose port only if API_EXTERNAL_PORT is set (for local dev)
+      - "${API_EXTERNAL_PORT:-}:8000"
+    volumes:
+      # Mount elevation data (path configurable via env)
+      - ${ELEVATION_DATA_PATH:-./output/elevation}:/app/output/elevation:ro
+      # Mount cache directory
+      - api-cache:/cache
+    environment:
+      # Core app config
+      - API_PORT=8000
+      - TILESERVER_URL=http://tileserver:8080
+      - PROJECT_ROOT=/app
+      - ELEVATION_DATA_DIR=output/elevation
+      
+      # Performance tuning (configurable)
+      - ELEVATION_CACHE_SIZE=${ELEVATION_CACHE_SIZE:-100}
+      - TILE_CACHE_SIZE=${TILE_CACHE_SIZE:-2000}
+      
+      # Environment and monitoring
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION=${OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION:-}
+      
+      # System settings
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - tileserver
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    # Production security (only when ENVIRONMENT=production)
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits (configurable)
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT:-2G}
+          cpus: ${CPU_LIMIT:-1.0}
+
+volumes:
+  api-cache:
+    driver: local
+
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME:-floodmap}-network
