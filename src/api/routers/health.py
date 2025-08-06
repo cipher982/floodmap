@@ -119,13 +119,17 @@ async def detailed_status():
     }
 
 def _get_memory_usage() -> float:
-    """Get current memory usage in MB."""
+    """Get current memory usage in MB from /proc/self/status."""
     try:
-        import psutil
-        process = psutil.Process()
-        return process.memory_info().rss / 1024 / 1024
-    except ImportError:
-        return 0.0
+        with open('/proc/self/status', 'r') as f:
+            for line in f:
+                if line.startswith('VmRSS:'):
+                    # Extract memory in kB, convert to MB
+                    memory_kb = int(line.split()[1])
+                    return memory_kb / 1024
+    except (FileNotFoundError, ValueError, IndexError):
+        pass
+    return 0.0
 
 def _get_disk_usage() -> dict:
     """Get disk usage for key directories."""
@@ -149,12 +153,31 @@ def _get_disk_usage() -> dict:
     return usage
 
 def _get_system_load() -> dict:
-    """Get system load information."""
+    """Get system load information from /proc."""
+    load_info = {}
+    
+    # Get load average
     try:
-        import psutil
-        return {
-            "cpu_percent": psutil.cpu_percent(interval=1),
-            "memory_percent": psutil.virtual_memory().percent
-        }
-    except ImportError:
-        return {}
+        with open('/proc/loadavg', 'r') as f:
+            load_avg = f.read().strip().split()
+            load_info["load_1m"] = float(load_avg[0])
+    except (FileNotFoundError, ValueError, IndexError):
+        pass
+        
+    # Get memory info
+    try:
+        with open('/proc/meminfo', 'r') as f:
+            meminfo = {}
+            for line in f:
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    meminfo[key.strip()] = value.strip()
+            
+            total_kb = int(meminfo['MemTotal'].split()[0])
+            available_kb = int(meminfo['MemAvailable'].split()[0])
+            used_percent = ((total_kb - available_kb) / total_kb) * 100
+            load_info["memory_percent"] = round(used_percent, 1)
+    except (FileNotFoundError, ValueError, KeyError, IndexError):
+        pass
+        
+    return load_info

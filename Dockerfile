@@ -1,66 +1,46 @@
-FROM ghcr.io/osgeo/gdal:alpine-latest
+FROM python:3.12-alpine
 
 # Prevent python from writing .pyc files and enable unbuffered output
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 # ----------------------------------------------------------------------
-# OS dependencies
+# Install system dependencies and uv
 # ----------------------------------------------------------------------
 RUN apk add --no-cache \
-    build-base \
-    python3-dev \
-    py3-pip \
     curl \
-    bash
-
-# Upgrade pip first
-RUN pip install --upgrade pip
+    bash && \
+    pip install --no-cache-dir uv
 
 # ----------------------------------------------------------------------
-# Copy application source
+# Setup application directory and copy project files
 # ----------------------------------------------------------------------
 WORKDIR /app
-COPY . /app
+
+# Copy uv project files first for better Docker layer caching
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies using uv (only core serving dependencies)
+RUN uv sync --frozen --no-dev
+
+# Copy application source code
+COPY src/ ./src/
 
 # ----------------------------------------------------------------------
-# Install Python dependencies (pin versions to match pyproject.toml)
+# Application environment variables for serving
 # ----------------------------------------------------------------------
-RUN pip install --no-cache-dir \
-    diskcache==5.6.3 \
-    folium==0.17.0 \
-    geopy==2.4.1 \
-    googlemaps==4.10.0 \
-    ipykernel==6.29.5 \
-    matplotlib==3.9.2 \
-    numpy==2.1.2 \
-    pyproj==3.7.0 \
-    python-fasthtml==0.6.9 \
-    rasterio==1.4.1 \
-    scipy==1.14.1 \
-    tqdm==4.66.5 \
-    s3fs==2024.3.1 \
-    prometheus-client==0.20.0 \
-    redis==5.0.4 \
-    Pillow==10.3.0 \
-    fastapi==0.110.0 \
-    uvicorn==0.29.0 \
-    requests==2.31.0 \
-    python-dotenv==1.0.1
-
-# ----------------------------------------------------------------------
-# Application environment variables
-# ----------------------------------------------------------------------
-ENV PROCESSED_DIR=/data/processed \
-    INPUT_DIR=/data/input \
-    COLOR_RAMP=/app/scripts/color_ramp.txt \
+ENV PROJECT_ROOT=/app \
+    ELEVATION_DATA_DIR=output/elevation \
     CACHE_DIR=/cache
 
 # Create required directories
-RUN mkdir -p ${PROCESSED_DIR} ${INPUT_DIR} ${CACHE_DIR}
+RUN mkdir -p ${CACHE_DIR}
 
 # Expose API port
-EXPOSE 5001
+EXPOSE 8000
 
-# Default command
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5001"]
+# Change to API directory for relative imports
+WORKDIR /app/src/api
+
+# Use uv to run the application
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

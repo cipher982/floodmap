@@ -7,7 +7,6 @@ import os
 import json
 import time
 import threading
-import psutil
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 import numpy as np

@@ -612,19 +612,8 @@ name = "floodmap"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "aiofiles" },
-    { name = "cryptography" },
-    { name = "diskcache" },
     { name = "fastapi" },
-    { name = "folium" },
-    { name = "gdal" },
-    { name = "geopy" },
-    { name = "googlemaps" },
-    { name = "httptools" },
     { name = "httpx" },
-    { name = "ipykernel" },
-    { name = "lz4" },
-    { name = "matplotlib" },
     { name = "numpy" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -632,51 +621,60 @@ dependencies = [
     { name = "opentelemetry-instrumentation-requests" },
     { name = "opentelemetry-sdk" },
     { name = "pillow" },
-    { name = "playwright" },
-    { name = "prometheus-client" },
-    { name = "psutil" },
-    { name = "pyproj" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-playwright" },
     { name = "python-dotenv" },
-    { name = "python-fasthtml" },
-    { name = "rasterio" },
-    { name = "redis" },
-    { name = "s3fs" },
-    { name = "scipy" },
-    { name = "setuptools" },
-    { name = "tqdm" },
     { name = "uvicorn" },
-    { name = "wheel" },
     { name = "zstandard" },
 ]
 
 [package.optional-dependencies]
+dev = [
+    { name = "aiofiles" },
+    { name = "cryptography" },
+    { name = "diskcache" },
+    { name = "folium" },
+    { name = "geopy" },
+    { name = "googlemaps" },
+    { name = "httptools" },
+    { name = "ipykernel" },
+    { name = "lz4" },
+    { name = "prometheus-client" },
+    { name = "python-fasthtml" },
+    { name = "redis" },
+    { name = "setuptools" },
+    { name = "wheel" },
+]
+processing = [
+    { name = "gdal" },
+    { name = "matplotlib" },
+    { name = "pyproj" },
+    { name = "rasterio" },
+    { name = "s3fs" },
+    { name = "scipy" },
+    { name = "tqdm" },
+]
 test = [
-    { name = "fastapi" },
-    { name = "httpx" },
+    { name = "playwright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
+    { name = "pytest-playwright" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "aiofiles", specifier = ">=23.0.0" },
-    { name = "cryptography", specifier = "<46" },
-    { name = "diskcache", specifier = ">=5.6.3" },
+    { name = "aiofiles", marker = "extra == 'dev'", specifier = ">=23.0.0" },
+    { name = "cryptography", marker = "extra == 'dev'", specifier = "<46" },
+    { name = "diskcache", marker = "extra == 'dev'", specifier = ">=5.6.3" },
     { name = "fastapi", specifier = ">=0.116.1" },
-    { name = "fastapi", marker = "extra == 'test'", specifier = ">=0.104.0" },
-    { name = "folium", specifier = ">=0.17.0" },
-    { name = "gdal", specifier = "==3.10.0" },
-    { name = "geopy", specifier = ">=2.4.1" },
-    { name = "googlemaps", specifier = ">=4.10.0" },
-    { name = "httptools", git = "https://github.com/MagicStack/httptools" },
+    { name = "folium", marker = "extra == 'dev'", specifier = ">=0.17.0" },
+    { name = "gdal", marker = "extra == 'processing'", specifier = "==3.10.0" },
+    { name = "geopy", marker = "extra == 'dev'", specifier = ">=2.4.1" },
+    { name = "googlemaps", marker = "extra == 'dev'", specifier = ">=4.10.0" },
+    { name = "httptools", marker = "extra == 'dev'", specifier = ">=0.6.0" },
     { name = "httpx", specifier = ">=0.25.0" },
-    { name = "httpx", marker = "extra == 'test'", specifier = ">=0.25.0" },
-    { name = "ipykernel", specifier = ">=6.29.5" },
-    { name = "lz4", specifier = ">=4.4.4" },
-    { name = "matplotlib", specifier = ">=3.9.2" },
+    { name = "ipykernel", marker = "extra == 'dev'", specifier = ">=6.29.5" },
+    { name = "lz4", marker = "extra == 'dev'", specifier = ">=4.4.4" },
+    { name = "matplotlib", marker = "extra == 'processing'", specifier = ">=3.9.2" },
     { name = "numpy", specifier = ">=2.1.2" },
     { name = "opentelemetry-api", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.20.0" },
@@ -684,28 +682,26 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-requests", specifier = ">=0.41b0" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
     { name = "pillow", specifier = ">=10.3.0" },
-    { name = "playwright", specifier = ">=1.53.0" },
-    { name = "prometheus-client", specifier = ">=0.20.0" },
-    { name = "psutil", specifier = ">=5.9.0" },
-    { name = "pyproj", specifier = ">=3.7.0" },
+    { name = "playwright", marker = "extra == 'test'", specifier = ">=1.53.0" },
+    { name = "prometheus-client", marker = "extra == 'dev'", specifier = ">=0.20.0" },
+    { name = "pyproj", marker = "extra == 'processing'", specifier = ">=3.7.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0.0" },
-    { name = "pytest-asyncio", specifier = ">=1.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.23.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0" },
-    { name = "pytest-playwright", specifier = ">=0.7.0" },
+    { name = "pytest-playwright", marker = "extra == 'test'", specifier = ">=0.7.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "python-fasthtml", specifier = ">=0.6.9" },
-    { name = "rasterio", specifier = ">=1.4.1" },
-    { name = "redis", specifier = ">=5.0.4" },
-    { name = "s3fs", specifier = ">=2024.3.1" },
-    { name = "scipy", specifier = ">=1.14.1" },
-    { name = "setuptools", specifier = ">=69.0.0" },
-    { name = "tqdm", specifier = ">=4.66.5" },
+    { name = "python-fasthtml", marker = "extra == 'dev'", specifier = ">=0.6.9" },
+    { name = "rasterio", marker = "extra == 'processing'", specifier = ">=1.4.1" },
+    { name = "redis", marker = "extra == 'dev'", specifier = ">=5.0.4" },
+    { name = "s3fs", marker = "extra == 'processing'", specifier = ">=2024.3.1" },
+    { name = "scipy", marker = "extra == 'processing'", specifier = ">=1.14.1" },
+    { name = "setuptools", marker = "extra == 'dev'", specifier = ">=69.0.0" },
+    { name = "tqdm", marker = "extra == 'processing'", specifier = ">=4.66.5" },
     { name = "uvicorn", specifier = ">=0.30.0" },
-    { name = "wheel", specifier = ">=0.43.0" },
+    { name = "wheel", marker = "extra == 'dev'", specifier = ">=0.43.0" },
     { name = "zstandard", specifier = ">=0.23.0" },
 ]
-provides-extras = ["test"]
+provides-extras = ["processing", "dev", "test"]
 
 [[package]]
 name = "folium"
@@ -922,8 +918,25 @@ wheels = [
 
 [[package]]
 name = "httptools"
-version = "0.7.0.dev0"
-source = { git = "https://github.com/MagicStack/httptools#922f366068f3a0b505cdfd22ff51c4c457e8e6df" }
+version = "0.6.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/9a/ce5e1f7e131522e6d3426e8e7a490b3a01f39a6696602e1c4f33f9e94277/httptools-0.6.4.tar.gz", hash = "sha256:4e93eee4add6493b59a5c514da98c939b244fce4a0d8879cd3f466562f4b7d5c", size = 240639, upload-time = "2024-10-16T19:45:08.902Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bb/0e/d0b71465c66b9185f90a091ab36389a7352985fe857e352801c39d6127c8/httptools-0.6.4-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:df017d6c780287d5c80601dafa31f17bddb170232d85c066604d8558683711a2", size = 200683, upload-time = "2024-10-16T19:44:30.175Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/b8/412a9bb28d0a8988de3296e01efa0bd62068b33856cdda47fe1b5e890954/httptools-0.6.4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:85071a1e8c2d051b507161f6c3e26155b5c790e4e28d7f236422dbacc2a9cc44", size = 104337, upload-time = "2024-10-16T19:44:31.786Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/01/6fb20be3196ffdc8eeec4e653bc2a275eca7f36634c86302242c4fbb2760/httptools-0.6.4-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:69422b7f458c5af875922cdb5bd586cc1f1033295aa9ff63ee196a87519ac8e1", size = 508796, upload-time = "2024-10-16T19:44:32.825Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/d8/b644c44acc1368938317d76ac991c9bba1166311880bcc0ac297cb9d6bd7/httptools-0.6.4-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:16e603a3bff50db08cd578d54f07032ca1631450ceb972c2f834c2b860c28ea2", size = 510837, upload-time = "2024-10-16T19:44:33.974Z" },
+    { url = "https://files.pythonhosted.org/packages/52/d8/254d16a31d543073a0e57f1c329ca7378d8924e7e292eda72d0064987486/httptools-0.6.4-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:ec4f178901fa1834d4a060320d2f3abc5c9e39766953d038f1458cb885f47e81", size = 485289, upload-time = "2024-10-16T19:44:35.111Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/3c/4aee161b4b7a971660b8be71a92c24d6c64372c1ab3ae7f366b3680df20f/httptools-0.6.4-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:f9eb89ecf8b290f2e293325c646a211ff1c2493222798bb80a530c5e7502494f", size = 489779, upload-time = "2024-10-16T19:44:36.253Z" },
+    { url = "https://files.pythonhosted.org/packages/12/b7/5cae71a8868e555f3f67a50ee7f673ce36eac970f029c0c5e9d584352961/httptools-0.6.4-cp312-cp312-win_amd64.whl", hash = "sha256:db78cb9ca56b59b016e64b6031eda5653be0589dba2b1b43453f6e8b405a0970", size = 88634, upload-time = "2024-10-16T19:44:37.357Z" },
+    { url = "https://files.pythonhosted.org/packages/94/a3/9fe9ad23fd35f7de6b91eeb60848986058bd8b5a5c1e256f5860a160cc3e/httptools-0.6.4-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:ade273d7e767d5fae13fa637f4d53b6e961fb7fd93c7797562663f0171c26660", size = 197214, upload-time = "2024-10-16T19:44:38.738Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/d9/82d5e68bab783b632023f2fa31db20bebb4e89dfc4d2293945fd68484ee4/httptools-0.6.4-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:856f4bc0478ae143bad54a4242fccb1f3f86a6e1be5548fecfd4102061b3a083", size = 102431, upload-time = "2024-10-16T19:44:39.818Z" },
+    { url = "https://files.pythonhosted.org/packages/96/c1/cb499655cbdbfb57b577734fde02f6fa0bbc3fe9fb4d87b742b512908dff/httptools-0.6.4-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:322d20ea9cdd1fa98bd6a74b77e2ec5b818abdc3d36695ab402a0de8ef2865a3", size = 473121, upload-time = "2024-10-16T19:44:41.189Z" },
+    { url = "https://files.pythonhosted.org/packages/af/71/ee32fd358f8a3bb199b03261f10921716990808a675d8160b5383487a317/httptools-0.6.4-cp313-cp313-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4d87b29bd4486c0093fc64dea80231f7c7f7eb4dc70ae394d70a495ab8436071", size = 473805, upload-time = "2024-10-16T19:44:42.384Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/0a/0d4df132bfca1507114198b766f1737d57580c9ad1cf93c1ff673e3387be/httptools-0.6.4-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:342dd6946aa6bda4b8f18c734576106b8a31f2fe31492881a9a160ec84ff4bd5", size = 448858, upload-time = "2024-10-16T19:44:43.959Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/6a/787004fdef2cabea27bad1073bf6a33f2437b4dbd3b6fb4a9d71172b1c7c/httptools-0.6.4-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:4b36913ba52008249223042dca46e69967985fb4051951f94357ea681e1f5dc0", size = 452042, upload-time = "2024-10-16T19:44:45.071Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/dc/7decab5c404d1d2cdc1bb330b1bf70e83d6af0396fd4fc76fc60c0d522bf/httptools-0.6.4-cp313-cp313-win_amd64.whl", hash = "sha256:28908df1b9bb8187393d5b5db91435ccc9c8e891657f9cbb42a2541b44c82fc8", size = 87682, upload-time = "2024-10-16T19:44:46.46Z" },
+]
 
 [[package]]
 name = "httpx"
