@@ -21,6 +21,56 @@ from opentelemetry.sdk.resources import Resource
 # Load environment variables from .env file
 load_dotenv()
 
+# Critical data validation on startup
+def validate_critical_data():
+    """Validate that all critical data files exist and are accessible."""
+    from pathlib import Path
+    import sys
+    
+    project_root = Path(os.getenv("PROJECT_ROOT", "/Users/davidrose/git/floodmap"))
+    elevation_dir = project_root / "output" / "elevation"
+    mbtiles_file = project_root / "output" / "usa-complete.mbtiles"
+    
+    errors = []
+    warnings = []
+    
+    # Check elevation data directory
+    if not elevation_dir.exists():
+        errors.append(f"CRITICAL: Elevation data directory missing: {elevation_dir}")
+    else:
+        elevation_files = list(elevation_dir.glob("*.zst"))
+        if len(elevation_files) < 1000:  # Should have 2000+ files
+            errors.append(f"CRITICAL: Insufficient elevation files: {len(elevation_files)} (expected 2000+)")
+        elif len(elevation_files) < 2000:
+            warnings.append(f"WARNING: Low elevation file count: {len(elevation_files)} (expected 2000+)")
+    
+    # Check MBTiles file
+    if not mbtiles_file.exists():
+        errors.append(f"CRITICAL: MBTiles file missing: {mbtiles_file}")
+    else:
+        size_gb = mbtiles_file.stat().st_size / (1024**3)
+        if size_gb < 1.0:  # Should be ~1.6GB
+            errors.append(f"CRITICAL: MBTiles file too small: {size_gb:.1f}GB (expected ~1.6GB)")
+    
+    # Log results
+    if errors:
+        print("🚨 STARTUP VALIDATION FAILED:")
+        for error in errors:
+            print(f"  ❌ {error}")
+        if warnings:
+            for warning in warnings:
+                print(f"  ⚠️  {warning}")
+        print("\n💡 This explains performance issues and incorrect behavior!")
+        print("   Check your .dockerignore and Dockerfile COPY statements.")
+        sys.exit(1)
+    
+    if warnings:
+        print("⚠️  STARTUP WARNINGS:")
+        for warning in warnings:
+            print(f"  {warning}")
+    
+    print("✅ Data validation passed - all critical files present")
+
 # Configure OpenTelemetry
 def configure_telemetry():
     """Configure OpenTelemetry with ClickHouse backend."""
@@ -51,6 +101,9 @@ def configure_telemetry():
 
 # Initialize telemetry
 configure_telemetry()
+
+# Validate critical data on startup
+validate_critical_data()
 
 # Import routers
 from routers import tiles, tiles_v1, risk, health
