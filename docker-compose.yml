@@ -29,8 +29,8 @@ services:
       # Expose port only if API_EXTERNAL_PORT is set (for local dev)
       - "${API_EXTERNAL_PORT:-}:8000"
     volumes:
-      # Mount elevation data (path configurable via env)
-      - ${ELEVATION_DATA_PATH:-./output/elevation}:/app/output/elevation:ro
+      # Mount MBTiles file (too large for build-time copy)
+      - ${MAP_DATA_PATH:-./output}/usa-complete.mbtiles:/app/output/usa-complete.mbtiles:ro
       # Mount cache directory
       - api-cache:/cache
     environment:
@@ -60,7 +60,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 45s
+      start_period: 300s  # 5 minutes to allow for elevation data copy
     # Production security (only when ENVIRONMENT=production)
     security_opt:
       - no-new-privileges:true
@@ -68,8 +68,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${MEMORY_LIMIT:-2G}
-          cpus: ${CPU_LIMIT:-1.0}
+          memory: ${MEMORY_LIMIT:-20G}
+          cpus: ${CPU_LIMIT:-2.0}
 
 volumes:
   api-cache:
