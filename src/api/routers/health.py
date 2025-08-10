@@ -55,22 +55,53 @@ async def health_check():
         if not health_monitor.is_healthy():
             health_data["status"] = "unhealthy"
     
-    # Check elevation data availability
+    # Check elevation data availability with detailed validation
     if ELEVATION_DATA_DIR.exists():
         elevation_files = list(ELEVATION_DATA_DIR.glob("*.zst"))
         health_data["elevation_files_available"] = len(elevation_files)
+        
+        # Critical data validation
+        if len(elevation_files) < 1000:
+            health_data["status"] = "critical"
+            health_data["errors"] = health_data.get("errors", [])
+            health_data["errors"].append(f"Critical: Only {len(elevation_files)} elevation files (expected 2000+)")
+        elif len(elevation_files) < 2000:
+            if health_data["status"] == "healthy":
+                health_data["status"] = "degraded"
+            health_data["warnings"] = health_data.get("warnings", [])
+            health_data["warnings"].append(f"Warning: Low elevation file count: {len(elevation_files)}")
     else:
         health_data["elevation_files_available"] = 0
-        if health_data["status"] == "healthy":
-            health_data["status"] = "degraded"
+        health_data["status"] = "critical"
+        health_data["errors"] = health_data.get("errors", [])
+        health_data["errors"].append(f"Critical: Elevation data directory missing: {ELEVATION_DATA_DIR}")
     
-    # Check map data availability
-    if MAP_DATA_DIR.exists():
-        mbtiles_files = list(MAP_DATA_DIR.glob("*.mbtiles"))
-        regional_files = list((MAP_DATA_DIR / "regions").glob("*.mbtiles")) if (MAP_DATA_DIR / "regions").exists() else []
-        health_data["map_tiles_available"] = len(mbtiles_files) + len(regional_files)
+    # Check map data availability with validation
+    from config import PROJECT_ROOT
+    mbtiles_file = PROJECT_ROOT / "output" / "usa-complete.mbtiles"
+    
+    if mbtiles_file.exists():
+        size_gb = mbtiles_file.stat().st_size / (1024**3)
+        health_data["map_tiles_available"] = 1
+        health_data["mbtiles_size_gb"] = round(size_gb, 2)
+        
+        if size_gb < 1.0:
+            health_data["status"] = "critical"
+            health_data["errors"] = health_data.get("errors", [])
+            health_data["errors"].append(f"Critical: MBTiles file too small: {size_gb:.1f}GB (expected ~1.6GB)")
     else:
         health_data["map_tiles_available"] = 0
+        health_data["mbtiles_size_gb"] = 0
+        health_data["status"] = "critical"
+        health_data["errors"] = health_data.get("errors", [])
+        health_data["errors"].append(f"Critical: MBTiles file missing: {mbtiles_file}")
+    
+    # Add deployment context
+    health_data["deployment_context"] = {
+        "project_root": str(PROJECT_ROOT),
+        "elevation_data_dir": str(ELEVATION_DATA_DIR),
+        "environment": os.getenv("ENVIRONMENT", "unknown")
+    }
     
     return health_data
 
