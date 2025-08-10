@@ -26,6 +26,9 @@ RUN uv sync --frozen --no-dev
 # Copy application source code
 COPY src/ ./src/
 
+# Copy elevation data directly into container
+COPY output/elevation ./output/elevation
+
 # ----------------------------------------------------------------------
 # Application environment variables for serving
 # ----------------------------------------------------------------------

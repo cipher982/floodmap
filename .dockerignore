@@ -1,7 +1,6 @@
 # Docker ignore file - excludes files from Docker build context
 
-# Data directories (mounted as volumes instead)
-output/elevation/
+# Large data files - mount as volumes to avoid large image size
 output/*.mbtiles
 
 # Development files
