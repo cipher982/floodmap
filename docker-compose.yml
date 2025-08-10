@@ -19,15 +19,15 @@ services:
       retries: 3
       start_period: 10s
 
-  # FloodMap API server
-  api:
+  # FloodMap Web Application (serves website + API)
+  webapp:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-api
+    container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-webapp
     ports:
-      # Expose port only if API_EXTERNAL_PORT is set (for local dev)
-      - "${API_EXTERNAL_PORT:-}:8000"
+      # Expose port only if WEBAPP_EXTERNAL_PORT is set (for local dev)
+      - "${WEBAPP_EXTERNAL_PORT:-}:8000"
     volumes:
       # Mount MBTiles file (too large for build-time copy)
       - ${MAP_DATA_PATH:-./output}/usa-complete.mbtiles:/app/output/usa-complete.mbtiles:ro
@@ -35,7 +35,7 @@ services:
       - api-cache:/cache
     environment:
       # Core app config
-      - API_PORT=8000
+      - WEBAPP_PORT=8000
       - TILESERVER_URL=http://tileserver:8080
       - PROJECT_ROOT=/app
       - ELEVATION_DATA_DIR=output/elevation
