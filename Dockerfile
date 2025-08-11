@@ -26,14 +26,10 @@ RUN uv sync --frozen --no-dev
 # Copy application source code
 COPY src/ ./src/
 
-# Copy elevation data directly into container
-COPY output/elevation ./output/elevation
-
 # ----------------------------------------------------------------------
 # Application environment variables for serving
 # ----------------------------------------------------------------------
 ENV PROJECT_ROOT=/app \
-    ELEVATION_DATA_DIR=output/elevation \
     CACHE_DIR=/cache
 
 # Create required directories
