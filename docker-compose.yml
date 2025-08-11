@@ -4,8 +4,8 @@ services:
     image: maptiler/tileserver-gl:latest
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
     volumes:
-      - ${MAP_DATA_PATH:-./output}:/data:ro
-      - ${MAP_DATA_PATH:-./output}/config.json:/config.json:ro
+      - /mnt/backup/floodmap:/data:ro
+      - /mnt/backup/floodmap/config.json:/config.json:ro
     environment:
       - TILESERVER_CONFIG=/config.json
     restart: unless-stopped
@@ -26,9 +26,9 @@ services:
       - "8000:8000"
     volumes:
       # Mount elevation data (no longer copied at build time)
-      - ${ELEVATION_DATA_PATH:-./output/elevation}:/app/output/elevation:ro
+      - /mnt/backup/floodmap/elevation:/app/output/elevation:ro
       # Mount MBTiles file (too large for build-time copy)
-      - ${MAP_DATA_PATH:-./output}/usa-complete.mbtiles:/app/output/usa-complete.mbtiles:ro
+      - /mnt/backup/floodmap/usa-complete.mbtiles:/app/output/usa-complete.mbtiles:ro
       # Mount cache directory
       - api-cache:/cache
     environment:
