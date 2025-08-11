@@ -22,8 +22,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-webapp
-    ports:
-      - "8000:8000"
+    # No external ports - reverse proxy handles external access
+    expose:
+      - "8000"
     volumes:
       # Mount elevation data (no longer copied at build time)
       - /mnt/backup/floodmap/elevation:/app/output/elevation:ro
