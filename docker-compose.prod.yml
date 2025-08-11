@@ -3,9 +3,10 @@ services:
   tileserver:
     image: maptiler/tileserver-gl:latest
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
+    # No external port exposure in production
     volumes:
-      - ${MAP_DATA_PATH:-./output}:/data:ro
-      - ${MAP_DATA_PATH:-./output}/config.json:/config.json:ro
+      - ${MAP_DATA_PATH:-/mnt/backup/floodmap}:/data:ro
+      - ${MAP_DATA_PATH:-/mnt/backup/floodmap}/config.json:/config.json:ro
     environment:
       - TILESERVER_CONFIG=/config.json
     restart: unless-stopped
@@ -23,12 +24,12 @@ services:
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-webapp
     ports:
-      - "8000:8000"
+      - "8000:8000"  # Always expose in production for reverse proxy
     volumes:
-      # Mount elevation data (no longer copied at build time)
-      - ${ELEVATION_DATA_PATH:-./output/elevation}:/app/output/elevation:ro
-      # Mount MBTiles file (too large for build-time copy)
-      - ${MAP_DATA_PATH:-./output}/usa-complete.mbtiles:/app/output/usa-complete.mbtiles:ro
+      # Mount elevation data from host
+      - ${ELEVATION_DATA_PATH:-/mnt/backup/floodmap/elevation}:/app/output/elevation:ro
+      # Mount MBTiles file
+      - ${MAP_DATA_PATH:-/mnt/backup/floodmap}/usa-complete.mbtiles:/app/output/usa-complete.mbtiles:ro
       # Mount cache directory
       - api-cache:/cache
     environment:
@@ -43,7 +44,7 @@ services:
       - TILE_CACHE_SIZE=${TILE_CACHE_SIZE:-2000}
       
       # Environment and monitoring
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION=${OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION:-}
       
@@ -58,8 +59,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 300s  # 5 minutes to allow for elevation data copy
-    # Production security (only when ENVIRONMENT=production)
+      start_period: 60s
+    # Production security
     security_opt:
       - no-new-privileges:true
     # Resource limits (configurable)
