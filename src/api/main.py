@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # OpenTelemetry imports
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -87,15 +87,10 @@ def configure_telemetry():
     
     trace.set_tracer_provider(TracerProvider(resource=resource))
     
-    # Configure OTLP exporter for ClickHouse
-    headers = {}
-    auth_token = os.getenv('OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION', '').strip()
-    if auth_token:
-        headers["Authorization"] = f"Bearer {auth_token}"
-    
+    # Configure OTLP exporter using gRPC
     otlp_exporter = OTLPSpanExporter(
         endpoint=otel_endpoint,
-        headers=headers
+        insecure=True  # Internal network, no TLS needed
     )
     
     span_processor = BatchSpanProcessor(otlp_exporter)
