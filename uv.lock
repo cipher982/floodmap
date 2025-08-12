@@ -626,6 +626,7 @@ dependencies = [
     { name = "opentelemetry-sdk" },
     { name = "pillow" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "uvicorn" },
     { name = "zstandard" },
 ]
@@ -697,6 +698,7 @@ requires-dist = [
     { name = "python-fasthtml", marker = "extra == 'dev'", specifier = ">=0.6.9" },
     { name = "rasterio", marker = "extra == 'processing'", specifier = ">=1.4.1" },
     { name = "redis", marker = "extra == 'dev'", specifier = ">=5.0.4" },
+    { name = "requests", specifier = ">=2.32.4" },
     { name = "s3fs", marker = "extra == 'processing'", specifier = ">=2024.3.1" },
     { name = "scipy", marker = "extra == 'processing'", specifier = ">=1.14.1" },
     { name = "setuptools", marker = "extra == 'dev'", specifier = ">=69.0.0" },
