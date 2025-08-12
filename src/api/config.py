@@ -17,14 +17,14 @@ COMPRESSED_DATA_DIR = PROJECT_ROOT / os.getenv("COMPRESSED_DATA_DIR", "compresse
 MAP_DATA_DIR = PROJECT_ROOT / os.getenv("MAP_DATA_DIR", "map_data")
 
 # Server configuration
-API_PORT = int(os.getenv("API_PORT", "8000"))
-TILESERVER_PORT = int(os.getenv("TILESERVER_PORT", "8080"))
-FRONTEND_PORT = int(os.getenv("FRONTEND_PORT", "3000"))
+API_PORT = int(os.getenv("API_PORT") or "8000")
+TILESERVER_PORT = int(os.getenv("TILESERVER_PORT") or "8080")
+FRONTEND_PORT = int(os.getenv("FRONTEND_PORT") or "3000")
 TILESERVER_URL = os.getenv("TILESERVER_URL", f"http://localhost:{TILESERVER_PORT}")
 
 # Cache configuration
-ELEVATION_CACHE_SIZE = int(os.getenv("ELEVATION_CACHE_SIZE", "50"))
-TILE_CACHE_SIZE = int(os.getenv("TILE_CACHE_SIZE", "1000"))
+ELEVATION_CACHE_SIZE = int(os.getenv("ELEVATION_CACHE_SIZE") or "50")
+TILE_CACHE_SIZE = int(os.getenv("TILE_CACHE_SIZE") or "1000")
 
 # Data processing constants
 NODATA_VALUE = int(os.getenv("NODATA_VALUE", "-32768"))
