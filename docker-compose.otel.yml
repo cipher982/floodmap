@@ -1,0 +1,18 @@
+# Simple OTEL Collector that just works
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector:latest  # Use the simple one, not contrib
+    container_name: simple-otel
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4318:4318"  # HTTP
+      - "4317:4317"  # gRPC
+    networks:
+      - default
+
+networks:
+  default:
+    external: true
+    name: coolify
