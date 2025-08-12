@@ -88,12 +88,14 @@ def configure_telemetry():
     trace.set_tracer_provider(TracerProvider(resource=resource))
     
     # Configure OTLP exporter for ClickHouse
+    headers = {}
+    auth_token = os.getenv('OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION', '').strip()
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+    
     otlp_exporter = OTLPSpanExporter(
         endpoint=otel_endpoint,
-        headers={
-            "Authorization": f"Bearer {os.getenv('OTEL_EXPORTER_OTLP_HEADERS_AUTHORIZATION', '')}",
-            **dict(h.split("=", 1) for h in os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "").split(",") if "=" in h)
-        } if os.getenv("OTEL_EXPORTER_OTLP_HEADERS") else {}
+        headers=headers
     )
     
     span_processor = BatchSpanProcessor(otlp_exporter)
