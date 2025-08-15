@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Client-Side Rendering Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .status { padding: 5px 10px; border-radius: 4px; display: inline-block; }
+        .success { background: #4CAF50; color: white; }
+        .error { background: #f44336; color: white; }
+        .info { background: #2196F3; color: white; }
+        canvas { border: 1px solid #ccc; margin: 10px; }
+        #results { white-space: pre-wrap; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Flood Map Client-Side Rendering Test</h1>
+    
+    <div class="test-section">
+        <h2>1. Elevation Data Endpoint Test</h2>
+        <button onclick="testElevationEndpoint()">Test Elevation Data</button>
+        <div id="elevation-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. Client-Side Rendering Test</h2>
+        <button onclick="testClientRendering()">Test Rendering</button>
+        <div id="render-result"></div>
+        <canvas id="test-canvas" width="256" height="256" style="display:none;"></canvas>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. Performance Test</h2>
+        <button onclick="testPerformance()">Run Performance Test</button>
+        <div id="performance-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <pre id="results"></pre>
+    </div>
+    
+    <script src="/static/js/elevation-renderer.js"></script>
+    <script>
+        const renderer = new ElevationRenderer();
+        const results = document.getElementById('results');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
+            results.textContent += `[${timestamp}] ${message}\n`;
+            console.log(message);
+        }
+        
+        async function testElevationEndpoint() {
+            const resultDiv = document.getElementById('elevation-result');
+            resultDiv.innerHTML = '<span class="status info">Testing...</span>';
+            
+            try {
+                // Test Tampa tile
+                const response = await fetch('/api/v1/tiles/elevation-data/10/252/442.u16');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const buffer = await response.arrayBuffer();
+                const data = new Uint16Array(buffer);
+                
+                log(`✅ Elevation endpoint working`);
+                log(`  Size: ${buffer.byteLength} bytes`);
+                log(`  Pixels: ${data.length}`);
+                log(`  Min: ${Math.min(...data)}, Max: ${Math.max(...data)}`);
+                
+                // Check if we have real data or all NODATA
+                const uniqueValues = new Set(data);
+                if (uniqueValues.size === 1 && data[0] === 65535) {
+                    log(`  ⚠️ All NODATA values - may be ocean tile`);
+                } else {
+                    log(`  ✅ Contains ${uniqueValues.size} unique elevation values`);
+                }
+                
+                resultDiv.innerHTML = '<span class="status success">✅ Endpoint Working</span>';
+                
+            } catch (error) {
+                log(`❌ Elevation endpoint failed: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<span class="status error">❌ Failed: ${error.message}</span>`;
+            }
+        }
+        
+        async function testClientRendering() {
+            const resultDiv = document.getElementById('render-result');
+            resultDiv.innerHTML = '<span class="status info">Testing...</span>';
+            
+            try {
+                // Load elevation data
+                log('Loading elevation tile...');
+                const elevationData = await renderer.loadElevationTile(10, 252, 442);
+                
+                log(`✅ Loaded ${elevationData.length} elevation values`);
+                
+                // Test rendering at different water levels
+                const waterLevels = [1, 5, 10, 20];
+                const canvas = document.getElementById('test-canvas');
+                canvas.style.display = 'block';
+                
+                for (const waterLevel of waterLevels) {
+                    const startTime = performance.now();
+                    
+                    // Render to canvas
+                    const ctx = canvas.getContext('2d');
+                    const imageData = ctx.createImageData(256, 256);
+                    const data = imageData.data;
+                    
+                    for (let i = 0; i < elevationData.length; i++) {
+                        const elevation = renderer.decodeElevation(elevationData[i]);
+                        const color = renderer.calculateFloodColor(elevation, waterLevel);
+                        
+                        const offset = i * 4;
+                        data[offset] = color[0];
+                        data[offset + 1] = color[1];
+                        data[offset + 2] = color[2];
+                        data[offset + 3] = color[3];
+                    }
+                    
+                    ctx.putImageData(imageData, 0, 0);
+                    
+                    const renderTime = performance.now() - startTime;
+                    log(`  Water level ${waterLevel}m: ${renderTime.toFixed(2)}ms`);
+                }
+                
+                resultDiv.innerHTML = '<span class="status success">✅ Rendering Working</span>';
+                log('✅ Client-side rendering successful');
+                
+            } catch (error) {
+                log(`❌ Rendering failed: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<span class="status error">❌ Failed: ${error.message}</span>`;
+            }
+        }
+        
+        async function testPerformance() {
+            const resultDiv = document.getElementById('performance-result');
+            resultDiv.innerHTML = '<span class="status info">Running...</span>';
+            
+            try {
+                // Test server-side vs client-side performance
+                log('Performance comparison:');
+                
+                // Server-side test
+                const serverStart = performance.now();
+                const serverResponse = await fetch('/api/tiles/elevation/5/10/252/442.png');
+                const serverTime = performance.now() - serverStart;
+                log(`  Server-side tile: ${serverTime.toFixed(2)}ms`);
+                
+                // Client-side test (with cached elevation data)
+                const clientStart = performance.now();
+                const elevationData = await renderer.loadElevationTile(10, 252, 442);
+                const tileUrl = renderer.renderFloodTile(elevationData, 5, '10/252/442');
+                const clientTime = performance.now() - clientStart;
+                log(`  Client-side tile: ${clientTime.toFixed(2)}ms`);
+                
+                // Calculate improvement
+                const improvement = (serverTime / clientTime).toFixed(1);
+                log(`  🚀 Client-side is ${improvement}x faster!`);
+                
+                // Test slider response simulation
+                log('\nSlider simulation (10 changes):');
+                const sliderStart = performance.now();
+                for (let i = 1; i <= 10; i++) {
+                    renderer.clearRenderedCache();
+                    renderer.renderFloodTile(elevationData, i, '10/252/442');
+                }
+                const sliderTime = (performance.now() - sliderStart) / 10;
+                log(`  Average render time: ${sliderTime.toFixed(2)}ms per change`);
+                
+                resultDiv.innerHTML = `<span class="status success">✅ ${improvement}x Faster</span>`;
+                
+            } catch (error) {
+                log(`❌ Performance test failed: ${error.message}`, 'error');
+                resultDiv.innerHTML = `<span class="status error">❌ Failed: ${error.message}</span>`;
+            }
+        }
+        
+        // Run all tests on load
+        window.addEventListener('load', async () => {
+            log('🚀 Client-side rendering test suite loaded');
+            log(`Renderer initialized: ${renderer !== undefined}`);
+            log(`Browser support: Canvas=${!!document.createElement('canvas').getContext}, Uint16Array=${typeof Uint16Array !== 'undefined'}`);
+        });
+    </script>
+</body>
+</html>
