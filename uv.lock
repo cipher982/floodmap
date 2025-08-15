@@ -686,7 +686,7 @@ requires-dist = [
     { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0.41b0" },
     { name = "opentelemetry-instrumentation-requests", specifier = ">=0.41b0" },
     { name = "opentelemetry-sdk", specifier = ">=1.20.0" },
-    { name = "pillow", specifier = ">=10.3.0" },
+    { name = "pillow", extras = ["webp"], specifier = ">=10.3.0" },
     { name = "playwright", marker = "extra == 'test'", specifier = ">=1.53.0" },
     { name = "prometheus-client", marker = "extra == 'dev'", specifier = ">=0.20.0" },
     { name = "pyproj", marker = "extra == 'processing'", specifier = ">=3.7.0" },
