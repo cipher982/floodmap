@@ -19,9 +19,10 @@ class CacheEntry:
 class TileCache:
     """Simple LRU cache for generated tiles."""
     
-    def __init__(self, max_size: int = 2000, ttl_seconds: int = 3600):
+    def __init__(self, max_size: int = 5000, ttl_seconds: int = None):
         self.max_size = max_size
-        self.ttl_seconds = ttl_seconds
+        # Tiles are immutable - cache forever internally (None = infinity)
+        self.ttl_seconds = ttl_seconds or float('inf')
         self.cache = {}
         self.access_order = []  # For LRU eviction
         self.lock = threading.RLock()
@@ -32,14 +33,18 @@ class TileCache:
         """Cluster water levels to 0.1m increments for better cache hits."""
         return round(water_level * 10) / 10  # Round to nearest 0.1
     
-    def _make_key(self, water_level: float, z: int, x: int, y: int) -> str:
-        """Create cache key from tile coordinates and clustered water level."""
-        clustered_level = self._cluster_water_level(water_level)
-        return f"{clustered_level:.2f}:{z}:{x}:{y}"
+    def _make_key(self, cache_key_prefix: str, z: int, x: int, y: int) -> str:
+        """Create cache key from tile coordinates and cache key prefix (water_level_format or special key)."""
+        return f"{cache_key_prefix}:{z}:{x}:{y}"
     
-    def get(self, water_level: float, z: int, x: int, y: int) -> Optional[bytes]:
+    def get(self, cache_key_prefix, z: int, x: int, y: int) -> Optional[bytes]:
         """Get cached tile if available and not expired."""
-        key = self._make_key(water_level, z, x, y)
+        # Support both old format (float) and new format (string with format)
+        if isinstance(cache_key_prefix, float):
+            clustered_level = self._cluster_water_level(cache_key_prefix)
+            key = f"{clustered_level:.2f}:{z}:{x}:{y}"
+        else:
+            key = self._make_key(cache_key_prefix, z, x, y)
         
         with self.lock:
             if key not in self.cache:
@@ -64,9 +69,20 @@ class TileCache:
             self.hit_count += 1
             return entry.tile_data
     
-    def put(self, water_level: float, z: int, x: int, y: int, tile_data: bytes):
+    def put(self, cache_key_prefix, z: int, x: int, y: int, tile_data: bytes):
         """Cache generated tile."""
-        key = self._make_key(water_level, z, x, y)
+        # Support both old format (float) and new format (string with format)
+        if isinstance(cache_key_prefix, float):
+            clustered_level = self._cluster_water_level(cache_key_prefix)
+            key = f"{clustered_level:.2f}:{z}:{x}:{y}"
+            water_level = cache_key_prefix
+        else:
+            key = self._make_key(cache_key_prefix, z, x, y)
+            # Extract water level from format like "2.0_PNG" or use special values
+            if '_' in str(cache_key_prefix):
+                water_level = float(cache_key_prefix.split('_')[0])
+            else:
+                water_level = float(cache_key_prefix)  # Handle special keys like "-888.0"
         
         with self.lock:
             # Remove oldest entries if cache is full
@@ -90,6 +106,30 @@ class TileCache:
                 self.access_order.remove(key)
             self.access_order.append(key)
     
+    def exists(self, cache_key_prefix, z: int, x: int, y: int) -> bool:
+        """Check if tile exists in cache without retrieving it."""
+        # Support both old format (float) and new format (string with format)
+        if isinstance(cache_key_prefix, float):
+            clustered_level = self._cluster_water_level(cache_key_prefix)
+            key = f"{clustered_level:.2f}:{z}:{x}:{y}"
+        else:
+            key = self._make_key(cache_key_prefix, z, x, y)
+        
+        with self.lock:
+            if key not in self.cache:
+                return False
+            
+            entry = self.cache[key]
+            
+            # Check if expired
+            if time.time() - entry.timestamp > self.ttl_seconds:
+                del self.cache[key]
+                if key in self.access_order:
+                    self.access_order.remove(key)
+                return False
+            
+            return True
+    
     def clear(self):
         """Clear all cached tiles."""
         with self.lock:
@@ -111,5 +151,5 @@ class TileCache:
             }
 
 
-# Global cache instance with larger size and clustering
-tile_cache = TileCache(max_size=2000, ttl_seconds=3600)
+# Global cache instance with larger size and immutable TTL
+tile_cache = TileCache(max_size=5000, ttl_seconds=None)

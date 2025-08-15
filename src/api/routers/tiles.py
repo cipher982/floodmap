@@ -1,5 +1,5 @@
 """Tile serving endpoints - clean and simple."""
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Request
 from fastapi.responses import Response
 import httpx
 import os
@@ -41,7 +41,27 @@ logger = logging.getLogger(__name__)
 CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tile-cpu")
 
 
-def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> bytes:
+def get_optimal_format(request: Request) -> str:
+    """Detect browser WEBP support via Accept header."""
+    accept = request.headers.get('Accept', '')
+    if 'image/webp' in accept:
+        return 'WEBP'
+    return 'PNG'
+
+
+def get_optimal_compression(rgba_array: np.ndarray, is_solid: bool) -> int:
+    """Choose compression based on content complexity."""
+    if is_solid:
+        return 9  # Maximum compression for tiny files
+    
+    # Check image complexity using standard deviation
+    complexity = np.std(rgba_array)
+    if complexity < 10:  # Simple patterns
+        return 6
+    return 1  # Complex tiles need speed over size
+
+
+def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int, format: str = 'PNG') -> bytes:
     """OPTIMIZED synchronous tile generation using persistent cache."""
     try:
         # Use persistent elevation cache instead of slow elevation_loader
@@ -66,12 +86,41 @@ def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> 
             no_data_value=NODATA_VALUE
         )
         
-        # Convert to PIL Image
+        # OPTIMIZATION: Ultra-fast solid color detection for ocean tiles
+        is_solid = np.all(rgba_array == rgba_array[0,0])
+        
+        if is_solid:
+            # Generate 1x1 image (70 bytes vs 12KB) for solid color tiles
+            color = rgba_array[0,0]
+            tiny_array = np.array([[color]], dtype=np.uint8)
+            img = Image.fromarray(tiny_array, 'RGBA')
+            
+            img_bytes = io.BytesIO()
+            # Use high compression for tiny solid tiles
+            compression_level = get_optimal_compression(rgba_array, is_solid)
+            if format == 'WEBP':
+                img.save(img_bytes, format='WEBP', quality=95, method=6)
+            else:
+                img.save(img_bytes, format='PNG', compress_level=compression_level)
+            img_bytes.seek(0)
+            
+            # Add debug logging for monitoring
+            response_bytes = img_bytes.getvalue()
+            logger.debug(f"Solid color tile {z}/{x}/{y} ({format}): {len(response_bytes)} bytes")
+            return response_bytes
+        
+        # Complex tile: continue with normal generation
         img = Image.fromarray(rgba_array, 'RGBA')
         
-        # Convert to PNG bytes with fast compression
+        # Convert to optimized format with adaptive compression
         img_bytes = io.BytesIO()
-        img.save(img_bytes, format='PNG', optimize=True, compress_level=1)  # Fast compression
+        compression_level = get_optimal_compression(rgba_array, is_solid)
+        
+        if format == 'WEBP':
+            # WEBP provides 65% reduction for complex tiles
+            img.save(img_bytes, format='WEBP', quality=85, method=4)
+        else:
+            img.save(img_bytes, format='PNG', optimize=True, compress_level=compression_level)
         img_bytes.seek(0)
         
         return img_bytes.getvalue()
@@ -83,7 +132,7 @@ def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> 
             detail=f"Elevation tile generation failed: {str(e)}"
         )
 
-def generate_topographical_tile_sync(z: int, x: int, y: int) -> bytes:
+def generate_topographical_tile_sync(z: int, x: int, y: int, format: str = 'PNG') -> bytes:
     """Generate topographical tile showing absolute elevation colors."""
     try:
         # Get elevation data using the same optimized mosaicking
@@ -101,12 +150,41 @@ def generate_topographical_tile_sync(z: int, x: int, y: int) -> bytes:
             no_data_value=NODATA_VALUE
         )
         
-        # Convert to PIL Image
+        # OPTIMIZATION: Ultra-fast solid color detection for topographical tiles
+        is_solid = np.all(rgba_array == rgba_array[0,0])
+        
+        if is_solid:
+            # Generate 1x1 image (70 bytes vs 12KB) for solid color tiles  
+            color = rgba_array[0,0]
+            tiny_array = np.array([[color]], dtype=np.uint8)
+            img = Image.fromarray(tiny_array, 'RGBA')
+            
+            img_bytes = io.BytesIO()
+            # Use high compression for tiny solid tiles
+            compression_level = get_optimal_compression(rgba_array, is_solid)
+            if format == 'WEBP':
+                img.save(img_bytes, format='WEBP', quality=95, method=6)
+            else:
+                img.save(img_bytes, format='PNG', compress_level=compression_level)
+            img_bytes.seek(0)
+            
+            # Add debug logging for monitoring
+            response_bytes = img_bytes.getvalue()
+            logger.debug(f"Solid color topographical tile {z}/{x}/{y} ({format}): {len(response_bytes)} bytes")
+            return response_bytes
+        
+        # Complex tile: continue with normal generation
         img = Image.fromarray(rgba_array, 'RGBA')
         
-        # Convert to PNG bytes with fast compression
+        # Convert to optimized format with adaptive compression
         img_bytes = io.BytesIO()
-        img.save(img_bytes, format='PNG', optimize=True, compress_level=1)  # Fast compression
+        compression_level = get_optimal_compression(rgba_array, is_solid)
+        
+        if format == 'WEBP':
+            # WEBP provides 65% reduction for complex tiles
+            img.save(img_bytes, format='WEBP', quality=85, method=4)
+        else:
+            img.save(img_bytes, format='PNG', optimize=True, compress_level=compression_level)
         img_bytes.seek(0)
         
         return img_bytes.getvalue()
@@ -120,23 +198,30 @@ def generate_topographical_tile_sync(z: int, x: int, y: int) -> bytes:
 
 @router.get("/tiles/topographical/{z}/{x}/{y}.png")
 @log_performance
-async def get_topographical_tile(z: int, x: int, y: int):
+async def get_topographical_tile(request: Request, z: int, x: int, y: int):
     """Generate topographical tiles showing absolute elevation colors."""
     # Input validation
     if not (0 <= z <= MAX_ZOOM and 0 <= x < 2**z and 0 <= y < 2**z):
         raise HTTPException(status_code=400, detail="Invalid tile coordinates")
     
     try:
+        # Determine optimal format based on browser capability
+        format = get_optimal_format(request)
+        media_type = "image/webp" if format == "WEBP" else "image/png"
+        
         # Check cache first (using special cache key for topographical tiles)
         cache_key_water_level = -888.0  # Special value for topographical tiles
-        cached_tile = tile_cache.get(cache_key_water_level, z, x, y)
+        cache_key = f"{cache_key_water_level}_{format}"
+        cached_tile = tile_cache.get(cache_key, z, x, y)
         if cached_tile is not None:
             return Response(
                 content=cached_tile,
-                media_type="image/png",
+                media_type=media_type,
                 headers={
-                    "Cache-Control": f"public, max-age=3600",
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "Vary": "Accept",
                     "X-Tile-Type": "topographical",
+                    "X-Format": format,
                     "X-Cache": "HIT"
                 }
             )
@@ -146,18 +231,20 @@ async def get_topographical_tile(z: int, x: int, y: int):
         tile_data = await loop.run_in_executor(
             CPU_EXECUTOR,
             generate_topographical_tile_sync,
-            z, x, y
+            z, x, y, format
         )
         
         # Cache the generated tile
-        tile_cache.put(cache_key_water_level, z, x, y, tile_data)
+        tile_cache.put(cache_key, z, x, y, tile_data)
         
         return Response(
             content=tile_data,
-            media_type="image/png",
+            media_type=media_type,
             headers={
-                "Cache-Control": f"public, max-age=3600",
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Vary": "Accept",
                 "X-Tile-Type": "topographical",
+                "X-Format": format,
                 "X-Cache": "MISS"
             }
         )
@@ -191,7 +278,8 @@ async def get_vector_tile(z: int, x: int, y: int):
                     content=response.content,
                     media_type="application/x-protobuf",
                     headers={
-                        "Cache-Control": "public, max-age=3600",
+                        "Cache-Control": "public, max-age=31536000, immutable",
+                        "Vary": "Accept",
                         "Access-Control-Allow-Origin": "*",
                         "X-Tile-Source": "tampa"
                     }
@@ -201,7 +289,7 @@ async def get_vector_tile(z: int, x: int, y: int):
                 return Response(
                     content=b"",
                     media_type="application/x-protobuf",
-                    headers={"Cache-Control": "public, max-age=3600"}
+                    headers={"Cache-Control": "public, max-age=31536000, immutable", "Vary": "Accept"}
                 )
             else:
                 raise HTTPException(status_code=404, detail="Tile not found")
@@ -211,7 +299,7 @@ async def get_vector_tile(z: int, x: int, y: int):
 
 @router.get("/tiles/elevation/{water_level}/{z}/{x}/{y}.png")
 @log_performance
-async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
+async def get_elevation_tile(request: Request, water_level: float, z: int, x: int, y: int):
     """Generate contextual flood risk tiles dynamically with async processing."""
     # No zoom restrictions - elevation data works at any zoom level
     
@@ -219,15 +307,22 @@ async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
         raise HTTPException(status_code=400, detail="Invalid water level")
     
     try:
-        # Check cache first
-        cached_tile = tile_cache.get(water_level, z, x, y)
+        # Determine optimal format based on browser capability
+        format = get_optimal_format(request)
+        media_type = "image/webp" if format == "WEBP" else "image/png"
+        
+        # Check cache first (include format in cache key)
+        cache_key = f"{water_level}_{format}"
+        cached_tile = tile_cache.get(cache_key, z, x, y)
         if cached_tile is not None:
             return Response(
                 content=cached_tile,
-                media_type="image/png",
+                media_type=media_type,
                 headers={
-                    "Cache-Control": f"public, max-age=3600",
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "Vary": "Accept",
                     "X-Water-Level": str(water_level),
+                    "X-Format": format,
                     "X-Cache": "HIT"
                 }
             )
@@ -240,18 +335,20 @@ async def get_elevation_tile(water_level: float, z: int, x: int, y: int):
         tile_data = await loop.run_in_executor(
             CPU_EXECUTOR,
             generate_elevation_tile_sync,
-            water_level, z, x, y
+            water_level, z, x, y, format
         )
         
         # Cache the generated tile
-        tile_cache.put(water_level, z, x, y, tile_data)
+        tile_cache.put(cache_key, z, x, y, tile_data)
         
         return Response(
             content=tile_data,
-            media_type="image/png",
+            media_type=media_type,
             headers={
-                "Cache-Control": f"public, max-age=3600",
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Vary": "Accept",
                 "X-Water-Level": str(water_level),
+                "X-Format": format,
                 "X-Cache": "MISS"
             }
         )
@@ -270,7 +367,7 @@ def _transparent_tile() -> Response:
     return Response(
         content=transparent_png,
         media_type="image/png",
-        headers={"Cache-Control": "public, max-age=3600"}
+        headers={"Cache-Control": "public, max-age=31536000, immutable", "Vary": "Accept"}
     )
 
 @router.post("/tiles/bulk")
@@ -289,12 +386,16 @@ async def generate_bulk_tiles(tile_requests: List[dict]):
             z, x, y = req["z"], req["x"], req["y"]
             water_level = req["water_level"]
             
+            # Use PNG format for bulk generation (no format negotiation for bulk)
+            format = 'PNG'
+            cache_key = f"{water_level}_{format}"
+            
             # Check cache first
-            cached_tile = tile_cache.get(water_level, z, x, y)
+            cached_tile = tile_cache.get(cache_key, z, x, y)
             if cached_tile is not None:
                 return {
                     "z": z, "x": x, "y": y, "water_level": water_level,
-                    "status": "cached", "size": len(cached_tile)
+                    "status": "cached", "size": len(cached_tile), "format": format
                 }
             
             # Generate tile
@@ -302,15 +403,15 @@ async def generate_bulk_tiles(tile_requests: List[dict]):
             tile_data = await loop.run_in_executor(
                 CPU_EXECUTOR,
                 generate_elevation_tile_sync,
-                water_level, z, x, y
+                water_level, z, x, y, format
             )
             
             # Cache the result
-            tile_cache.put(water_level, z, x, y, tile_data)
+            tile_cache.put(cache_key, z, x, y, tile_data)
             
             return {
                 "z": z, "x": x, "y": y, "water_level": water_level,
-                "status": "generated", "size": len(tile_data)
+                "status": "generated", "size": len(tile_data), "format": format
             }
             
         except Exception as e:
