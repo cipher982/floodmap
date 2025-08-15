@@ -42,7 +42,7 @@ CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tile-cpu-v1
 # Constants
 SUPPORTED_ZOOM_RANGE = (MIN_ZOOM, MAX_ZOOM)
 SUPPORTED_WATER_LEVEL_RANGE = (MIN_WATER_LEVEL, MAX_WATER_LEVEL)
-MAX_CACHE_AGE = 3600  # 1 hour
+MAX_CACHE_AGE = 31536000  # 1 year (immutable tiles)
 
 def validate_tile_coordinates(z: int, x: int, y: int) -> None:
     """Validate tile coordinates according to TMS/XYZ standards."""

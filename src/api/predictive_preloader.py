@@ -236,50 +236,81 @@ class PredictiveTilePreloader:
         max_coord = 2 ** z
         return (0 <= x < max_coord) and (0 <= y < max_coord)
     
-    async def _schedule_preloading(self, predictions: List[TileRequest]):
-        """Schedule tile preloading using the thread pool."""
+    def predict_adjacent_tiles(self, z: int, x: int, y: int) -> List[Tuple[int, int, int]]:
+        """Predict tiles user will likely request next."""
+        adjacent = [
+            (z, x-1, y), (z, x+1, y),  # Horizontal pan
+            (z, x, y-1), (z, x, y+1),  # Vertical pan
+            (z+1, x*2, y*2), (z+1, x*2+1, y*2), (z+1, x*2, y*2+1), (z+1, x*2+1, y*2+1),  # Zoom in
+            (z-1, x//2, y//2)          # Zoom out
+        ]
+        return [(tz, tx, ty) for tz, tx, ty in adjacent 
+                if self._is_valid_tile(tz, tx, ty)]
+
+    async def preload_predicted_tiles(self, current_z: int, current_x: int, current_y: int, water_level: float):
+        """Generate predicted tiles during idle time."""
+        predictions = self.predict_adjacent_tiles(current_z, current_x, current_y)
+        
+        from tile_cache import tile_cache
+        
+        for z, x, y in predictions:
+            # Try both PNG and WEBP formats for comprehensive preloading
+            for format in ['PNG', 'WEBP']:
+                cache_key = f"{water_level}_{format}"
+                if not tile_cache.exists(cache_key, z, x, y):
+                    # Use idle workers to pregenerate
+                    tile_req = TileRequest(z, x, y, water_level, time.time())
+                    await self._preload_tile_with_format(tile_req, format)
+
+    async def _preload_tile_with_format(self, tile_req: TileRequest, format: str):
+        """Preload a single tile with specific format."""
         from routers.tiles import generate_elevation_tile_sync
         from tile_cache import tile_cache
         
-        async def preload_tile(tile_req: TileRequest):
-            """Preload a single tile."""
-            tile_key = f"{tile_req.z}_{tile_req.x}_{tile_req.y}_{tile_req.water_level:.1f}"
-            
-            # Skip if already preloading or cached
-            if tile_key in self.preloading_tiles:
-                return
-            
-            # Check if already in cache
-            cached = tile_cache.get(tile_req.water_level, tile_req.z, tile_req.x, tile_req.y)
-            if cached is not None:
-                return
-            
-            self.preloading_tiles.add(tile_key)
-            self.preload_stats['preload_workers_active'] += 1
-            
-            try:
-                # Generate tile in background
-                loop = asyncio.get_event_loop()
-                tile_data = await loop.run_in_executor(
-                    self.preload_pool,
-                    generate_elevation_tile_sync,
-                    tile_req.water_level, tile_req.z, tile_req.x, tile_req.y
-                )
-                
-                # Cache the preloaded tile
-                if tile_data and len(tile_data) > 100:  # Valid tile data
-                    tile_cache.put(tile_req.water_level, tile_req.z, tile_req.x, tile_req.y, tile_data)
-                    self.preload_stats['tiles_preloaded'] += 1
-                    logger.debug(f"✅ Preloaded tile {tile_key}")
-                
-            except Exception as e:
-                logger.warning(f"Preload failed for {tile_key}: {e}")
-            finally:
-                self.preloading_tiles.discard(tile_key)
-                self.preload_stats['preload_workers_active'] -= 1
+        tile_key = f"{tile_req.z}_{tile_req.x}_{tile_req.y}_{tile_req.water_level:.1f}_{format}"
         
-        # Execute preloading tasks concurrently
-        tasks = [preload_tile(pred) for pred in predictions]
+        # Skip if already preloading
+        if tile_key in self.preloading_tiles:
+            return
+        
+        # Check if already in cache
+        cache_key = f"{tile_req.water_level}_{format}"
+        cached = tile_cache.get(cache_key, tile_req.z, tile_req.x, tile_req.y)
+        if cached is not None:
+            return
+        
+        self.preloading_tiles.add(tile_key)
+        self.preload_stats['preload_workers_active'] += 1
+        
+        try:
+            # Generate tile in background with format
+            loop = asyncio.get_event_loop()
+            tile_data = await loop.run_in_executor(
+                self.preload_pool,
+                generate_elevation_tile_sync,
+                tile_req.water_level, tile_req.z, tile_req.x, tile_req.y, format
+            )
+            
+            # Cache the preloaded tile
+            if tile_data and len(tile_data) > 0:  # Valid tile data (even 1x1 tiles are valid)
+                tile_cache.put(cache_key, tile_req.z, tile_req.x, tile_req.y, tile_data)
+                self.preload_stats['tiles_preloaded'] += 1
+                logger.debug(f"✅ Preloaded tile {tile_key} ({len(tile_data)} bytes)")
+            
+        except Exception as e:
+            logger.warning(f"Preload failed for {tile_key}: {e}")
+        finally:
+            self.preloading_tiles.discard(tile_key)
+            self.preload_stats['preload_workers_active'] -= 1
+
+    async def _schedule_preloading(self, predictions: List[TileRequest]):
+        """Schedule tile preloading using the thread pool with format awareness."""
+        # Preload both PNG and WEBP formats for optimal coverage
+        tasks = []
+        for pred in predictions:
+            for format in ['PNG', 'WEBP']:
+                tasks.append(self._preload_tile_with_format(pred, format))
+        
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
     
