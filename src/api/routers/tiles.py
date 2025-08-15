@@ -55,9 +55,9 @@ def generate_elevation_tile_sync(water_level: float, z: int, x: int, y: int) -> 
         
         # Handle case where no elevation data is available
         if elevation_data is None:
-            logger.warning(f"No elevation data available for tile {z}/{x}/{y}")
-            # Return transparent tile
-            return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07:\xb9Y\x00\x00\x00\x00IEND\xaeB`\x82'
+            # Generate synthetic sea-level elevation data (0m elevation)
+            elevation_data = np.zeros((256, 256), dtype=np.float32)
+            logger.debug(f"Using synthetic sea-level data for ocean tile {z}/{x}/{y}")
         
         # Convert elevation to contextual colors
         rgba_array = color_mapper.elevation_array_to_rgba(
@@ -91,9 +91,9 @@ def generate_topographical_tile_sync(z: int, x: int, y: int) -> bytes:
         
         # Handle case where no elevation data is available
         if elevation_data is None:
-            logger.warning(f"No elevation data available for topographical tile {z}/{x}/{y}")
-            # Return transparent tile
-            return b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x07:\xb9Y\x00\x00\x00\x00IEND\xaeB`\x82'
+            # Generate synthetic sea-level elevation data (0m elevation)
+            elevation_data = np.zeros((256, 256), dtype=np.float32)
+            logger.debug(f"Using synthetic sea-level data for topographical ocean tile {z}/{x}/{y}")
         
         # Convert elevation to topographical colors (absolute elevation)
         rgba_array = color_mapper.elevation_array_to_topographical_rgba(
