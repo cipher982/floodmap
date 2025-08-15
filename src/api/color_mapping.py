@@ -112,11 +112,14 @@ class FloodRiskColorMapper:
         height, width = elevation_data.shape
         rgba_array = np.zeros((height, width, 4), dtype=np.uint8)
         
-        # Handle no-data values
+        # Handle no-data values by treating them as sea level (0m)
         if no_data_value is not None:
-            valid_mask = elevation_data != no_data_value
-        else:
-            valid_mask = np.ones_like(elevation_data, dtype=bool)
+            # Replace no-data values with 0m (sea level) instead of making them transparent
+            elevation_data = elevation_data.copy()
+            elevation_data[elevation_data == no_data_value] = 0.0
+        
+        # All pixels are now valid (no transparent areas)
+        valid_mask = np.ones_like(elevation_data, dtype=bool)
         
         # True vectorized color mapping using NumPy operations
         # Calculate risk levels for all pixels at once
@@ -165,11 +168,14 @@ class FloodRiskColorMapper:
         height, width = elevation_data.shape
         rgba_array = np.zeros((height, width, 4), dtype=np.uint8)
         
-        # Handle no-data values
+        # Handle no-data values by treating them as sea level (0m)
         if no_data_value is not None:
-            valid_mask = elevation_data != no_data_value
-        else:
-            valid_mask = np.ones_like(elevation_data, dtype=bool)
+            # Replace no-data values with 0m (sea level) instead of making them transparent
+            elevation_data = elevation_data.copy()
+            elevation_data[elevation_data == no_data_value] = 0.0
+        
+        # All pixels are now valid (no transparent areas)
+        valid_mask = np.ones_like(elevation_data, dtype=bool)
         
         # Assign colors based on elevation thresholds
         for i in range(len(self.ELEVATION_THRESHOLDS) - 1):
