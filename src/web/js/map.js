@@ -19,47 +19,29 @@ class FloodMap {
     }
 
     async initializeMap() {
-        // Fetch dynamic tile metadata
-        let metadata;
-        try {
-            const response = await fetch('/api/v1/tiles/metadata');
-            metadata = await response.json();
-        } catch (error) {
-            console.warn('Could not fetch tile metadata, using defaults:', error);
-            metadata = {
-                vector_tiles: { min_zoom: 0, max_zoom: 4, available_zoom_levels: [0,1,2,3,4] },
-                elevation_tiles: { min_zoom: 8, max_zoom: 14 }
-            };
-        }
+        // Simple static configuration - elevation tiles work everywhere
+        const config = {
+            zoom: 8,
+            minZoom: 0,
+            maxZoom: 18
+        };
+        
+        console.log(`Configuring map: zoom=${config.zoom}, range=${config.minZoom}-${config.maxZoom}`);
 
-        // Determine best zoom configuration
-        const vectorZoom = metadata.vector_tiles;
-        const hasVectorTiles = vectorZoom.available_zoom_levels && vectorZoom.available_zoom_levels.length > 0;
-        
-        // Choose initial zoom and bounds based on available data
-        const initialZoom = hasVectorTiles ? Math.min(vectorZoom.max_zoom, 8) : 8;
-        const minZoom = hasVectorTiles ? vectorZoom.min_zoom : 0;
-        const maxZoom = hasVectorTiles ? vectorZoom.max_zoom : 4;
-        
-        console.log(`Vector tiles: ${vectorZoom.min_zoom}-${vectorZoom.max_zoom}`);
-        console.log(`Setting map bounds: ${minZoom}-${maxZoom}, initial: ${initialZoom}`);
-        
-        console.log(`Configuring map: zoom=${initialZoom}, range=${minZoom}-${maxZoom}, vector tiles available:`, hasVectorTiles);
-
-        // Create map with dynamic configuration
+        // Create map with clean, simple architecture
         this.map = new maplibregl.Map({
             container: 'map',
             style: {
                 version: 8,
                 sources: {
-                    'vector-tiles': {
-                        type: 'vector',
-                        tiles: [window.location.origin + '/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf']
-                    },
                     'elevation-tiles': {
                         type: 'raster',
                         tiles: [this.getElevationTileURL()]
                     },
+                    'vector-tiles': {
+                        type: 'vector',
+                        tiles: [window.location.origin + '/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf']
+                    }
                 },
                 layers: [
                     // Background
@@ -68,35 +50,27 @@ class FloodMap {
                         type: 'background',
                         paint: { 'background-color': '#f8f9fa' }
                     },
-                    // Water bodies (only add if vector tiles available)
-                    ...(hasVectorTiles ? [{
-                        id: 'water',
-                        type: 'fill',
-                        source: 'vector-tiles',
-                        'source-layer': 'water',
-                        paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.6 }
-                    }] : []),
-                    // Roads (only add if vector tiles available)
-                    ...(hasVectorTiles ? [{
+                    // Elevation tiles are authoritative for ALL water
+                    {
+                        id: 'elevation',
+                        type: 'raster',
+                        source: 'elevation-tiles',
+                        paint: { 'raster-opacity': 1.0 }
+                    },
+                    // Optional: Roads for navigation
+                    {
                         id: 'roads',
                         type: 'line',
                         source: 'vector-tiles',
                         'source-layer': 'transportation',
                         paint: { 'line-color': '#6b7280', 'line-width': 1 }
-                    }] : []),
-                    // Contextual flood risk elevation overlay
-                    {
-                        id: 'elevation',
-                        type: 'raster',
-                        source: 'elevation-tiles',
-                        paint: { 'raster-opacity': 0.6 }
                     }
                 ]
             },
             center: [-82.46, 27.95], // Tampa Bay, Florida
-            zoom: initialZoom,
-            minZoom: minZoom,
-            maxZoom: maxZoom
+            zoom: config.zoom,
+            minZoom: config.minZoom,
+            maxZoom: config.maxZoom
         });
 
         // Add navigation controls
@@ -151,11 +125,10 @@ class FloodMap {
     }
 
     getElevationTileURL() {
-        if (this.viewMode === 'elevation') {
-            return window.location.origin + '/api/tiles/topographical/{z}/{x}/{y}.png?v=' + Date.now();
-        } else {
-            return window.location.origin + '/api/tiles/elevation/' + this.currentWaterLevel + '/{z}/{x}/{y}.png?v=' + Date.now();
-        }
+        // Simple template strings - no complex switching logic
+        return this.viewMode === 'elevation' 
+            ? '/api/tiles/topographical/{z}/{x}/{y}.png'
+            : `/api/tiles/elevation/${this.currentWaterLevel}/{z}/{x}/{y}.png`;
     }
 
     updateViewMode() {
