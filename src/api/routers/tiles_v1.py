@@ -10,6 +10,7 @@ import io
 import logging
 import asyncio
 import time
+import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 from dotenv import load_dotenv
@@ -387,6 +388,128 @@ async def get_flood_tile(
     except Exception as e:
         logger.error(f"Error serving flood tile {water_level}m/{z}/{x}/{y}: {e}")
         raise HTTPException(status_code=500, detail="Flood tile generation failed")
+
+# ============================================================================
+# RAW ELEVATION DATA (Client-Side Rendering)
+# ============================================================================
+
+def generate_elevation_data_sync(z: int, x: int, y: int) -> bytes:
+    """Generate raw elevation data as Uint16 array for client-side rendering."""
+    try:
+        # Get tile bounds for elevation file lookup
+        lat_top, lat_bottom, lon_left, lon_right = elevation_loader.num2deg(x, y, z)
+        
+        # Find elevation files using O(1) lookup
+        overlapping_files = elevation_loader.find_elevation_files_for_tile(
+            lat_top, lat_bottom, lon_left, lon_right
+        )
+        
+        if not overlapping_files:
+            # Return empty elevation data (all NODATA)
+            empty_data = np.full((TILE_SIZE, TILE_SIZE), 65535, dtype=np.uint16)
+            return empty_data.tobytes()
+        
+        # Get elevation data from persistent cache
+        elevation_data = None
+        for file_path in overlapping_files:
+            elevation_data = persistent_elevation_cache.extract_tile_from_cached_array(
+                file_path, lat_top, lat_bottom, lon_left, lon_right, TILE_SIZE
+            )
+            if elevation_data is not None:
+                break
+        
+        if elevation_data is None:
+            # Return empty elevation data
+            empty_data = np.full((TILE_SIZE, TILE_SIZE), 65535, dtype=np.uint16)
+            return empty_data.tobytes()
+        
+        # Convert elevation to uint16 format
+        # Range: -500m to 9000m → 0 to 65534
+        # Special value: 65535 = NODATA
+        normalized = np.zeros_like(elevation_data, dtype=np.float32)
+        
+        # Handle NODATA values
+        nodata_mask = (elevation_data == NODATA_VALUE) | (elevation_data < -500) | (elevation_data > 9000)
+        valid_mask = ~nodata_mask
+        
+        # Normalize valid elevations to 0-65534 range
+        normalized[valid_mask] = np.clip(
+            (elevation_data[valid_mask] + 500) / 9500 * 65534, 
+            0, 
+            65534
+        )
+        normalized[nodata_mask] = 65535
+        
+        # Convert to uint16
+        uint16_data = normalized.astype(np.uint16)
+        
+        return uint16_data.tobytes()
+        
+    except Exception as e:
+        logger.error(f"Error generating elevation data for {z}/{x}/{y}: {e}")
+        # Return empty elevation data on error
+        empty_data = np.full((TILE_SIZE, TILE_SIZE), 65535, dtype=np.uint16)
+        return empty_data.tobytes()
+
+@router.get("/elevation-data/{z}/{x}/{y}.u16")
+@log_performance
+async def get_elevation_data_tile(
+    z: int = Path(..., description="Zoom level"),
+    x: int = Path(..., description="Tile X coordinate"),
+    y: int = Path(..., description="Tile Y coordinate")
+):
+    """
+    Serve raw elevation data as Uint16 binary array for client-side rendering.
+    
+    Format:
+    - 256x256 pixels as uint16 values (131,072 bytes uncompressed)
+    - Values 0-65534: Elevation from -500m to 9000m
+    - Value 65535: NODATA (ocean/missing data)
+    - Cached forever (immutable elevation data)
+    """
+    validate_tile_coordinates(z, x, y)
+    
+    try:
+        # Check cache first (using special cache key for raw data)
+        cache_key_format = -1000.0  # Special value for raw elevation data
+        cached_data = tile_cache.get(cache_key_format, z, x, y)
+        if cached_data is not None:
+            return Response(
+                content=cached_data,
+                media_type="application/octet-stream",
+                headers={
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "Access-Control-Allow-Origin": "*",
+                    "X-Tile-Source": "elevation-data",
+                    "X-Cache": "HIT"
+                }
+            )
+        
+        # Generate data asynchronously
+        loop = asyncio.get_event_loop()
+        elevation_data = await loop.run_in_executor(
+            CPU_EXECUTOR,
+            generate_elevation_data_sync,
+            z, x, y
+        )
+        
+        # Cache the generated data
+        tile_cache.put(cache_key_format, z, x, y, elevation_data)
+        
+        return Response(
+            content=elevation_data,
+            media_type="application/octet-stream",
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Access-Control-Allow-Origin": "*",
+                "X-Tile-Source": "elevation-data",
+                "X-Cache": "MISS"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error serving elevation data {z}/{x}/{y}: {e}")
+        raise HTTPException(status_code=500, detail="Elevation data generation failed")
 
 # ============================================================================
 # COMPOSITE TILES (Optional - Combined Elevation + Flood)
