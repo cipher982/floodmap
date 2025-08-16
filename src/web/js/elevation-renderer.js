@@ -80,8 +80,7 @@ class ElevationRenderer {
                 
                 // Validate data size
                 if (elevationData.length !== this.TILE_SIZE * this.TILE_SIZE) {
-                    console.warn(`Invalid elevation data size for ${key}: ${elevationData.length}`);
-                    // Return NODATA tile
+                    // Return NODATA tile for invalid data size
                     return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);
                 }
                 
@@ -157,6 +156,43 @@ class ElevationRenderer {
     }
     
     /**
+     * Calculate elevation (topographical) color based on absolute elevation
+     * @param {number} elevation - Elevation in meters
+     * @returns {Array} RGBA color array
+     */
+    calculateElevationColor(elevation) {
+        // Handle NODATA (ocean/missing data)
+        if (elevation === -32768) {
+            return [70, 130, 180, 255]; // Steel blue for water
+        }
+        
+        // Topographical color scheme based on elevation
+        if (elevation < 0) {
+            // Below sea level - dark blue
+            return [25, 25, 112, 255]; // Midnight blue
+        } else if (elevation < 50) {
+            // Low coastal areas - green to yellow-green
+            const t = elevation / 50;
+            return this.interpolateColors([34, 139, 34, 255], [154, 205, 50, 255], t); // Forest green to yellow-green
+        } else if (elevation < 200) {
+            // Hills - yellow-green to brown
+            const t = (elevation - 50) / 150;
+            return this.interpolateColors([154, 205, 50, 255], [160, 82, 45, 255], t); // Yellow-green to saddle brown
+        } else if (elevation < 500) {
+            // Mountains - brown to gray
+            const t = (elevation - 200) / 300;
+            return this.interpolateColors([160, 82, 45, 255], [105, 105, 105, 255], t); // Saddle brown to dim gray
+        } else if (elevation < 1000) {
+            // High mountains - gray to light gray
+            const t = (elevation - 500) / 500;
+            return this.interpolateColors([105, 105, 105, 255], [169, 169, 169, 255], t); // Dim gray to dark gray
+        } else {
+            // Very high elevations - white
+            return [255, 255, 255, 255]; // White
+        }
+    }
+    
+    /**
      * Interpolate between two colors
      * @param {Array} color1 - Start color [r, g, b, a]
      * @param {Array} color2 - End color [r, g, b, a]
@@ -172,73 +208,13 @@ class ElevationRenderer {
         ];
     }
     
-    /**
-     * Render flood overlay for a tile
-     * @param {Uint16Array} elevationData - Raw elevation data
-     * @param {number} waterLevel - Water level in meters
-     * @param {string} tileKey - Tile identifier for caching
-     * @returns {string} Data URL of rendered tile
-     */
-    renderFloodTile(elevationData, waterLevel, tileKey) {
-        const startTime = performance.now();
-        
-        // Check rendered cache
-        const cacheKey = `${tileKey}@${waterLevel}`;
-        if (this.renderedCache.has(cacheKey)) {
-            return this.renderedCache.get(cacheKey);
-        }
-        
-        // Create off-screen canvas
-        const canvas = document.createElement('canvas');
-        canvas.width = this.TILE_SIZE;
-        canvas.height = this.TILE_SIZE;
-        const ctx = canvas.getContext('2d', { alpha: true });
-        
-        // Create image data
-        const imageData = ctx.createImageData(this.TILE_SIZE, this.TILE_SIZE);
-        const data = imageData.data;
-        
-        // Process each pixel
-        for (let i = 0; i < elevationData.length; i++) {
-            // Decode elevation
-            const elevation = this.decodeElevation(elevationData[i]);
-            
-            // Calculate flood color
-            const color = this.calculateFloodColor(elevation, waterLevel);
-            
-            // Set pixel color
-            const offset = i * 4;
-            data[offset] = color[0];     // Red
-            data[offset + 1] = color[1]; // Green
-            data[offset + 2] = color[2]; // Blue
-            data[offset + 3] = color[3]; // Alpha
-        }
-        
-        // Put image data to canvas
-        ctx.putImageData(imageData, 0, 0);
-        
-        // Convert to data URL
-        const dataUrl = canvas.toDataURL('image/png');
-        
-        // Cache the rendered tile
-        this.renderedCache.set(cacheKey, dataUrl);
-        
-        // Update stats
-        const renderTime = performance.now() - startTime;
-        this.stats.renderTime = renderTime;
-        this.stats.tilesRendered++;
-        
-        console.debug(`Rendered tile ${tileKey} in ${renderTime.toFixed(1)}ms`);
-        
-        return dataUrl;
-    }
     
     /**
      * Clear rendered tile cache (call when water level changes)
      */
     clearRenderedCache() {
         this.renderedCache.clear();
-        console.debug('Cleared rendered tile cache');
+        // Cache cleared
     }
     
     /**
@@ -271,7 +247,7 @@ class ElevationRenderer {
         this.elevationCache.clear();
         this.renderedCache.clear();
         this.loadingTiles.clear();
-        console.debug('Cleared all caches');
+        // All caches cleared
     }
 }
 
