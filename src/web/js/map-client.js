@@ -223,7 +223,14 @@ class FloodMapClient {
         // Show client-side status
         this.showClientStatus();
         
-        this.updateViewMode();
+        // Wait for map to be loaded before initial update
+        if (this.map && this.map.loaded()) {
+            this.updateViewMode();
+        } else {
+            this.map.on('load', () => {
+                this.updateViewMode();
+            });
+        }
     }
     
     showClientStatus() {
@@ -276,6 +283,18 @@ class FloodMapClient {
     }
     
     updateFloodLayer() {
+        // Ensure map and source are ready
+        if (!this.map || !this.map.loaded()) {
+            console.log('Map not ready for source update, deferring...');
+            return;
+        }
+        
+        const source = this.map.getSource('elevation-tiles');
+        if (!source) {
+            console.error('elevation-tiles source not found');
+            return;
+        }
+        
         if (this.viewMode === 'flood') {
             // Clear the renderer cache to force re-render with new water level
             if (this.elevationRenderer) {
@@ -283,10 +302,12 @@ class FloodMapClient {
             }
             
             // Switch to client-side rendering protocol
-            this.map.getSource('elevation-tiles').setTiles(['client://flood/{z}/{x}/{y}']);
+            source.setTiles(['client://flood/{z}/{x}/{y}']);
+            console.log('🌊 Switched to client-side flood rendering');
         } else {
             // Topographical view - always from server
-            this.map.getSource('elevation-tiles').setTiles(['/api/tiles/topographical/{z}/{x}/{y}.png']);
+            source.setTiles(['/api/tiles/topographical/{z}/{x}/{y}.png']);
+            console.log('🗻 Switched to server-side elevation rendering');
         }
     }
     
