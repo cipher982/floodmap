@@ -31,7 +31,8 @@ from config import (
     MAX_WATER_LEVEL,
     MAX_ZOOM,
     MIN_ZOOM,
-    TILE_SIZE
+    TILE_SIZE,
+    NODATA_VALUE
 )
 
 router = APIRouter(prefix="/api/v1/tiles", tags=["tiles-v1"])

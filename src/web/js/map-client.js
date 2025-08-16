@@ -12,7 +12,7 @@ class FloodMapClient {
         
         // Always use client-side rendering for flood tiles
         this.setupCustomProtocol();
-        console.log('🚀 Client-side flood rendering initialized');
+        console.log('🚀 Client-side rendering initialized');
         
         this.init();
     }
@@ -21,49 +21,44 @@ class FloodMapClient {
     setupCustomProtocol() {
         const self = this;
         
-        // Register a custom protocol with MapLibre
-        maplibregl.addProtocol('client', (params, callback) => {
-            // Parse the request URL
-            // Format: client://flood/{z}/{x}/{y}
-            const url = params.url.replace('client://', '');
-            const parts = url.split('/');
-            
-            if (parts[0] === 'flood' && parts.length >= 4) {
-                const z = parseInt(parts[1]);
-                const x = parseInt(parts[2]);
-                const y = parseInt(parts[3].split('?')[0]);
+        // Register a custom protocol with MapLibre (4.7.1+ Promise-based API)
+        maplibregl.addProtocol('client', async (params, abortController) => {
+            try {
+                // Parse the request URL
+                // Format: client://flood/{z}/{x}/{y}
+                const url = params.url.replace('client://', '');
+                const parts = url.split('/');
                 
-                // ALWAYS use the current water level from the slider
-                // This ensures tiles are re-rendered with the latest value
-                const waterLevel = self.currentWaterLevel;
-                
-                // Generate tile asynchronously
-                self.generateClientTile(z, x, y, waterLevel)
-                    .then(blob => {
-                        // Convert blob to array buffer for MapLibre
-                        blob.arrayBuffer().then(buffer => {
-                            callback(null, buffer, null, null);
-                        });
-                    })
-                    .catch(error => {
-                        console.error(`Failed to generate tile ${z}/${x}/${y}:`, error);
-                        callback(error);
-                    });
+                if ((parts[0] === 'flood' || parts[0] === 'elevation') && parts.length >= 4) {
+                    const mode = parts[0];
+                    const z = parseInt(parts[1]);
+                    const x = parseInt(parts[2]);
+                    const y = parseInt(parts[3].split('?')[0]);
                     
-                // Return true to indicate async handling
-                return true;
+                    // Generate tile (logging in production can be removed)
+                    
+                    // Generate tile based on mode
+                    const blob = await self.generateTile(z, x, y, mode, self.currentWaterLevel);
+                    
+                    const arrayBuffer = await blob.arrayBuffer();
+                    return { data: arrayBuffer };
+                } else {
+                    throw new Error(`Invalid client protocol URL: ${params.url}`);
+                }
+            } catch (error) {
+                console.error(`Failed to generate tile from ${params.url}:`, error);
+                throw error;
             }
-            
-            callback(new Error('Invalid client protocol URL'));
-            return true;
         });
+        
+        console.log('✅ Client protocol registered successfully');
     }
     
-    async generateClientTile(z, x, y, waterLevel) {
-        // Load elevation data (cached after first load)
+    async generateTile(z, x, y, mode, waterLevel = null) {
+        // Load elevation data
         const elevationData = await this.elevationRenderer.loadElevationTile(z, x, y);
         
-        // Create canvas for rendering - no caching, always fresh render
+        // Create canvas
         const canvas = document.createElement('canvas');
         canvas.width = 256;
         canvas.height = 256;
@@ -73,10 +68,12 @@ class FloodMapClient {
         const imageData = ctx.createImageData(256, 256);
         const data = imageData.data;
         
-        // Process each pixel with the current water level
+        // Process each pixel
         for (let i = 0; i < elevationData.length; i++) {
             const elevation = this.elevationRenderer.decodeElevation(elevationData[i]);
-            const color = this.elevationRenderer.calculateFloodColor(elevation, waterLevel);
+            const color = mode === 'elevation' 
+                ? this.elevationRenderer.calculateElevationColor(elevation)
+                : this.elevationRenderer.calculateFloodColor(elevation, waterLevel);
             
             const offset = i * 4;
             data[offset] = color[0];
@@ -87,14 +84,10 @@ class FloodMapClient {
         
         ctx.putImageData(imageData, 0, 0);
         
-        // Convert to blob - always fresh, no caching
+        // Convert to blob
         return new Promise((resolve, reject) => {
             canvas.toBlob(blob => {
-                if (blob) {
-                    resolve(blob);
-                } else {
-                    reject(new Error('Failed to create blob'));
-                }
+                blob ? resolve(blob) : reject(new Error(`Failed to create ${mode} tile`));
             }, 'image/png');
         });
     }
@@ -163,20 +156,15 @@ class FloodMapClient {
             this.assessLocationRisk(e.lngLat.lat, e.lngLat.lng);
         });
         
-        // Log tile requests for debugging
-        this.map.on('dataloading', (e) => {
-            if (e.sourceId === 'elevation-tiles' && e.tile) {
-                console.log(`Loading tile: ${e.tile.tileID.canonical.z}/${e.tile.tileID.canonical.x}/${e.tile.tileID.canonical.y}`);
-            }
-        });
+        // Optional: Add tile loading listeners for debugging
     }
     
     getTileUrl() {
         if (this.viewMode === 'elevation') {
-            // Server for elevation/topographical view
-            return '/api/tiles/topographical/{z}/{x}/{y}.png';
+            // Client-side elevation rendering (no server requests)
+            return 'client://elevation/{z}/{x}/{y}';
         } else {
-            // Always use client-side rendering for flood view
+            // Client-side flood rendering
             return 'client://flood/{z}/{x}/{y}';
         }
     }
@@ -220,8 +208,7 @@ class FloodMapClient {
             this.findUserLocation();
         });
         
-        // Show client-side status
-        this.showClientStatus();
+        // Status display can be added for debugging if needed
         
         // Wait for map to be loaded before initial update
         if (this.map && this.map.loaded()) {
@@ -233,34 +220,6 @@ class FloodMapClient {
         }
     }
     
-    showClientStatus() {
-        const status = document.createElement('div');
-        status.style.position = 'fixed';
-        status.style.top = '10px';
-        status.style.left = '50%';
-        status.style.transform = 'translateX(-50%)';
-        status.style.background = '#4CAF50';
-        status.style.color = 'white';
-        status.style.padding = '5px 10px';
-        status.style.borderRadius = '4px';
-        status.style.zIndex = '1000';
-        status.style.fontSize = '12px';
-        status.textContent = '⚡ Client-side rendering active (0 network requests)';
-        document.body.appendChild(status);
-        
-        // Show stats
-        setTimeout(() => {
-            if (this.elevationRenderer) {
-                const stats = this.elevationRenderer.getStats();
-                status.textContent = `⚡ Client: ${stats.tilesLoaded} tiles cached, ${stats.tilesRendered} rendered`;
-            }
-        }, 5000);
-        
-        // Keep status visible
-        setTimeout(() => {
-            status.style.opacity = '0.7';
-        }, 8000);
-    }
     
     updateViewMode() {
         const waterLevelControls = document.getElementById('water-level-controls');
@@ -283,17 +242,12 @@ class FloodMapClient {
     }
     
     updateFloodLayer() {
-        // Ensure map and source are ready
         if (!this.map || !this.map.loaded()) {
-            console.log('Map not ready for source update, deferring...');
             return;
         }
         
         const source = this.map.getSource('elevation-tiles');
-        if (!source) {
-            console.error('elevation-tiles source not found');
-            return;
-        }
+        if (!source) return;
         
         if (this.viewMode === 'flood') {
             // Clear the renderer cache to force re-render with new water level
@@ -301,13 +255,9 @@ class FloodMapClient {
                 this.elevationRenderer.clearRenderedCache();
             }
             
-            // Switch to client-side rendering protocol
             source.setTiles(['client://flood/{z}/{x}/{y}']);
-            console.log('🌊 Switched to client-side flood rendering');
         } else {
-            // Topographical view - always from server
-            source.setTiles(['/api/tiles/topographical/{z}/{x}/{y}.png']);
-            console.log('🗻 Switched to server-side elevation rendering');
+            source.setTiles(['client://elevation/{z}/{x}/{y}']);
         }
     }
     

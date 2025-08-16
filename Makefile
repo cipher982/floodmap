@@ -18,7 +18,14 @@ start: ## 🚀 Start tileserver + API server
 	@echo "⏳ Waiting for tileserver..."
 	@timeout=30; while [ $$timeout -gt 0 ] && ! curl -s http://localhost:8080 > /dev/null; do sleep 1; timeout=$$((timeout-1)); done
 	@echo "🌐 Starting API server..."
-	@cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+	@if [ -f .env ]; then \
+		API_PORT=$$(grep "^API_PORT=" .env | cut -d'=' -f2 | cut -d'#' -f1 | tr -d ' '); \
+		echo "📡 Using port $$API_PORT from .env file"; \
+		cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port $$API_PORT --reload; \
+	else \
+		echo "⚠️  No .env file found, using default port 8000"; \
+		cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload; \
+	fi
 
 # Start tileserver with static config (no dynamic generation)
 tileserver: ## 🔧 Start tileserver only
@@ -41,9 +48,16 @@ tileserver: ## 🔧 Start tileserver only
 
 # Start API server only
 website: ## 🔧 Start API server only
-	@echo "🌐 Starting API server at http://localhost:8000"
-	@echo "💡 Make sure tileserver is running: make tileserver"
-	@cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+	@if [ -f .env ]; then \
+		API_PORT=$$(grep "^API_PORT=" .env | cut -d'=' -f2 | cut -d'#' -f1 | tr -d ' '); \
+		echo "🌐 Starting API server at http://localhost:$$API_PORT"; \
+		echo "💡 Make sure tileserver is running: make tileserver"; \
+		cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port $$API_PORT --reload; \
+	else \
+		echo "🌐 Starting API server at http://localhost:8000"; \
+		echo "💡 Make sure tileserver is running: make tileserver"; \
+		cd src/api && uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload; \
+	fi
 
 # Stop all services
 stop: ## 🛑 Stop all services

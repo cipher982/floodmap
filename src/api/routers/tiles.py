@@ -197,64 +197,12 @@ def generate_topographical_tile_sync(z: int, x: int, y: int, format: str = 'PNG'
         )
 
 @router.get("/tiles/topographical/{z}/{x}/{y}.png")
-@log_performance
-async def get_topographical_tile(request: Request, z: int, x: int, y: int):
-    """Generate topographical tiles showing absolute elevation colors."""
-    # Input validation
-    if not (0 <= z <= MAX_ZOOM and 0 <= x < 2**z and 0 <= y < 2**z):
-        raise HTTPException(status_code=400, detail="Invalid tile coordinates")
-    
-    try:
-        # Determine optimal format based on browser capability
-        format = get_optimal_format(request)
-        media_type = "image/webp" if format == "WEBP" else "image/png"
-        
-        # Check cache first (using special cache key for topographical tiles)
-        cache_key_water_level = -888.0  # Special value for topographical tiles
-        cache_key = f"{cache_key_water_level}_{format}"
-        cached_tile = tile_cache.get(cache_key, z, x, y)
-        if cached_tile is not None:
-            return Response(
-                content=cached_tile,
-                media_type=media_type,
-                headers={
-                    "Cache-Control": "public, max-age=31536000, immutable",
-                    "Vary": "Accept",
-                    "X-Tile-Type": "topographical",
-                    "X-Format": format,
-                    "X-Cache": "HIT"
-                }
-            )
-        
-        # Generate tile asynchronously using thread pool
-        loop = asyncio.get_event_loop()
-        tile_data = await loop.run_in_executor(
-            CPU_EXECUTOR,
-            generate_topographical_tile_sync,
-            z, x, y, format
-        )
-        
-        # Cache the generated tile
-        tile_cache.put(cache_key, z, x, y, tile_data)
-        
-        return Response(
-            content=tile_data,
-            media_type=media_type,
-            headers={
-                "Cache-Control": "public, max-age=31536000, immutable",
-                "Vary": "Accept",
-                "X-Tile-Type": "topographical",
-                "X-Format": format,
-                "X-Cache": "MISS"
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Error generating topographical tile {z}/{x}/{y}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Topographical tile generation failed: {str(e)}"
-        )
+async def get_topographical_tile_DEPRECATED(z: int, x: int, y: int):
+    """DEPRECATED: Topographical tiles are now generated client-side only."""
+    raise HTTPException(
+        status_code=410, 
+        detail="DEPRECATED: Topographical tiles moved to client-side rendering. This endpoint should not be called."
+    )
 
 def _transparent_tile_bytes() -> bytes:
     """Return transparent PNG as bytes."""
@@ -298,72 +246,12 @@ async def get_vector_tile(z: int, x: int, y: int):
             raise HTTPException(status_code=503, detail="Tileserver unavailable")
 
 @router.get("/tiles/elevation/{water_level}/{z}/{x}/{y}.png")
-@log_performance
-async def get_elevation_tile(request: Request, water_level: float, z: int, x: int, y: int):
+async def get_elevation_tile_DEPRECATED(water_level: float, z: int, x: int, y: int):
     """DEPRECATED: Use client-side rendering instead."""
     raise HTTPException(
-        status_code=501,
-        detail=f"Server flood tiles DISABLED! Use /api/v1/tiles/elevation-data/{z}/{x}/{y}.u16 for client-side rendering"
+        status_code=410,
+        detail="DEPRECATED: Server-side flood tiles disabled. Use client-side rendering with elevation data from /api/v1/tiles/elevation-data/{z}/{x}/{y}.u16"
     )
-    # DISABLED - forcing client-side rendering
-    return
-    
-    if not (MIN_WATER_LEVEL <= water_level <= MAX_WATER_LEVEL):
-        raise HTTPException(status_code=400, detail="Invalid water level")
-    
-    try:
-        # Determine optimal format based on browser capability
-        format = get_optimal_format(request)
-        media_type = "image/webp" if format == "WEBP" else "image/png"
-        
-        # Check cache first (include format in cache key)
-        cache_key = f"{water_level}_{format}"
-        cached_tile = tile_cache.get(cache_key, z, x, y)
-        if cached_tile is not None:
-            return Response(
-                content=cached_tile,
-                media_type=media_type,
-                headers={
-                    "Cache-Control": "public, max-age=31536000, immutable",
-                    "Vary": "Accept",
-                    "X-Water-Level": str(water_level),
-                    "X-Format": format,
-                    "X-Cache": "HIT"
-                }
-            )
-        
-        # Record request for predictive preloading
-        predictive_preloader.record_tile_request(z, x, y, water_level)
-        
-        # Generate tile asynchronously using thread pool
-        loop = asyncio.get_event_loop()
-        tile_data = await loop.run_in_executor(
-            CPU_EXECUTOR,
-            generate_elevation_tile_sync,
-            water_level, z, x, y, format
-        )
-        
-        # Cache the generated tile
-        tile_cache.put(cache_key, z, x, y, tile_data)
-        
-        return Response(
-            content=tile_data,
-            media_type=media_type,
-            headers={
-                "Cache-Control": "public, max-age=31536000, immutable",
-                "Vary": "Accept",
-                "X-Water-Level": str(water_level),
-                "X-Format": format,
-                "X-Cache": "MISS"
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Error generating elevation tile {z}/{x}/{y} at water level {water_level}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Elevation tile generation failed: {str(e)}"
-        )
 
 
 def _transparent_tile() -> Response:
