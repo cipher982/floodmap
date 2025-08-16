@@ -300,8 +300,13 @@ async def get_vector_tile(z: int, x: int, y: int):
 @router.get("/tiles/elevation/{water_level}/{z}/{x}/{y}.png")
 @log_performance
 async def get_elevation_tile(request: Request, water_level: float, z: int, x: int, y: int):
-    """Generate contextual flood risk tiles dynamically with async processing."""
-    # No zoom restrictions - elevation data works at any zoom level
+    """DEPRECATED: Use client-side rendering instead."""
+    raise HTTPException(
+        status_code=501,
+        detail=f"Server flood tiles DISABLED! Use /api/v1/tiles/elevation-data/{z}/{x}/{y}.u16 for client-side rendering"
+    )
+    # DISABLED - forcing client-side rendering
+    return
     
     if not (MIN_WATER_LEVEL <= water_level <= MAX_WATER_LEVEL):
         raise HTTPException(status_code=400, detail="Invalid water level")

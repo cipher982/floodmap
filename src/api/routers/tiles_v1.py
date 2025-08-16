@@ -341,9 +341,16 @@ async def get_flood_tile(
     y: int = Path(..., description="Tile Y coordinate")
 ):
     """
-    Serve flood overlay tiles at specified water level.
-    Returns colored flood risk visualization.
+    DEPRECATED: This endpoint should not be used with client-side rendering.
+    The client should use /elevation-data/{z}/{x}/{y}.u16 instead.
     """
+    raise HTTPException(
+        status_code=501, 
+        detail="Server-side flood tiles are disabled. Use client-side rendering with /elevation-data/{z}/{x}/{y}.u16"
+    )
+    
+    # OLD CODE DISABLED - Client should render tiles
+    return
     validate_water_level(water_level)
     validate_tile_coordinates(z, x, y)
     
