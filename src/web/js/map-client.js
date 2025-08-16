@@ -282,9 +282,8 @@ class FloodMapClient {
                 this.elevationRenderer.clearRenderedCache();
             }
             
-            // Force MapLibre to repaint tiles without changing URLs
-            // This triggers the protocol handler to re-fetch all visible tiles
-            this.map.triggerRepaint();
+            // Switch to client-side rendering protocol
+            this.map.getSource('elevation-tiles').setTiles(['client://flood/{z}/{x}/{y}']);
         } else {
             // Topographical view - always from server
             this.map.getSource('elevation-tiles').setTiles(['/api/tiles/topographical/{z}/{x}/{y}.png']);
