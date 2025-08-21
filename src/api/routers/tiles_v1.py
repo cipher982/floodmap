@@ -134,13 +134,10 @@ async def get_vector_tile(
     if not tileserver_source:
         raise HTTPException(status_code=400, detail=f"Unsupported vector source: {source}")
     
-    # Proxy to tileserver
-    async with httpx.AsyncClient() as client:
+    # Use simple httpx with correct port configuration  
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.get(
-                f"{TILESERVER_URL}/data/{tileserver_source}/{z}/{x}/{y}.pbf",
-                timeout=10.0
-            )
+            response = await client.get(f"{TILESERVER_URL}/data/{tileserver_source}/{z}/{x}/{y}.pbf")
             
             if response.status_code == 200:
                 return create_tile_response(
@@ -149,18 +146,15 @@ async def get_vector_tile(
                     tile_source="vector"
                 )
             elif response.status_code == 204:
-                # Empty tile - return minimal response
                 return create_tile_response(
                     content=b"",
-                    content_type="application/x-protobuf", 
+                    content_type="application/x-protobuf",
                     tile_source="vector"
                 )
             else:
-                logger.warning(f"Tileserver returned {response.status_code} for vector tile {source}/{z}/{x}/{y}")
                 raise HTTPException(status_code=404, detail="Vector tile not found")
-                
         except httpx.RequestError as e:
-            logger.error(f"Tileserver request failed for vector tile {source}/{z}/{x}/{y}: {e}")
+            logger.error(f"Tileserver connection error: {e}")
             raise HTTPException(status_code=503, detail="Vector tile service unavailable")
 
 # ============================================================================
