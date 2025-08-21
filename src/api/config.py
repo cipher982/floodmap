@@ -20,7 +20,8 @@ MAP_DATA_DIR = PROJECT_ROOT / os.getenv("MAP_DATA_DIR", "map_data")
 API_PORT = int(os.getenv("API_PORT") or "8000")
 TILESERVER_PORT = int(os.getenv("TILESERVER_PORT") or "8080")
 FRONTEND_PORT = int(os.getenv("FRONTEND_PORT") or "3000")
-TILESERVER_URL = os.getenv("TILESERVER_URL", f"http://localhost:{TILESERVER_PORT}")
+# Use 127.0.0.1 instead of localhost for more reliable connection to Docker
+TILESERVER_URL = os.getenv("TILESERVER_URL", f"http://127.0.0.1:{TILESERVER_PORT}")
 
 # Cache configuration
 ELEVATION_CACHE_SIZE = int(os.getenv("ELEVATION_CACHE_SIZE") or "50")
