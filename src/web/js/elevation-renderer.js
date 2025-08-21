@@ -80,8 +80,18 @@ class ElevationRenderer {
                 
                 // Validate data size
                 if (elevationData.length !== this.TILE_SIZE * this.TILE_SIZE) {
+                    console.warn(`⚠️ Invalid data size for tile ${key}: ${elevationData.length} bytes (expected ${this.TILE_SIZE * this.TILE_SIZE})`);
                     // Return NODATA tile for invalid data size
                     return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);
+                }
+                
+                // Debug: log tile loading (development mode only)
+                if (window.DEBUG_TILES && Math.random() < 0.02) { // 2% of tiles when debugging enabled
+                    console.log(`✅ Loaded tile data ${key}:`, {
+                        size: elevationData.length,
+                        first10: Array.from(elevationData.slice(0, 10)),
+                        allSameValue: new Set(elevationData).size === 1
+                    });
                 }
                 
                 // Cache the data
@@ -92,7 +102,8 @@ class ElevationRenderer {
                 return elevationData;
             })
             .catch(error => {
-                console.error(`Error loading elevation tile ${key}:`, error);
+                console.error(`❌ Error loading elevation tile ${key}:`, error);
+                console.error(`   URL was: /api/v1/tiles/elevation-data/${z}/${x}/${y}.u16`);
                 this.loadingTiles.delete(key);
                 // Return NODATA tile on error
                 return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);

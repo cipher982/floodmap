@@ -47,6 +47,15 @@
         </div>
     </div>
 
+    <script>
+        // Debug mode detection (enable with ?debug=1 or localStorage)
+        window.DEBUG_TILES = new URLSearchParams(window.location.search).get('debug') === '1' || 
+                             localStorage.getItem('DEBUG_TILES') === 'true' ||
+                             window.location.hostname === 'localhost';
+        if (window.DEBUG_TILES) {
+            console.log('🔧 Debug mode enabled - tile logging active');
+        }
+    </script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="/static/js/elevation-renderer.js"></script>
     <script src="/static/js/map-client.js"></script>
