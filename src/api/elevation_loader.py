@@ -35,12 +35,14 @@ class ElevationDataLoader:
         
     async def _check_vector_tile(self, xtile: int, ytile: int, zoom: int) -> bool:
         """Check if vector tile exists for this location (indicates geographic features)."""
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(f"{TILESERVER_URL}/data/usa-complete/{zoom}/{xtile}/{ytile}.pbf")
-                return response.status_code == 200 and len(response.content) > VECTOR_TILE_MIN_SIZE
-            except:
-                return False
+        from http_client import get_http_client
+        
+        client = await get_http_client()
+        try:
+            response = await client.get(f"{TILESERVER_URL}/data/usa-complete/{zoom}/{xtile}/{ytile}.pbf")
+            return response.status_code == 200 and len(response.content) > VECTOR_TILE_MIN_SIZE
+        except:
+            return False
         
     def deg2num(self, lat_deg: float, lon_deg: float, zoom: int) -> Tuple[int, int]:
         """Convert lat/lon to tile numbers using Web Mercator projection."""
