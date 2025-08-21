@@ -58,6 +58,16 @@ class FloodMapClient {
         // Load elevation data
         const elevationData = await this.elevationRenderer.loadElevationTile(z, x, y);
         
+        // Debug logging (development mode only)
+        if (window.DEBUG_TILES && Math.random() < 0.05) { // 5% of tiles when debugging enabled
+            console.log(`🔍 Debug tile ${z}/${x}/${y}:`, {
+                dataLength: elevationData.length,
+                first10Values: Array.from(elevationData.slice(0, 10)),
+                centerValue: elevationData[128 * 256 + 128],
+                decodedCenter: this.elevationRenderer.decodeElevation(elevationData[128 * 256 + 128])
+            });
+        }
+        
         // Create canvas
         const canvas = document.createElement('canvas');
         canvas.width = 256;
@@ -68,18 +78,34 @@ class FloodMapClient {
         const imageData = ctx.createImageData(256, 256);
         const data = imageData.data;
         
-        // Process each pixel
+        // Process each pixel - simple 1:1 mapping
+        let debugColorSample = null;
         for (let i = 0; i < elevationData.length; i++) {
             const elevation = this.elevationRenderer.decodeElevation(elevationData[i]);
             const color = mode === 'elevation' 
                 ? this.elevationRenderer.calculateElevationColor(elevation)
                 : this.elevationRenderer.calculateFloodColor(elevation, waterLevel);
             
+            // Debug: sample first non-transparent color
+            if (!debugColorSample && color[3] > 0) {
+                debugColorSample = { 
+                    raw: elevationData[i], 
+                    elevation, 
+                    color,
+                    mode 
+                };
+            }
+            
             const offset = i * 4;
             data[offset] = color[0];
             data[offset + 1] = color[1];
             data[offset + 2] = color[2];
             data[offset + 3] = color[3];
+        }
+        
+        // Log debug info (development mode only)
+        if (window.DEBUG_TILES && debugColorSample && Math.random() < 0.05) {
+            console.log(`🎨 Color sample for tile ${z}/${x}/${y}:`, debugColorSample);
         }
         
         ctx.putImageData(imageData, 0, 0);
