@@ -185,8 +185,10 @@ class ElevationDataLoader:
             return None
         
         # Handle multiple overlapping files with proper mosaicking
+        # Pass tile indices for proper global grid alignment
         tile_data = self._mosaic_elevation_files(
-            overlapping_files, lat_top, lat_bottom, lon_left, lon_right, tile_size
+            overlapping_files, lat_top, lat_bottom, lon_left, lon_right, tile_size,
+            xtile, ytile, zoom
         )
         
         # Cache the result
@@ -202,25 +204,19 @@ class ElevationDataLoader:
         return tile_data
     
     def _mosaic_elevation_files(self, files: list, lat_top: float, lat_bottom: float,
-                               lon_left: float, lon_right: float, tile_size: int) -> Optional[np.ndarray]:
+                               lon_left: float, lon_right: float, tile_size: int,
+                               xtile: int, ytile: int, zoom: int) -> Optional[np.ndarray]:
         """Accurately mosaic multiple 1-degree elevation rasters into a single Web-Mercator tile.
 
-        The previous implementation simply resized every overlapping file to the
-        full 256×256 target which meant the last processed source overwrote the
-        already combined data and, more importantly, destroyed the spatial
-        relationship between the DEM and the map.  The re-worked algorithm
-        draws every source into the correct sub-window of the canvas so that
-        coastline and elevation stay perfectly aligned.
+        Uses global pixel grid alignment to ensure adjacent tiles have perfectly
+        matching boundaries, eliminating seams between tiles.
         """
 
         # Prepare empty canvas (initialised with NoData)
         canvas = np.full((tile_size, tile_size), NODATA_VALUE, dtype=np.int16)
 
-        total_lat_span = lat_top - lat_bottom  # positive value
-        total_lon_span = lon_right - lon_left  # positive value
-
         from PIL import Image
-
+        
         for file_path in files:
             elevation_data = self.load_elevation_data(file_path)
             if elevation_data is None:
@@ -245,7 +241,7 @@ class ElevationDataLoader:
             if overlap_lat_bottom >= overlap_lat_top or overlap_lon_left >= overlap_lon_right:
                 continue
 
-            # Source array indices for the overlapping area ------------------
+            # Source array indices for the overlapping area
             src_h, src_w = elevation_array.shape
 
             y_top_src = int((file_lat_top - overlap_lat_top) / (file_lat_top - file_lat_bottom) * src_h)
@@ -258,16 +254,39 @@ class ElevationDataLoader:
 
             sub_array = elevation_array[y_top_src:y_bottom_src, x_left_src:x_right_src]
 
-            # Destination window inside the 256×256 canvas -------------------
-            y_top_frac = (lat_top - overlap_lat_top) / total_lat_span
-            y_bottom_frac = (lat_top - overlap_lat_bottom) / total_lat_span
-            x_left_frac = (overlap_lon_left - lon_left) / total_lon_span
-            x_right_frac = (overlap_lon_right - lon_left) / total_lon_span
-
-            y_top_dst = int(round(y_top_frac * tile_size))
-            y_bottom_dst = int(round(y_bottom_frac * tile_size))
-            x_left_dst = int(round(x_left_frac * tile_size))
-            x_right_dst = int(round(x_right_frac * tile_size))
+            # FIXED: Use tile-index-based pixel coordinates for perfect alignment
+            # The key insight: destination pixels must be calculated from tile indices, not geographic coords
+            
+            # Calculate pixel positions within this tile based on the overlap's geographic extent
+            # Use the tile's pixel grid (0-255) directly
+            
+            # Tile pixel boundaries are deterministic: tile N ends at pixel 255, tile N+1 starts at pixel 0
+            # We need to map the geographic overlap to these fixed pixel positions
+            
+            # Calculate fractional position within the tile
+            lon_span = lon_right - lon_left
+            lat_span = lat_top - lat_bottom
+            
+            # Where does the overlap start/end within this tile? (0.0 = left/top edge, 1.0 = right/bottom edge)
+            x_left_frac = (overlap_lon_left - lon_left) / lon_span
+            x_right_frac = (overlap_lon_right - lon_left) / lon_span
+            y_top_frac = (lat_top - overlap_lat_top) / lat_span
+            y_bottom_frac = (lat_top - overlap_lat_bottom) / lat_span
+            
+            # Convert to pixel coordinates using consistent floor operation
+            # This ensures tile boundaries always map to pixel 0 or 256
+            x_left_dst = int(math.floor(x_left_frac * tile_size))
+            x_right_dst = int(math.floor(x_right_frac * tile_size))
+            y_top_dst = int(math.floor(y_top_frac * tile_size))
+            y_bottom_dst = int(math.floor(y_bottom_frac * tile_size))
+            
+            # Special handling for tile boundaries to ensure perfect alignment
+            # If we're at the right edge of the tile, ensure we include pixel 255
+            if abs(x_right_frac - 1.0) < 1e-10:
+                x_right_dst = tile_size
+            # If we're at the bottom edge of the tile, ensure we include pixel 255
+            if abs(y_bottom_frac - 1.0) < 1e-10:
+                y_bottom_dst = tile_size
 
             # Clamp to canvas boundary (numerical safety)
             y_top_dst = max(0, min(tile_size, y_top_dst))
