@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from color_mapping import color_mapper
-from elevation_loader import elevation_loader
+from elevation_loader import elevation_loader  # Uses preprocessed aligned data
 from tile_cache import tile_cache
 from error_handling import safe_tile_generation, log_performance, health_monitor
 from persistent_elevation_cache import persistent_elevation_cache
@@ -404,27 +404,8 @@ async def get_flood_tile(
 def generate_elevation_data_sync(z: int, x: int, y: int) -> bytes:
     """Generate raw elevation data as Uint16 array for client-side rendering."""
     try:
-        # Get tile bounds for elevation file lookup
-        lat_top, lat_bottom, lon_left, lon_right = elevation_loader.num2deg(x, y, z)
-        
-        # Find elevation files using O(1) lookup
-        overlapping_files = elevation_loader.find_elevation_files_for_tile(
-            lat_top, lat_bottom, lon_left, lon_right
-        )
-        
-        if not overlapping_files:
-            # Return empty elevation data (all NODATA)
-            empty_data = np.full((TILE_SIZE, TILE_SIZE), 65535, dtype=np.uint16)
-            return empty_data.tobytes()
-        
-        # Get elevation data from persistent cache
-        elevation_data = None
-        for file_path in overlapping_files:
-            elevation_data = persistent_elevation_cache.extract_tile_from_cached_array(
-                file_path, lat_top, lat_bottom, lon_left, lon_right, TILE_SIZE
-            )
-            if elevation_data is not None:
-                break
+        # Get elevation data from preprocessed aligned file
+        elevation_data = elevation_loader.get_elevation_for_tile(x, y, z, tile_size=TILE_SIZE)
         
         if elevation_data is None:
             # Return empty elevation data
