@@ -216,34 +216,36 @@ async def get_vector_tile(z: int, x: int, y: int):
         raise HTTPException(status_code=400, detail="Invalid tile coordinates")
     
     # Proxy to tileserver with fallback logic
-    async with httpx.AsyncClient() as client:
-        try:
-            # Use Tampa as primary source (usa-complete is corrupted)
-            response = await client.get(f"{TILESERVER_URL}/data/tampa/{z}/{x}/{y}.pbf")
+    from http_client import get_http_client
+    
+    client = await get_http_client()
+    try:
+        # Use Tampa as primary source (usa-complete is corrupted)
+        response = await client.get(f"{TILESERVER_URL}/data/tampa/{z}/{x}/{y}.pbf")
+        
+        if response.status_code == 200 and len(response.content) > 0:
+            return Response(
+                content=response.content,
+                media_type="application/x-protobuf",
+                headers={
+                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "Vary": "Accept",
+                    "Access-Control-Allow-Origin": "*",
+                    "X-Tile-Source": "tampa"
+                }
+            )
+        elif response.status_code == 204:
+            # Empty tile
+            return Response(
+                content=b"",
+                media_type="application/x-protobuf",
+                headers={"Cache-Control": "public, max-age=31536000, immutable", "Vary": "Accept"}
+            )
+        else:
+            raise HTTPException(status_code=404, detail="Tile not found")
             
-            if response.status_code == 200 and len(response.content) > 0:
-                return Response(
-                    content=response.content,
-                    media_type="application/x-protobuf",
-                    headers={
-                        "Cache-Control": "public, max-age=31536000, immutable",
-                        "Vary": "Accept",
-                        "Access-Control-Allow-Origin": "*",
-                        "X-Tile-Source": "tampa"
-                    }
-                )
-            elif response.status_code == 204:
-                # Empty tile
-                return Response(
-                    content=b"",
-                    media_type="application/x-protobuf",
-                    headers={"Cache-Control": "public, max-age=31536000, immutable", "Vary": "Accept"}
-                )
-            else:
-                raise HTTPException(status_code=404, detail="Tile not found")
-                
-        except httpx.RequestError:
-            raise HTTPException(status_code=503, detail="Tileserver unavailable")
+    except httpx.RequestError:
+        raise HTTPException(status_code=503, detail="Tileserver unavailable")
 
 @router.get("/tiles/elevation/{water_level}/{z}/{x}/{y}.png")
 async def get_elevation_tile_DEPRECATED(water_level: float, z: int, x: int, y: int):
@@ -425,24 +427,24 @@ async def debug_tile(z: int, x: int, y: int):
     
     # Check vector tile availability
     vector_info = {}
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(f"{TILESERVER_URL}/data/usa-complete/{z}/{x}/{y}.pbf")
-            vector_info["usa_complete"] = {
-                "status": response.status_code,
-                "size": len(response.content) if response.content else 0
-            }
-        except Exception as e:
-            vector_info["usa_complete"] = {"error": str(e)}
-        
-        try:
-            response = await client.get(f"{TILESERVER_URL}/data/tampa/{z}/{x}/{y}.pbf")
-            vector_info["tampa"] = {
-                "status": response.status_code,
-                "size": len(response.content) if response.content else 0
-            }
-        except Exception as e:
-            vector_info["tampa"] = {"error": str(e)}
+    client = await get_http_client()
+    try:
+        response = await client.get(f"{TILESERVER_URL}/data/usa-complete/{z}/{x}/{y}.pbf")
+        vector_info["usa_complete"] = {
+            "status": response.status_code,
+            "size": len(response.content) if response.content else 0
+        }
+    except Exception as e:
+        vector_info["usa_complete"] = {"error": str(e)}
+    
+    try:
+        response = await client.get(f"{TILESERVER_URL}/data/tampa/{z}/{x}/{y}.pbf")
+        vector_info["tampa"] = {
+            "status": response.status_code,
+            "size": len(response.content) if response.content else 0
+        }
+    except Exception as e:
+        vector_info["tampa"] = {"error": str(e)}
     
     return {
         "tile": f"{z}/{x}/{y}",
