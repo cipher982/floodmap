@@ -7,7 +7,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 import uvicorn
 import os
+import logging
 from dotenv import load_dotenv
+
+# Get logger
+logger = logging.getLogger(__name__)
 
 # OpenTelemetry imports
 from opentelemetry import trace
@@ -114,6 +118,27 @@ app = FastAPI(
     description="Clean flood risk mapping service",
     version="2.0.0"
 )
+
+# HTTP client lifecycle management
+@app.on_event("startup")
+async def startup_event():
+    """Initialize shared HTTP client on startup."""
+    try:
+        from http_client import get_http_client
+        client = await get_http_client()  # Initialize the client
+        logger.info("🔗 HTTP client initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize HTTP client: {e}")
+    
+@app.on_event("shutdown") 
+async def shutdown_event():
+    """Clean up shared HTTP client on shutdown."""
+    try:
+        from http_client import close_http_client
+        await close_http_client()
+        logger.info("🔒 HTTP client closed successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to close HTTP client: {e}")
 
 # Add middleware
 app.add_middleware(RateLimitMiddleware, default_limit=60)
