@@ -238,3 +238,13 @@ ARCHIVED_DATA
 output/
 /archive/
 archive/
+
+# Development temporary files
+temp_input/
+temp_processing/
+srtm_missing_tiles/
+floodmap.egg-info/
+
+# Development artifacts
+test_*.html
+test_tile.png
