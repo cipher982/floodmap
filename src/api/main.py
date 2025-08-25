@@ -4,7 +4,7 @@ Single server architecture with clear separation of concerns.
 """
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 import uvicorn
 import os
 import logging
@@ -108,6 +108,7 @@ validate_critical_data()
 
 # Import routers
 from routers import tiles, tiles_v1, risk, health
+from routers import diagnostics as diagnostics_router
 
 # Import middleware
 from middleware.rate_limiter import RateLimitMiddleware
@@ -151,6 +152,7 @@ if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
 # Include API routers
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(tiles.router, prefix="/api", tags=["tiles"])  # Legacy routes
+app.include_router(diagnostics_router.router)  # /api/diagnostics
 app.include_router(tiles_v1.router, tags=["tiles-v1"])  # New v1 routes (already prefixed)
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 
@@ -162,6 +164,21 @@ async def serve_frontend():
     """Serve the main application frontend."""
     with open("../web/index.html", "r") as f:
         return HTMLResponse(content=f.read())
+
+@app.get("/favicon.svg", include_in_schema=False)
+async def favicon_svg():
+    """Serve an emoji-based SVG favicon without a static file."""
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
+        "<text x='50%' y='50%' dominant-baseline='central' text-anchor='middle' font-size='52'>🌊</text>"
+        "</svg>"
+    )
+    return Response(content=svg, media_type="image/svg+xml")
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_ico():
+    """Redirect .ico requests to the SVG favicon to avoid 404s."""
+    return RedirectResponse(url="/favicon.svg")
 
 if __name__ == "__main__":
     import os
