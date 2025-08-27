@@ -260,17 +260,22 @@ class ElevationDataLoader:
 
             sub_array = elevation_array[y_top_src:y_bottom_src, x_left_src:x_right_src]
 
-            # Treat ocean zeros as NoData BEFORE resampling to avoid creating
-            # low-elevation artifacts (e.g., green rectangles) from interpolation.
-            # Many SRTM-derived tiles encode ocean as 0 instead of the declared
-            # nodata value. If left as 0, resampling will produce small positive
-            # values which then render as low-lying land. Reclassify exact zeros
-            # to NODATA at source-patch level so they don't get written.
+            # Conservative handling of ocean zeros and mask-aware resampling:
+            # - Only reclassify exact zeros to NODATA if they dominate the
+            #   sub-patch (avoid erasing legitimate 0 m land at beaches).
+            # - Build a validity mask so resampling ignores NODATA and extreme
+            #   placeholders (< -500) instead of blending them into neighbors.
+            sub_array = sub_array.copy()
             if sub_array.size:
-                zero_mask = (sub_array == 0)
-                if np.any(zero_mask):
-                    sub_array = sub_array.copy()
-                    sub_array[zero_mask] = NODATA_VALUE
+                # Step 1: optionally treat zeros as NODATA if they dominate
+                zero_ratio = float(np.mean(sub_array == 0)) if sub_array.size else 0.0
+                if zero_ratio >= 0.90:  # dominant zeros → very likely ocean
+                    sub_array[sub_array == 0] = NODATA_VALUE
+
+                # Step 2: build a validity mask and a weighted value array
+                src_valid_mask = (sub_array != NODATA_VALUE) & (sub_array >= -500) & (sub_array <= 9000)
+                value_float = sub_array.astype(np.float32)
+                weight_float = src_valid_mask.astype(np.float32)
 
             # FIXED: Use tile-index-based pixel coordinates for perfect alignment
             # The key insight: destination pixels must be calculated from tile indices, not geographic coords
@@ -320,9 +325,18 @@ class ElevationDataLoader:
 
             # Resize source patch to destination pixel size ------------------
             if sub_array.shape != (dst_height, dst_width):
-                pil_img = Image.fromarray(sub_array.astype(np.float32), mode='F')
-                pil_img = pil_img.resize((dst_width, dst_height), Image.LANCZOS)
-                sub_resized = np.array(pil_img, dtype=np.int16)
+                # Mask-aware resampling: resize value*weight and weight, then
+                # divide to avoid bleeding NODATA into valid pixels.
+                val_img = Image.fromarray((value_float * weight_float), mode='F')
+                wgt_img = Image.fromarray(weight_float, mode='F')
+                val_r = val_img.resize((dst_width, dst_height), Image.LANCZOS)
+                wgt_r = wgt_img.resize((dst_width, dst_height), Image.LANCZOS)
+                val_r = np.array(val_r, dtype=np.float32)
+                wgt_r = np.array(wgt_r, dtype=np.float32)
+                with np.errstate(invalid='ignore', divide='ignore'):
+                    out = np.where(wgt_r > 1e-6, val_r / wgt_r, np.nan)
+                # Convert NaNs to NODATA
+                sub_resized = np.where(np.isfinite(out), out, NODATA_VALUE).astype(np.int16)
             else:
                 sub_resized = sub_array
 
