@@ -260,6 +260,18 @@ class ElevationDataLoader:
 
             sub_array = elevation_array[y_top_src:y_bottom_src, x_left_src:x_right_src]
 
+            # Treat ocean zeros as NoData BEFORE resampling to avoid creating
+            # low-elevation artifacts (e.g., green rectangles) from interpolation.
+            # Many SRTM-derived tiles encode ocean as 0 instead of the declared
+            # nodata value. If left as 0, resampling will produce small positive
+            # values which then render as low-lying land. Reclassify exact zeros
+            # to NODATA at source-patch level so they don't get written.
+            if sub_array.size:
+                zero_mask = (sub_array == 0)
+                if np.any(zero_mask):
+                    sub_array = sub_array.copy()
+                    sub_array[zero_mask] = NODATA_VALUE
+
             # FIXED: Use tile-index-based pixel coordinates for perfect alignment
             # The key insight: destination pixels must be calculated from tile indices, not geographic coords
             
@@ -314,12 +326,14 @@ class ElevationDataLoader:
             else:
                 sub_resized = sub_array
 
-            # Blend into canvas – keep existing values where we already have
-            # data (prefers the first encountered file; order of `files` list
-            # is determined by find_elevation_files_for_tile which walks from
-            # west→east and south→north, matching typical DEM priority rules)
+            # Blend into canvas – prefer real data over placeholders.
+            # Consider both explicit NODATA and extreme invalid values (< -500)
+            # as replaceable placeholders. Only write values in the plausible
+            # elevation range.
             target_slice = canvas[y_top_dst:y_bottom_dst, x_left_dst:x_right_dst]
-            write_mask = (target_slice == NODATA_VALUE) & (sub_resized != NODATA_VALUE)
+            dest_placeholder = (target_slice == NODATA_VALUE) | (target_slice < -500)
+            src_valid = (sub_resized != NODATA_VALUE) & (sub_resized >= -500) & (sub_resized <= 9000)
+            write_mask = dest_placeholder & src_valid
             target_slice[write_mask] = sub_resized[write_mask]
 
             canvas[y_top_dst:y_bottom_dst, x_left_dst:x_right_dst] = target_slice
