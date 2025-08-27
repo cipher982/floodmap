@@ -6,6 +6,7 @@ import time
 import threading
 from typing import Optional, Tuple
 from dataclasses import dataclass
+from config import TILE_CACHE_TTL, IS_DEVELOPMENT
 
 
 @dataclass
@@ -151,5 +152,6 @@ class TileCache:
             }
 
 
-# Global cache instance with larger size and immutable TTL
-tile_cache = TileCache(max_size=5000, ttl_seconds=None)
+# Global cache instance - development friendly
+cache_ttl = 60 if IS_DEVELOPMENT else TILE_CACHE_TTL  # 60 seconds in development, infinite in production
+tile_cache = TileCache(max_size=5000, ttl_seconds=cache_ttl)
