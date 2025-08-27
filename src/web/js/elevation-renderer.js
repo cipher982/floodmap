@@ -44,6 +44,9 @@ class ElevationRenderer {
         this.ELEVATION_MIN = -500;
         this.ELEVATION_MAX = 9000;
         this.ELEVATION_RANGE = this.ELEVATION_MAX - this.ELEVATION_MIN;
+
+        // Precomputed ocean color for elevation mode (steel blue)
+        this.OCEAN_RGBA = [70, 130, 180, 255];
     }
     
     /**
@@ -121,6 +124,7 @@ class ElevationRenderer {
      */
     decodeElevation(uint16Value) {
         if (uint16Value === this.NODATA_VALUE) {
+            // Use a consistent sentinel for downstream checks
             return -32768; // NODATA sentinel value
         }
         // Decode from 0-65534 range to -500 to 9000m
@@ -174,8 +178,8 @@ class ElevationRenderer {
      */
     calculateElevationColor(elevation) {
         // Handle NODATA (ocean/missing data)
-        if (elevation === -32768) {
-            return [70, 130, 180, 255]; // Steel blue for water
+        if (elevation === -32768 || Number.isNaN(elevation)) {
+            return this.OCEAN_RGBA; // Steel blue for water
         }
         
         // Topographical color scheme based on elevation
@@ -260,6 +264,41 @@ class ElevationRenderer {
         this.renderedCache.clear();
         this.loadingTiles.clear();
         // All caches cleared
+    }
+
+    /**
+     * Quick scan to detect if a tile is entirely NODATA
+     * @param {Uint16Array} elevationData
+     * @returns {boolean}
+     */
+    isAllNoData(elevationData) {
+        // Fast path: check a few sample points first
+        const len = elevationData.length;
+        const samples = [0, 1, 2, 3, 4, len >> 1, len - 1];
+        if (!samples.every(i => elevationData[i] === this.NODATA_VALUE)) {
+            return false;
+        }
+        // Full scan to confirm
+        for (let i = 0; i < len; i++) {
+            if (elevationData[i] !== this.NODATA_VALUE) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Fill an ImageData buffer with a solid RGBA color.
+     * @param {ImageData} imageData
+     * @param {Array} rgba
+     */
+    fillImageData(imageData, rgba) {
+        const data = imageData.data;
+        const [r, g, b, a] = rgba;
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = r;
+            data[i + 1] = g;
+            data[i + 2] = b;
+            data[i + 3] = a;
+        }
     }
 }
 

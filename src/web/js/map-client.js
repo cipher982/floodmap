@@ -77,6 +77,17 @@ class FloodMapClient {
         // Create image data
         const imageData = ctx.createImageData(256, 256);
         const data = imageData.data;
+
+        // Fast-path: if the entire tile is NODATA, fill with ocean color
+        if (this.elevationRenderer.isAllNoData(elevationData)) {
+            this.elevationRenderer.fillImageData(imageData, this.elevationRenderer.OCEAN_RGBA);
+            ctx.putImageData(imageData, 0, 0);
+            return new Promise((resolve, reject) => {
+                canvas.toBlob(blob => {
+                    blob ? resolve(blob) : reject(new Error(`Failed to create ${mode} tile`));
+                }, 'image/png');
+            });
+        }
         
         // Process each pixel - simple 1:1 mapping
         let debugColorSample = null;
@@ -179,7 +190,7 @@ class FloodMapClient {
         this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
         
         this.map.on('click', (e) => {
-            this.assessLocationRisk(e.lngLat.lat, e.lngLat.lng);
+            this.assessLocationRisk(e.lngLat.lat, e.lngLat.lng, e.lngLat);
         });
         
         // Optional: Add tile loading listeners for debugging
@@ -292,6 +303,15 @@ class FloodMapClient {
         return Math.round(waterLevel * 10) / 10;
     }
     
+    getTileCoordinates(lat, lng, zoom) {
+        // Convert lat/lng to tile coordinates using Web Mercator projection
+        const n = Math.pow(2, zoom);
+        const x = Math.floor(n * ((lng + 180) / 360));
+        const latRad = lat * Math.PI / 180;
+        const y = Math.floor(n * (1 - (Math.log(Math.tan(latRad) + (1 / Math.cos(latRad))) / Math.PI)) / 2);
+        return { x, y };
+    }
+    
     updateWaterLevelVibe(waterLevel, vibeElement) {
         vibeElement.className = '';
         
@@ -340,8 +360,17 @@ class FloodMapClient {
         }
     }
     
-    async assessLocationRisk(lat, lng) {
+    async assessLocationRisk(lat, lng, lngLat = null) {
         try {
+            // Calculate tile coordinates for current zoom level if lngLat provided
+            let tileInfo = '';
+            if (lngLat && this.map) {
+                const zoom = Math.floor(this.map.getZoom());
+                const tileCoords = this.getTileCoordinates(lat, lng, zoom);
+                const tilePath = `/api/v1/tiles/elevation-data/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`;
+                tileInfo = `🗂️ Tile: ${zoom}/${tileCoords.x}/${tileCoords.y} (${tilePath})`;
+            }
+            
             const response = await fetch('/api/risk/location', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -349,6 +378,9 @@ class FloodMapClient {
             });
             
             const data = await response.json();
+            // Add tile info to data for display
+            data.tileInfo = tileInfo;
+            
             this.updateRiskPanel(data);
             this.updateLocationInfo(data);
             this.addLocationMarker(lng, lat, data);
@@ -363,6 +395,7 @@ class FloodMapClient {
         locationInfo.innerHTML = `
             📍 ${data.latitude.toFixed(4)}°, ${data.longitude.toFixed(4)}°
             ${data.elevation_m ? `• ${data.elevation_m}m elevation` : ''}
+            ${data.tileInfo ? `<br>${data.tileInfo}` : ''}
         `;
     }
     
@@ -378,6 +411,7 @@ class FloodMapClient {
             ${data.elevation_m ? `<p><strong>Elevation:</strong> ${data.elevation_m}m</p>` : ''}
             <p><strong>Water Level:</strong> ${data.water_level_m}m</p>
             <p><strong>Assessment:</strong> ${data.risk_description}</p>
+            ${data.tileInfo ? `<p><strong>Debug:</strong> ${data.tileInfo}</p>` : ''}
         `;
     }
     
