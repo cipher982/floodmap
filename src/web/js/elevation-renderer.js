@@ -67,8 +67,9 @@ class ElevationRenderer {
             return this.loadingTiles.get(key);
         }
         
-        // Start loading
-        const loadPromise = fetch(`/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16`)
+        // Start loading (with cache-busting in development)
+        const cacheBuster = window.location.hostname === 'localhost' ? `?t=${Date.now()}` : '';
+        const loadPromise = fetch(`/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16${cacheBuster}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Failed to load elevation tile ${key}: ${response.status}`);

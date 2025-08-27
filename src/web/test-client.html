@@ -142,38 +142,56 @@
             resultDiv.innerHTML = '<span class="status info">Running...</span>';
             
             try {
-                // Test server-side vs client-side performance
-                log('Performance comparison:');
+                // Measure elevation-data fetch and client render time
+                log('Performance: data fetch + client render');
                 
-                // Server-side test
-                const serverStart = performance.now();
-                const serverResponse = await fetch('/api/tiles/elevation/5/10/252/442.png');
-                const serverTime = performance.now() - serverStart;
-                log(`  Server-side tile: ${serverTime.toFixed(2)}ms`);
-                
-                // Client-side test (with cached elevation data)
-                const clientStart = performance.now();
+                const fetchStart = performance.now();
                 const elevationData = await renderer.loadElevationTile(10, 252, 442);
-                const tileUrl = renderer.renderFloodTile(elevationData, 5, '10/252/442');
-                const clientTime = performance.now() - clientStart;
-                log(`  Client-side tile: ${clientTime.toFixed(2)}ms`);
+                const fetchTime = performance.now() - fetchStart;
+                log(`  Elevation-data fetch: ${fetchTime.toFixed(2)}ms`);
                 
-                // Calculate improvement
-                const improvement = (serverTime / clientTime).toFixed(1);
-                log(`  🚀 Client-side is ${improvement}x faster!`);
+                const renderStart = performance.now();
+                // Render once to offscreen canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = 256; canvas.height = 256;
+                const ctx = canvas.getContext('2d', { alpha: true });
+                const imageData = ctx.createImageData(256, 256);
+                const data = imageData.data;
+                for (let i = 0; i < elevationData.length; i++) {
+                    const elevation = renderer.decodeElevation(elevationData[i]);
+                    const color = renderer.calculateFloodColor(elevation, 5);
+                    const offset = i * 4;
+                    data[offset] = color[0];
+                    data[offset + 1] = color[1];
+                    data[offset + 2] = color[2];
+                    data[offset + 3] = color[3];
+                }
+                ctx.putImageData(imageData, 0, 0);
+                const renderTime = performance.now() - renderStart;
+                log(`  Client render: ${renderTime.toFixed(2)}ms`);
                 
-                // Test slider response simulation
+                // Slider response simulation
                 log('\nSlider simulation (10 changes):');
                 const sliderStart = performance.now();
                 for (let i = 1; i <= 10; i++) {
                     renderer.clearRenderedCache();
-                    renderer.renderFloodTile(elevationData, i, '10/252/442');
+                    // Reuse elevationData; vary water level
+                    const wl = i;
+                    for (let p = 0; p < elevationData.length; p++) {
+                        const elevation = renderer.decodeElevation(elevationData[p]);
+                        const color = renderer.calculateFloodColor(elevation, wl);
+                        const off = p * 4;
+                        data[off] = color[0];
+                        data[off + 1] = color[1];
+                        data[off + 2] = color[2];
+                        data[off + 3] = color[3];
+                    }
                 }
                 const sliderTime = (performance.now() - sliderStart) / 10;
                 log(`  Average render time: ${sliderTime.toFixed(2)}ms per change`);
                 
-                resultDiv.innerHTML = `<span class="status success">✅ ${improvement}x Faster</span>`;
-                
+                resultDiv.innerHTML = `<span class="status success">✅ Completed</span>`;
+            
             } catch (error) {
                 log(`❌ Performance test failed: ${error.message}`, 'error');
                 resultDiv.innerHTML = `<span class="status error">❌ Failed: ${error.message}</span>`;
