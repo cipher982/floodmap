@@ -57,24 +57,24 @@ class EndToEndValidator:
             return None
     
     def test_coordinate_to_tile_pixel(self, lat, lon, water_level):
-        """Get the actual pixel value from the tile overlay at a coordinate."""
+        """Get the expected overlay pixel color at a coordinate using elevation-data."""
         try:
             # Convert lat/lon to tile coordinates at zoom 8 (typical map zoom)
             zoom = 8
             x, y = elevation_loader.deg2num(lat, lon, zoom)
             
-            # Get the tile that contains this coordinate
-            tile_response = requests.get(
-                f"{self.server_base}/api/tiles/elevation/{water_level}/{zoom}/{x}/{y}.png",
+            # Fetch raw elevation-data for this tile
+            data_response = requests.get(
+                f"{self.server_base}/api/v1/tiles/elevation-data/{zoom}/{x}/{y}.u16",
                 timeout=10
             )
-            
-            if tile_response.status_code != 200:
+            if data_response.status_code != 200:
                 return None, None, None
-                
-            # Load the tile image
-            tile_img = Image.open(io.BytesIO(tile_response.content))
-            tile_array = np.array(tile_img)
+            buf = data_response.content
+            arr = np.frombuffer(buf, dtype=np.uint16)
+            if arr.size != 256 * 256:
+                return None, None, None
+            arr = arr.reshape((256, 256))
             
             # Convert lat/lon to pixel within the tile
             lat_top, lat_bottom, lon_left, lon_right = elevation_loader.num2deg(x, y, zoom)
@@ -87,12 +87,19 @@ class EndToEndValidator:
             pixel_x = max(0, min(255, pixel_x))
             pixel_y = max(0, min(255, pixel_y))
             
-            # Get the actual pixel color
-            if len(tile_array.shape) == 3 and tile_array.shape[2] >= 3:
-                pixel_color = tile_array[pixel_y, pixel_x, :3]  # RGB
-                return pixel_color, (pixel_x, pixel_y), (x, y)
+            # Decode elevation for that pixel
+            raw = int(arr[pixel_y, pixel_x])
+            if raw == 65535:
+                elevation = -32768
             else:
-                return None, None, None
+                elevation = (raw / 65534.0) * 9500.0 - 500.0
+            
+            # Compute expected overlay color using server color mapper
+            rgba = color_mapper.elevation_array_to_rgba(
+                np.array([[elevation]], dtype=np.float32), water_level
+            )
+            pixel_color = rgba[0, 0, :3]
+            return pixel_color, (pixel_x, pixel_y), (x, y)
                 
         except Exception as e:
             return None, None, None
@@ -284,7 +291,7 @@ def main():
     
     # Check server is running
     try:
-        response = requests.get(f"{validator.server_base}/api/tiles/elevation/3.6/8/68/106.png", timeout=5)
+        response = requests.get(f"{validator.server_base}/api/v1/tiles/elevation-data/8/68/106.u16", timeout=5)
         if response.status_code == 200:
             print("✅ Server is responding")
         else:

@@ -47,7 +47,7 @@ def test_vector_tiles() -> Dict:
             direct_response = requests.get(direct_url, timeout=5)
             
             # Test legacy API proxy
-            legacy_api_url = f"http://localhost:8000/api/tiles/vector/{z}/{x}/{y}.pbf"
+            legacy_api_url = f"http://localhost:8000/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf"
             legacy_response = requests.get(legacy_api_url, timeout=5)
             
             # Test new v1 API
@@ -218,14 +218,14 @@ def test_concurrent_performance() -> Dict:
     
     # Simulate map dragging - request multiple tiles at once
     concurrent_requests = [
-        ("http://localhost:8000/api/tiles/elevation/1.0/10/286/387.png", "elevation"),
-        ("http://localhost:8000/api/tiles/elevation/1.0/10/287/387.png", "elevation"), 
-        ("http://localhost:8000/api/tiles/elevation/1.0/10/286/388.png", "elevation"),
-        ("http://localhost:8000/api/tiles/elevation/1.0/10/287/388.png", "elevation"),
-        ("http://localhost:8000/api/tiles/vector/10/286/387.pbf", "vector"),
-        ("http://localhost:8000/api/tiles/vector/10/287/387.pbf", "vector"),
-        ("http://localhost:8000/api/tiles/vector/10/286/388.pbf", "vector"),
-        ("http://localhost:8000/api/tiles/vector/10/287/388.pbf", "vector"),
+        ("http://localhost:8000/api/v1/tiles/elevation/10/286/387.png", "elevation"),
+        ("http://localhost:8000/api/v1/tiles/elevation/10/287/387.png", "elevation"), 
+        ("http://localhost:8000/api/v1/tiles/elevation/10/286/388.png", "elevation"),
+        ("http://localhost:8000/api/v1/tiles/elevation/10/287/388.png", "elevation"),
+        ("http://localhost:8000/api/v1/tiles/vector/usa/10/286/387.pbf", "vector"),
+        ("http://localhost:8000/api/v1/tiles/vector/usa/10/287/387.pbf", "vector"),
+        ("http://localhost:8000/api/v1/tiles/vector/usa/10/286/388.pbf", "vector"),
+        ("http://localhost:8000/api/v1/tiles/vector/usa/10/287/388.pbf", "vector"),
     ]
     
     def fetch_tile(url_and_type):

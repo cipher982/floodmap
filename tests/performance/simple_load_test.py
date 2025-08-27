@@ -44,7 +44,7 @@ def concurrent_load_test(base_url: str, concurrent_users: int = 10, duration_sec
     
     # Test different tiles to avoid excessive caching
     tile_urls = [
-        f"{base_url}/api/tiles/elevation/2.0/11/{555+i}/{859+j}.png"
+        f"{base_url}/api/v1/tiles/elevation-data/11/{555+i}/{859+j}.u16"
         for i in range(-2, 3) for j in range(-2, 3)
     ]
     

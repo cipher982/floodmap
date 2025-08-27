@@ -43,7 +43,7 @@ class BrowserPerformanceTest:
         
     def _on_response(self, response):
         """Track response timing."""
-        if "/api/tiles/elevation/" in response.url:
+        if "/api/v1/tiles/elevation-data/" in response.url:
             # Find matching request
             for req in reversed(self.network_requests):
                 if req["url"] == response.url:
@@ -100,9 +100,10 @@ class BrowserPerformanceTest:
             # Execute zoom (this depends on your map implementation)
             # You may need to adjust these selectors based on your actual HTML
             await self.page.evaluate(f"""
-                // Assuming you have a global map object
-                if (window.map && window.map.setZoom) {{
-                    window.map.setZoom({zoom_level});
+                // Prefer map from FloodMapClient if available
+                const map = (window.floodMap && window.floodMap.map) || window.map;
+                if (map && map.setZoom) {{
+                    map.setZoom({zoom_level});
                 }}
             """)
             
@@ -142,11 +143,12 @@ class BrowserPerformanceTest:
             offset_y = (i % 3 - 1) * 0.01
             
             await self.page.evaluate(f"""
-                if (window.map && window.map.panBy) {{
-                    window.map.panBy([{offset_x * 100}, {offset_y * 100}]);
-                }} else if (window.map && window.map.setCenter) {{
-                    const center = window.map.getCenter();
-                    window.map.setCenter([center[0] + {offset_x}, center[1] + {offset_y}]);
+                const map = (window.floodMap && window.floodMap.map) || window.map;
+                if (map && map.panBy) {{
+                    map.panBy([{offset_x * 100}, {offset_y * 100}]);
+                }} else if (map && map.setCenter && map.getCenter) {{
+                    const center = map.getCenter();
+                    map.setCenter([center[0] + {offset_x}, center[1] + {offset_y}]);
                 }}
             """)
             
