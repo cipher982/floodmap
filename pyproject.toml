@@ -23,7 +23,6 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.41b0",
     "opentelemetry-instrumentation-requests>=0.41b0",
     "requests>=2.32.4",
-    "geopandas>=1.1.1",
 ]
 
 [project.optional-dependencies]
