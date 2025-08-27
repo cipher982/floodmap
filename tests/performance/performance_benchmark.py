@@ -58,7 +58,7 @@ class PerformanceBenchmark:
         start_time = time.perf_counter()
         try:
             response = requests.get(
-                f"{self.base_url}/api/tiles/elevation/{water_level}/{z}/{x}/{y}.png",
+                f"{self.base_url}/api/v1/tiles/elevation-data/{z}/{x}/{y}.u16",
                 timeout=10
             )
             end_time = time.perf_counter()

@@ -62,7 +62,7 @@ def profile_with_load(pid: int, base_url: str, duration: int = 30):
         for z, x, y in tile_coords:
             for water_level in water_levels:
                 try:
-                    url = f"{base_url}/api/tiles/elevation/{water_level}/{z}/{x}/{y}.png"
+                    url = f"{base_url}/api/v1/tiles/elevation-data/{z}/{x}/{y}.u16"
                     start_req = time.perf_counter()
                     response = requests.get(url, timeout=10)
                     end_req = time.perf_counter()

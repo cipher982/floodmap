@@ -10,6 +10,7 @@ import io
 import hashlib
 import json
 from pathlib import Path
+from api.color_mapping import color_mapper
 
 class TileReality:
     """Capture and analyze the actual reality of what tiles are being served."""
@@ -20,39 +21,55 @@ class TileReality:
     
     def capture_browser_tile(self, z, x, y, water_level):
         """Capture the exact tile bytes the browser receives."""
-        url = f"http://localhost:8000/api/tiles/elevation/{water_level}/{z}/{x}/{y}.png"
+        url = f"http://localhost:8000/api/v1/tiles/elevation-data/{z}/{x}/{y}.u16"
         
         try:
             response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                # Save the exact bytes
-                tile_hash = hashlib.md5(response.content).hexdigest()[:8]
-                filename = f"browser_{z}_{x}_{y}_{water_level}_{tile_hash}.png"
-                filepath = self.capture_dir / filename
-                
-                with open(filepath, 'wb') as f:
-                    f.write(response.content)
-                
-                # Analyze the pixels
-                img = Image.open(io.BytesIO(response.content))
-                pixels = np.array(img)
-                
-                analysis = {
-                    'url': url,
-                    'status_code': response.status_code,
-                    'bytes': len(response.content),
-                    'hash': tile_hash,
-                    'filepath': str(filepath),
-                    'shape': pixels.shape,
-                    'unique_colors': len(np.unique(pixels.reshape(-1, pixels.shape[2]), axis=0)),
-                    'mean_color': np.mean(pixels, axis=(0,1)).astype(int).tolist(),
-                    'is_solid': len(np.unique(pixels.reshape(-1, pixels.shape[2]), axis=0)) == 1,
-                    'headers': dict(response.headers)
-                }
-                
-                return analysis
-            else:
+            if response.status_code != 200:
                 return {'error': f'HTTP {response.status_code}', 'url': url}
+
+            # Decode elevation-data
+            buf = response.content
+            arr = np.frombuffer(buf, dtype=np.uint16)
+            if arr.size != 256 * 256:
+                return {'error': f'Invalid data size: {arr.size}', 'url': url}
+            arr = arr.reshape((256, 256))
+
+            # Convert to elevation in meters
+            elevation = arr.astype(np.float32)
+            nodata_mask = elevation == 65535
+            elevation[~nodata_mask] = (elevation[~nodata_mask] / 65534.0) * 9500.0 - 500.0
+            elevation[nodata_mask] = -32768
+
+            # Generate RGBA flood overlay using server color mapper
+            rgba = color_mapper.elevation_array_to_rgba(elevation, water_level, no_data_value=-32768)
+
+            # Save as PNG for analysis
+            img = Image.fromarray(rgba.astype(np.uint8), 'RGBA')
+            img_bytes = io.BytesIO()
+            img.save(img_bytes, format='PNG')
+            png_data = img_bytes.getvalue()
+
+            tile_hash = hashlib.md5(png_data).hexdigest()[:8]
+            filename = f"browser_{z}_{x}_{y}_{water_level}_{tile_hash}.png"
+            filepath = self.capture_dir / filename
+            with open(filepath, 'wb') as f:
+                f.write(png_data)
+
+            pixels = np.array(img)
+            analysis = {
+                'url': url,
+                'status_code': response.status_code,
+                'bytes': len(png_data),
+                'hash': tile_hash,
+                'filepath': str(filepath),
+                'shape': pixels.shape,
+                'unique_colors': len(np.unique(pixels.reshape(-1, pixels.shape[2]), axis=0)),
+                'mean_color': np.mean(pixels, axis=(0,1)).astype(int).tolist(),
+                'is_solid': len(np.unique(pixels.reshape(-1, pixels.shape[2]), axis=0)) == 1,
+                'headers': dict(response.headers)
+            }
+            return analysis
         except Exception as e:
             return {'error': str(e), 'url': url}
     
