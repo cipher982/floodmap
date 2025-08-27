@@ -4,6 +4,14 @@ from typing import Optional
 
 from diagnostics.tile_coverage import audit_bbox
 from elevation_loader import elevation_loader
+from config import IS_DEVELOPMENT
+
+try:
+    from tile_cache import tile_cache
+    from persistent_elevation_cache import persistent_elevation_cache
+    HAVE_CACHE = True
+except Exception:
+    HAVE_CACHE = False
 
 
 router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
@@ -73,3 +81,24 @@ async def tile_debug(
             pass
 
     return resp
+
+@router.post("/clear-cache")
+async def clear_cache():
+    """Clear server-side caches (development only)."""
+    if not IS_DEVELOPMENT:
+        raise HTTPException(status_code=404, detail="Endpoint only available in development")
+    if not HAVE_CACHE:
+        raise HTTPException(status_code=500, detail="Cache system not available")
+    
+    tile_cache.clear()
+    persistent_elevation_cache.clear_cache()
+    
+    return {
+        "status": "success",
+        "message": "Caches cleared",
+        "environment": "development",
+        "cache_stats": {
+            "tile_cache": tile_cache.stats(),
+            "elevation_cache": persistent_elevation_cache.get_stats()
+        }
+    }

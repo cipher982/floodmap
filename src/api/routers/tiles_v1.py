@@ -32,7 +32,9 @@ from config import (
     MAX_ZOOM,
     MIN_ZOOM,
     TILE_SIZE,
-    NODATA_VALUE
+    NODATA_VALUE,
+    TILE_CACHE_CONTROL,
+    TILE_CACHE_MAX_AGE
 )
 
 router = APIRouter(prefix="/api/v1/tiles", tags=["tiles-v1"])
@@ -44,7 +46,6 @@ CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tile-cpu-v1
 # Constants
 SUPPORTED_ZOOM_RANGE = (MIN_ZOOM, MAX_ZOOM)
 SUPPORTED_WATER_LEVEL_RANGE = (MIN_WATER_LEVEL, MAX_WATER_LEVEL)
-MAX_CACHE_AGE = 31536000  # 1 year (immutable tiles)
 
 def validate_tile_coordinates(z: int, x: int, y: int) -> None:
     """Validate tile coordinates according to TMS/XYZ standards."""
@@ -79,7 +80,7 @@ def create_tile_response(content: bytes, content_type: str, tile_source: str,
                         water_level: float = None, cache_status: str = "MISS") -> Response:
     """Create standardized tile response with proper headers."""
     headers = {
-        "Cache-Control": f"public, max-age={MAX_CACHE_AGE}, immutable",
+        "Cache-Control": TILE_CACHE_CONTROL,
         "X-Tile-Source": tile_source,
         "X-Cache": cache_status,
         "Access-Control-Allow-Origin": "*"
@@ -461,7 +462,7 @@ async def get_elevation_data_tile(
                 content=cached_data,
                 media_type="application/octet-stream",
                 headers={
-                    "Cache-Control": "public, max-age=31536000, immutable",
+                    "Cache-Control": TILE_CACHE_CONTROL,
                     "Access-Control-Allow-Origin": "*",
                     "X-Tile-Source": "elevation-data",
                     "X-Cache": "HIT"
@@ -483,7 +484,7 @@ async def get_elevation_data_tile(
             content=elevation_data,
             media_type="application/octet-stream",
             headers={
-                "Cache-Control": "public, max-age=31536000, immutable",
+                "Cache-Control": TILE_CACHE_CONTROL,
                 "Access-Control-Allow-Origin": "*",
                 "X-Tile-Source": "elevation-data",
                 "X-Cache": "MISS"
@@ -607,5 +608,5 @@ async def tiles_v1_health():
         },
         "supported_zoom_range": SUPPORTED_ZOOM_RANGE,
         "supported_water_level_range": SUPPORTED_WATER_LEVEL_RANGE,
-        "cache_age_seconds": MAX_CACHE_AGE
+        "cache_age_seconds": TILE_CACHE_MAX_AGE
     }
