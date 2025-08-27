@@ -197,6 +197,11 @@ map_data/
 fonts/
 sprites/
 
+# Ignore elevation data files (too large for git)
+*.tif
+*.tiff
+*.hgt
+
 # Ignore static files
 static/.DS_Store
 static/fonts/
