@@ -69,14 +69,16 @@ class ElevationDataLoader:
         overlapping_files = []
         
         # Calculate the range of 1-degree tiles that might overlap
-        lat_start = int(math.floor(lat_bottom))
-        lat_end = int(math.ceil(lat_top))
-        lon_start = int(math.floor(lon_left))
-        lon_end = int(math.ceil(lon_right))
+        # Use robust floor/ceil with tiny epsilon to avoid float boundary issues
+        eps = 1e-12
+        lat_start = math.floor(lat_bottom - eps)
+        lat_end = math.ceil(lat_top - eps)
+        lon_start = math.floor(lon_left - eps)
+        lon_end = math.ceil(lon_right - eps)
         
         # Generate filenames directly using O(1) formula
-        for lat in range(lat_start, lat_end + 1):
-            for lon in range(lon_start, lon_end + 1):
+        for lat in range(int(lat_start), int(lat_end) + 1):
+            for lon in range(int(lon_start), int(lon_end) + 1):
                 # Generate filename using Carmack's O(1) approach
                 lat_letter = 'n' if lat >= 0 else 's'
                 lon_letter = 'w' if lon < 0 else 'e'
@@ -86,14 +88,16 @@ class ElevationDataLoader:
                 
                 if file_path.exists():
                     # Quick bounds check
-                    file_lat_top = lat + 1
-                    file_lat_bottom = lat
-                    file_lon_left = lon
-                    file_lon_right = lon + 1
-                    
-                    # Check for actual overlap
-                    if (file_lat_bottom < lat_top and file_lat_top > lat_bottom and
-                        file_lon_left < lon_right and file_lon_right > lon_left):
+                    file_lat_top = lat + 1.0
+                    file_lat_bottom = lat * 1.0
+                    file_lon_left = lon * 1.0
+                    file_lon_right = lon + 1.0
+
+                    # Check for actual overlap with tolerance to avoid seam gaps
+                    if (
+                        (file_lat_bottom <= lat_top - eps) and (file_lat_top >= lat_bottom + eps) and
+                        (file_lon_left <= lon_right - eps) and (file_lon_right >= lon_left + eps)
+                    ):
                         overlapping_files.append(file_path)
                     
         return overlapping_files

@@ -43,11 +43,10 @@ async def assess_flood_risk(location: LocationRequest):
         
         if elevation is None:
             logger.warning(f"No elevation data found for {location.latitude}, {location.longitude}")
-            # Use simple altitude estimation based on latitude (rough approximation)
-            # Higher latitudes tend to be higher elevation in continental US
-            elevation = max(0.0, (abs(location.latitude - 25.0) * 2.0) + (abs(location.longitude + 80.0) * 0.5))
-            flood_risk_level = "estimated"
-            risk_description = f"Estimated elevation {elevation:.1f}m (no elevation data available for this location)"
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No elevation data available for coordinates {location.latitude}, {location.longitude}"
+            )
         else:
             # Calculate flood risk based on elevation
             if elevation < 1.0:
