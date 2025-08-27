@@ -8,9 +8,15 @@ Usage:
 """
 
 import os
+import sys
 import json
 import argparse
+from typing import Tuple, Optional
 from pathlib import Path
+
+# Add project root to path so we can import utils
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.srtm_coverage import BBox, bbox_for_region, audit_directory_against_bbox, audit_interior_holes
 import time
 import logging
 import psutil
@@ -261,6 +267,35 @@ Failed files: {len(failed_files)}
             logging.warning(f"... and {len(failed_files) - 10} more")
 
 
+
+def _run_prechecks(input_dir: Path, region: Optional[str], bbox_vals: Optional[Tuple[float, float, float, float]],
+                   fail_on_missing: bool, show_interior_holes: bool) -> None:
+    """Optional prechecks to detect missing tiles before compression."""
+    reports = {}
+    if region or bbox_vals:
+        bbox = bbox_for_region(region) if region else BBox(*bbox_vals)
+        reports["bbox_audit"] = audit_directory_against_bbox(input_dir, bbox)
+    if show_interior_holes:
+        reports["interior_holes"] = audit_interior_holes(input_dir)
+    if not reports:
+        return
+    if "bbox_audit" in reports:
+        r = reports["bbox_audit"]
+        missing = r.get("missing", [])
+        logging.info("=== Precheck: BBox Audit ===")
+        logging.info(f"Expected {r.get('expected_count')} tiles; Present {r.get('present_count')} tiles")
+        logging.info(f"Missing {len(missing)} tiles")
+        if missing:
+            logging.warning("Missing IDs (first 20): %s", ", ".join(missing[:20]))
+            if fail_on_missing:
+                raise SystemExit("Missing expected SRTM tiles in coverage area — aborting.")
+    if "interior_holes" in reports:
+        r = reports["interior_holes"]
+        if r.get("suspicious_count", 0) > 0:
+            logging.warning("Suspicious interior holes detected: %d (first 20: %s)",
+                            r["suspicious_count"], ", ".join(r["suspicious"][:20]))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compress SRTM elevation data")
     parser.add_argument("--input", required=True, help="Input directory containing .tif files")
@@ -271,6 +306,14 @@ def main():
     parser.add_argument("--workers", type=int, help="Number of parallel workers")
     parser.add_argument("--samples", type=int, help="Process only N random sample files (for testing)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without running")
+    # Coverage precheck options
+    parser.add_argument("--precheck", action="store_true", help="Audit coverage before compressing")
+    parser.add_argument("--region", help="Region preset for expected coverage (e.g., florida, usa-conus)")
+    parser.add_argument("--bbox", nargs=4, type=float, metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
+                        help="Explicit bbox for expected coverage")
+    parser.add_argument("--fail-on-missing", action="store_true",
+                        help="Exit with error if expected tiles are missing in coverage")
+    parser.add_argument("--check-holes", action="store_true", help="Detect interior holes based on present tiles")
     
     args = parser.parse_args()
     
@@ -303,6 +346,16 @@ def main():
     
     logging.info(f"Compressing elevation data from {input_dir} to {output_dir}")
     logging.info(f"Using ZSTD compression level {args.compression_level}")
+
+    # Optional coverage precheck
+    if args.precheck:
+        _run_prechecks(
+            input_dir=input_dir,
+            region=args.region,
+            bbox_vals=tuple(args.bbox) if args.bbox else None,
+            fail_on_missing=args.fail_on_missing,
+            show_interior_holes=bool(args.check_holes),
+        )
     
     compress_directory(
         input_dir, 

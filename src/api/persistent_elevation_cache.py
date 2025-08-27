@@ -4,6 +4,7 @@ Keeps decompressed elevation arrays in memory across requests.
 """
 
 import os
+import math
 import json
 import time
 import threading
@@ -321,10 +322,11 @@ class PersistentElevationCache:
         Preload elevation files for an area.
         Called when user pans to new location.
         """
-        lat_min = int(lat_center - radius_degrees)
-        lat_max = int(lat_center + radius_degrees)
-        lon_min = int(lon_center - radius_degrees) 
-        lon_max = int(lon_center + radius_degrees)
+        # Use floor/ceil for robust handling of negative coordinates
+        lat_min = math.floor(lat_center - radius_degrees)
+        lat_max = math.ceil(lat_center + radius_degrees)
+        lon_min = math.floor(lon_center - radius_degrees)
+        lon_max = math.ceil(lon_center + radius_degrees)
         
         futures = []
         for lat in range(lat_min, lat_max + 1):
