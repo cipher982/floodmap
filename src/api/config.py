@@ -23,9 +23,24 @@ FRONTEND_PORT = int(os.getenv("FRONTEND_PORT") or "3000")
 # Use 127.0.0.1 instead of localhost for more reliable connection to Docker
 TILESERVER_URL = os.getenv("TILESERVER_URL", f"http://127.0.0.1:{TILESERVER_PORT}")
 
-# Cache configuration
+# Environment detection
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_DEVELOPMENT = ENVIRONMENT.lower() in ["development", "dev", "local"]
+IS_PRODUCTION = ENVIRONMENT.lower() in ["production", "prod"]
+
+# Cache configuration - environment aware
 ELEVATION_CACHE_SIZE = int(os.getenv("ELEVATION_CACHE_SIZE") or "50")
 TILE_CACHE_SIZE = int(os.getenv("TILE_CACHE_SIZE") or "1000")
+
+# HTTP Cache settings - NO CACHING in development!
+if IS_DEVELOPMENT:
+    TILE_CACHE_MAX_AGE = 0  # No browser caching in development
+    TILE_CACHE_TTL = None   # Server cache TTL may be overridden to short-lived in tile_cache
+    TILE_CACHE_CONTROL = "no-cache, no-store, must-revalidate"
+else:
+    TILE_CACHE_MAX_AGE = 31536000  # 1 year for production
+    TILE_CACHE_TTL = None  # Infinite server cache for production  
+    TILE_CACHE_CONTROL = f"public, max-age={TILE_CACHE_MAX_AGE}, immutable"
 
 # Data processing constants
 NODATA_VALUE = int(os.getenv("NODATA_VALUE", "-32768"))
