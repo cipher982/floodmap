@@ -2,7 +2,7 @@
 Clean v1 tile serving API - consistent, RESTful, and well-designed.
 Implements the route redesign PRD with proper error handling and caching.
 """
-from fastapi import APIRouter, HTTPException, Response, Path, Query
+from fastapi import APIRouter, HTTPException, Response, Path, Query, Request
 from fastapi.responses import Response
 import httpx
 import os
@@ -14,6 +14,12 @@ import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal
 from dotenv import load_dotenv
+import gzip
+
+try:
+    import brotli  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    brotli = None
 
 # Load environment variables
 load_dotenv()
@@ -34,7 +40,8 @@ from config import (
     TILE_SIZE,
     NODATA_VALUE,
     TILE_CACHE_CONTROL,
-    TILE_CACHE_MAX_AGE
+    TILE_CACHE_MAX_AGE,
+    VECTOR_TILE_MIN_SIZE,
 )
 
 router = APIRouter(prefix="/api/v1/tiles", tags=["tiles-v1"])
@@ -46,6 +53,40 @@ CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tile-cpu-v1
 # Constants
 SUPPORTED_ZOOM_RANGE = (MIN_ZOOM, MAX_ZOOM)
 SUPPORTED_WATER_LEVEL_RANGE = (MIN_WATER_LEVEL, MAX_WATER_LEVEL)
+
+
+def _negotiate_compression(accept_encoding: str) -> str | None:
+    """Return preferred encoding ('br' or 'gzip') based on Accept-Encoding.
+    Prefers brotli when available; falls back to gzip. Returns None for identity.
+    """
+    enc = accept_encoding.lower()
+    if 'br' in enc and brotli is not None:
+        return 'br'
+    if 'gzip' in enc:
+        return 'gzip'
+    return None
+
+
+def _maybe_compress(content: bytes, accept_encoding: str, min_size: int = 1024) -> tuple[bytes, str | None]:
+    """Compress content if client supports it and payload exceeds min_size.
+
+    Returns (payload_bytes, content_encoding or None)
+    """
+    if len(content) < min_size:
+        return content, None
+    encoding = _negotiate_compression(accept_encoding)
+    if encoding == 'br':
+        # brotli default level 5 is a good balance for tiles
+        try:
+            return brotli.compress(content, quality=5), 'br'  # type: ignore[arg-type]
+        except Exception:
+            return content, None
+    if encoding == 'gzip':
+        try:
+            return gzip.compress(content, compresslevel=6), 'gzip'
+        except Exception:
+            return content, None
+    return content, None
 
 def validate_tile_coordinates(z: int, x: int, y: int) -> None:
     """Validate tile coordinates according to TMS/XYZ standards."""
@@ -108,7 +149,8 @@ async def get_vector_tile(
     source: Literal["usa", "tampa"] = Path(..., description="Vector tile source"),
     z: int = Path(..., description="Zoom level", ge=0, le=18),
     x: int = Path(..., description="Tile X coordinate"),
-    y: int = Path(..., description="Tile Y coordinate")
+    y: int = Path(..., description="Tile Y coordinate"),
+    request: Request = None,
 ):
     """
     Serve vector tiles (base maps) from tileserver.
@@ -138,14 +180,26 @@ async def get_vector_tile(
     # Use simple httpx with correct port configuration  
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.get(f"{TILESERVER_URL}/data/{tileserver_source}/{z}/{x}/{y}.pbf")
+            # Request identity encoding from upstream; compress for client below
+            response = await client.get(
+                f"{TILESERVER_URL}/data/{tileserver_source}/{z}/{x}/{y}.pbf",
+                headers={"Accept-Encoding": "identity"}
+            )
             
             if response.status_code == 200:
-                return create_tile_response(
-                    content=response.content,
+                content = response.content
+                # Compress for client if supported
+                accept_enc = request.headers.get("accept-encoding", "") if request else ""
+                payload, cenc = _maybe_compress(content, accept_enc, min_size=VECTOR_TILE_MIN_SIZE)
+                resp = create_tile_response(
+                    content=payload,
                     content_type="application/x-protobuf",
                     tile_source="vector"
                 )
+                if cenc:
+                    resp.headers["Content-Encoding"] = cenc
+                    resp.headers["Vary"] = "Accept-Encoding"
+                return resp
             elif response.status_code == 204:
                 return create_tile_response(
                     content=b"",
@@ -440,7 +494,8 @@ def generate_elevation_data_sync(z: int, x: int, y: int) -> bytes:
 async def get_elevation_data_tile(
     z: int = Path(..., description="Zoom level"),
     x: int = Path(..., description="Tile X coordinate"),
-    y: int = Path(..., description="Tile Y coordinate")
+    y: int = Path(..., description="Tile Y coordinate"),
+    request: Request = None,
 ):
     """
     Serve raw elevation data as Uint16 binary array for client-side rendering.
@@ -458,15 +513,22 @@ async def get_elevation_data_tile(
         cache_key_format = -1000.0  # Special value for raw elevation data
         cached_data = tile_cache.get(cache_key_format, z, x, y)
         if cached_data is not None:
+            # Negotiate compression per request (cache stores uncompressed bytes)
+            accept_enc = request.headers.get("accept-encoding", "") if request else ""
+            payload, cenc = _maybe_compress(cached_data, accept_enc, min_size=512)
+            headers = {
+                "Cache-Control": TILE_CACHE_CONTROL,
+                "Access-Control-Allow-Origin": "*",
+                "X-Tile-Source": "elevation-data",
+                "X-Cache": "HIT",
+            }
+            if cenc:
+                headers["Content-Encoding"] = cenc
+                headers["Vary"] = "Accept-Encoding"
             return Response(
-                content=cached_data,
+                content=payload,
                 media_type="application/octet-stream",
-                headers={
-                    "Cache-Control": TILE_CACHE_CONTROL,
-                    "Access-Control-Allow-Origin": "*",
-                    "X-Tile-Source": "elevation-data",
-                    "X-Cache": "HIT"
-                }
+                headers=headers,
             )
         
         # Generate data asynchronously
@@ -480,15 +542,22 @@ async def get_elevation_data_tile(
         # Cache the generated data
         tile_cache.put(cache_key_format, z, x, y, elevation_data)
         
+        # Negotiate compression per request (cache stores uncompressed bytes)
+        accept_enc = request.headers.get("accept-encoding", "") if request else ""
+        payload, cenc = _maybe_compress(elevation_data, accept_enc, min_size=512)
+        headers = {
+            "Cache-Control": TILE_CACHE_CONTROL,
+            "Access-Control-Allow-Origin": "*",
+            "X-Tile-Source": "elevation-data",
+            "X-Cache": "MISS",
+        }
+        if cenc:
+            headers["Content-Encoding"] = cenc
+            headers["Vary"] = "Accept-Encoding"
         return Response(
-            content=elevation_data,
+            content=payload,
             media_type="application/octet-stream",
-            headers={
-                "Cache-Control": TILE_CACHE_CONTROL,
-                "Access-Control-Allow-Origin": "*",
-                "X-Tile-Source": "elevation-data",
-                "X-Cache": "MISS"
-            }
+            headers=headers,
         )
         
     except Exception as e:

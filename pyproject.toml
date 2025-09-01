@@ -23,6 +23,8 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.41b0",
     "opentelemetry-instrumentation-requests>=0.41b0",
     "requests>=2.32.4",
+    "tqdm>=4.67.1",
+    "brotli>=1.1.0",
 ]
 
 [project.optional-dependencies]
