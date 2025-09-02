@@ -1,0 +1,19 @@
+{
+  "name": "map-profiling",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HAR capture and repeatable profiling suite for map network costs",
+  "scripts": {
+    "capture": "node capture-har.mjs",
+    "analyze": "node analyze-har.mjs har.json",
+    "metrics": "node metrics.mjs har.json",
+    "suite": "node profile-suite.mjs $URL --selector=\"$SELECTOR\"",
+    "install:playwright": "npx playwright install chromium --with-deps"
+  },
+  "dependencies": {
+    "playwright": "^1.46.0",
+    "pretty-bytes": "^6.1.1"
+  }
+}
+

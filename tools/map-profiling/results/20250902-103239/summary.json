@@ -1,0 +1,366 @@
+{
+  "meta": {
+    "url": "https://floodmap.drose.io",
+    "selector": null,
+    "width": 1440,
+    "height": 900,
+    "duration": 10000,
+    "git": "16cf367",
+    "ts": "2025-09-02T15:32:39.927Z"
+  },
+  "summaries": {
+    "cold": {
+      "requests": 73,
+      "transfer": "2.25 MB",
+      "elevation": {
+        "count": 45,
+        "bytes": "693 kB",
+        "encodings": [
+          "br"
+        ],
+        "byZoom": {
+          "9": {
+            "bytes": 693406,
+            "count": 45,
+            "totalTime": 92775.29299999996,
+            "avgTime": 2061.673177777777,
+            "maxTime": 4896.297
+          }
+        }
+      },
+      "vector": {
+        "count": 18,
+        "bytes": "946 kB",
+        "encodings": [
+          "br",
+          "zstd",
+          "(none)"
+        ],
+        "byZoom": {
+          "8": {
+            "bytes": 945515,
+            "count": 18,
+            "totalTime": 33295.351,
+            "avgTime": 1849.7417222222223,
+            "maxTime": 4924.057
+          }
+        }
+      },
+      "byType": {
+        "text": 14426,
+        "json": 441,
+        "js": 599105,
+        "binary": 693406,
+        "pbf": 945518,
+        "x-unknown": -3
+      },
+      "byHost": {
+        "floodmap.drose.io": 1652892,
+        "unpkg.com": 222052,
+        "static.cloudflareinsights.com": 7110,
+        "": 370839
+      },
+      "top": [
+        {
+          "url": "blob:https://floodmap.drose.io/8968191b-0100-4c64-9dbe-0e07d7f91baf",
+          "bytes": 370839,
+          "status": 200,
+          "type": "js"
+        },
+        {
+          "url": "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+          "bytes": 212357,
+          "status": 200,
+          "type": "js"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/106.pbf",
+          "bytes": 201641,
+          "status": 200,
+          "type": "pbf"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/107.pbf",
+          "bytes": 191872,
+          "status": 200,
+          "type": "pbf"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/70/107.pbf",
+          "bytes": 162649,
+          "status": 200,
+          "type": "pbf"
+        }
+      ]
+    },
+    "pan": {
+      "requests": 72,
+      "transfer": "2.25 MB",
+      "elevation": {
+        "count": 46,
+        "bytes": "694 kB",
+        "encodings": [
+          "br"
+        ],
+        "byZoom": {
+          "9": {
+            "bytes": 693882,
+            "count": 46,
+            "totalTime": 41336.70000000001,
+            "avgTime": 898.6239130434785,
+            "maxTime": 2570.798
+          }
+        }
+      },
+      "vector": {
+        "count": 16,
+        "bytes": "945 kB",
+        "encodings": [
+          "br",
+          "zstd"
+        ],
+        "byZoom": {
+          "8": {
+            "bytes": 945460,
+            "count": 16,
+            "totalTime": 27167.104000000007,
+            "avgTime": 1697.9440000000004,
+            "maxTime": 3732.701
+          }
+        }
+      },
+      "byType": {
+        "text": 14406,
+        "json": 467,
+        "js": 599163,
+        "binary": 693882,
+        "pbf": 945460
+      },
+      "byHost": {
+        "floodmap.drose.io": 1653332,
+        "unpkg.com": 222111,
+        "static.cloudflareinsights.com": 7096,
+        "": 370839
+      },
+      "top": [
+        {
+          "url": "blob:https://floodmap.drose.io/e55286a6-aae9-4221-a6f5-e50c5bc63b2e",
+          "bytes": 370839,
+          "status": 200,
+          "type": "js"
+        },
+        {
+          "url": "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+          "bytes": 212430,
+          "status": 200,
+          "type": "js"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/106.pbf",
+          "bytes": 201632,
+          "status": 200,
+          "type": "pbf"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/107.pbf",
+          "bytes": 191878,
+          "status": 200,
+          "type": "pbf"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/70/107.pbf",
+          "bytes": 162634,
+          "status": 200,
+          "type": "pbf"
+        }
+      ]
+    },
+    "zoomout": {
+      "requests": 111,
+      "transfer": "3 MB",
+      "elevation": {
+        "count": 77,
+        "bytes": "989 kB",
+        "encodings": [
+          "br"
+        ],
+        "byZoom": {
+          "8": {
+            "bytes": 379024,
+            "count": 42,
+            "totalTime": 124211.62199999999,
+            "avgTime": 2957.419571428571,
+            "maxTime": 5552.764999999999
+          },
+          "9": {
+            "bytes": 610373,
+            "count": 35,
+            "totalTime": 34569.18400000001,
+            "avgTime": 987.6909714285716,
+            "maxTime": 1783.078
+          }
+        }
+      },
+      "vector": {
+        "count": 24,
+        "bytes": "1.4 MB",
+        "encodings": [
+          "br",
+          "(none)"
+        ],
+        "byZoom": {
+          "6": {
+            "bytes": 187315,
+            "count": 6,
+            "totalTime": 7060.17,
+            "avgTime": 1176.695,
+            "maxTime": 1642.466
+          },
+          "7": {
+            "bytes": 307652,
+            "count": 9,
+            "totalTime": 4365.574,
+            "avgTime": 485.0637777777777,
+            "maxTime": 1005.502
+          },
+          "8": {
+            "bytes": 906492,
+            "count": 9,
+            "totalTime": 21532.996,
+            "avgTime": 2392.555111111111,
+            "maxTime": 3298.0519999999997
+          }
+        }
+      },
+      "byType": {
+        "text": 14422,
+        "json": 437,
+        "js": 599128,
+        "binary": 989397,
+        "pbf": 1401462,
+        "x-unknown": -3
+      },
+      "byHost": {
+        "floodmap.drose.io": 2404816,
+        "unpkg.com": 222083,
+        "static.cloudflareinsights.com": 7105,
+        "": 370839
+      },
+      "top": [
+        {
+          "url": "blob:https://floodmap.drose.io/e4ab105f-59dc-48df-841a-5e0336ae6f2f",
+          "bytes": 370839,
+          "status": 200,
+          "type": "js"
+        },
+        {
+          "url": "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+          "bytes": 212380,
+          "status": 200,
+          "type": "js"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/106.pbf",
+          "bytes": 201630,
+          "status": 200,
+          "type": "pbf"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/107.pbf",
+          "bytes": 191865,
+          "status": 200,
+          "type": "pbf"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/70/107.pbf",
+          "bytes": 162638,
+          "status": 200,
+          "type": "pbf"
+        }
+      ]
+    },
+    "warm": {
+      "requests": 117,
+      "transfer": "8.18 MB",
+      "elevation": {
+        "count": 71,
+        "bytes": "3.99 MB",
+        "encodings": [
+          "br"
+        ],
+        "byZoom": {
+          "9": {
+            "bytes": 3988586,
+            "count": 71,
+            "totalTime": 51762.31100000003,
+            "avgTime": 729.0466338028174,
+            "maxTime": 2348.7400000000002
+          }
+        }
+      },
+      "vector": {
+        "count": 25,
+        "bytes": "2.28 MB",
+        "encodings": [
+          "br",
+          "zstd"
+        ],
+        "byZoom": {
+          "8": {
+            "bytes": 2278052,
+            "count": 25,
+            "totalTime": 27520.326999999997,
+            "avgTime": 1100.81308,
+            "maxTime": 3619.455
+          }
+        }
+      },
+      "byType": {
+        "text": 89918,
+        "json": 976,
+        "js": 1824179,
+        "binary": 3988586,
+        "pbf": 2278052,
+        "x-unknown": -1
+      },
+      "byHost": {
+        "floodmap.drose.io": 6320251,
+        "unpkg.com": 1092361,
+        "static.cloudflareinsights.com": 27420,
+        "": 741678
+      },
+      "top": [
+        {
+          "url": "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+          "bytes": 803935,
+          "status": 200,
+          "type": "js"
+        },
+        {
+          "url": "blob:https://floodmap.drose.io/ddfed5f7-cc6b-4ade-9c91-43b29da7348e",
+          "bytes": 370839,
+          "status": 200,
+          "type": "js"
+        },
+        {
+          "url": "blob:https://floodmap.drose.io/bdb14798-9adb-436a-a27d-99932accf29d",
+          "bytes": 370839,
+          "status": 200,
+          "type": "js"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/106.pbf",
+          "bytes": 295597,
+          "status": 200,
+          "type": "pbf"
+        },
+        {
+          "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/107.pbf",
+          "bytes": 286834,
+          "status": 200,
+          "type": "pbf"
+        }
+      ]
+    }
+  }
+}

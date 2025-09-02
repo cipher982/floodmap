@@ -1,0 +1,245 @@
+{
+  "totals": {
+    "bytes": 3004843,
+    "count": 111,
+    "byHost": {
+      "floodmap.drose.io": 2404816,
+      "unpkg.com": 222083,
+      "static.cloudflareinsights.com": 7105,
+      "": 370839
+    },
+    "byType": {
+      "text": 14422,
+      "json": 437,
+      "js": 599128,
+      "binary": 989397,
+      "pbf": 1401462,
+      "x-unknown": -3
+    }
+  },
+  "tiles": {
+    "elevation": {
+      "totalBytes": 989397,
+      "totalCount": 77,
+      "totalTime": 158780.80600000004,
+      "avgTime": 2062.08838961039,
+      "maxTime": 5552.764999999999,
+      "byZoom": {
+        "8": {
+          "bytes": 379024,
+          "count": 42,
+          "totalTime": 124211.62199999999,
+          "avgTime": 2957.419571428571,
+          "maxTime": 5552.764999999999
+        },
+        "9": {
+          "bytes": 610373,
+          "count": 35,
+          "totalTime": 34569.18400000001,
+          "avgTime": 987.6909714285716,
+          "maxTime": 1783.078
+        }
+      },
+      "encodings": [
+        "br"
+      ],
+      "caches": [
+        "public, max-age=31536000, immutable"
+      ]
+    },
+    "vector": {
+      "totalBytes": 1401459,
+      "totalCount": 24,
+      "totalTime": 32958.74,
+      "avgTime": 1373.2808333333332,
+      "maxTime": 3298.0519999999997,
+      "byZoom": {
+        "6": {
+          "bytes": 187315,
+          "count": 6,
+          "totalTime": 7060.17,
+          "avgTime": 1176.695,
+          "maxTime": 1642.466
+        },
+        "7": {
+          "bytes": 307652,
+          "count": 9,
+          "totalTime": 4365.574,
+          "avgTime": 485.0637777777777,
+          "maxTime": 1005.502
+        },
+        "8": {
+          "bytes": 906492,
+          "count": 9,
+          "totalTime": 21532.996,
+          "avgTime": 2392.555111111111,
+          "maxTime": 3298.0519999999997
+        }
+      },
+      "encodings": [
+        "br",
+        "(none)"
+      ],
+      "caches": [
+        "public, max-age=31536000, immutable",
+        "(none)"
+      ]
+    }
+  },
+  "largest": [
+    {
+      "url": "blob:https://floodmap.drose.io/e4ab105f-59dc-48df-841a-5e0336ae6f2f",
+      "bytes": 370839,
+      "status": 200,
+      "type": "js"
+    },
+    {
+      "url": "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js",
+      "bytes": 212380,
+      "status": 200,
+      "type": "js"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/106.pbf",
+      "bytes": 201630,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/107.pbf",
+      "bytes": 191865,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/70/107.pbf",
+      "bytes": 162638,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/70/106.pbf",
+      "bytes": 125947,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/7/34/53.pbf",
+      "bytes": 117033,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/70/108.pbf",
+      "bytes": 106355,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/7/35/53.pbf",
+      "bytes": 88304,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/8/69/108.pbf",
+      "bytes": 80697,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/6/17/26.pbf",
+      "bytes": 75381,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/7/35/54.pbf",
+      "bytes": 58745,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/9/139/212.u16",
+      "bytes": 46679,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/8/69/105.u16",
+      "bytes": 46668,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/9/139/213.u16",
+      "bytes": 44970,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/9/139/214.u16",
+      "bytes": 44147,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/vector/usa/6/16/26.pbf",
+      "bytes": 43593,
+      "status": 200,
+      "type": "pbf"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/9/140/213.u16",
+      "bytes": 43077,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/8/69/106.u16",
+      "bytes": 43077,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/9/138/212.u16",
+      "bytes": 41455,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/9/140/214.u16",
+      "bytes": 38446,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/9/140/215.u16",
+      "bytes": 36880,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/9/139/215.u16",
+      "bytes": 36250,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/8/68/105.u16",
+      "bytes": 35930,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://floodmap.drose.io/api/v1/tiles/elevation-data/8/67/105.u16",
+      "bytes": 35553,
+      "status": 200,
+      "type": "binary"
+    }
+  ],
+  "pageTimings": {
+    "onContentLoad": 1602,
+    "onLoad": 1631
+  }
+}

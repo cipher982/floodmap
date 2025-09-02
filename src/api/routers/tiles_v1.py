@@ -76,14 +76,14 @@ def _maybe_compress(content: bytes, accept_encoding: str, min_size: int = 1024) 
         return content, None
     encoding = _negotiate_compression(accept_encoding)
     if encoding == 'br':
-        # brotli default level 5 is a good balance for tiles
+        # brotli level 1 for speed over compression ratio
         try:
-            return brotli.compress(content, quality=5), 'br'  # type: ignore[arg-type]
+            return brotli.compress(content, quality=1), 'br'  # type: ignore[arg-type]
         except Exception:
             return content, None
     if encoding == 'gzip':
         try:
-            return gzip.compress(content, compresslevel=6), 'gzip'
+            return gzip.compress(content, compresslevel=1), 'gzip'
         except Exception:
             return content, None
     return content, None
