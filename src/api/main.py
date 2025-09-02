@@ -107,7 +107,7 @@ configure_telemetry()
 validate_critical_data()
 
 # Import routers
-from routers import tiles_v1, risk, health
+from routers import tiles_v1, risk, health, tiles_performance_test
 from routers import diagnostics as diagnostics_router
 
 # Import middleware
@@ -153,6 +153,7 @@ if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(diagnostics_router.router)  # /api/diagnostics
 app.include_router(tiles_v1.router, tags=["tiles-v1"])  # New v1 routes (already prefixed)
+app.include_router(tiles_performance_test.router, tags=["performance-testing"])  # Performance test routes
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 
 # Serve static frontend files
