@@ -489,12 +489,124 @@ def generate_elevation_data_sync(z: int, x: int, y: int) -> bytes:
         empty_data = np.full((TILE_SIZE, TILE_SIZE), 65535, dtype=np.uint16)
         return empty_data.tobytes()
 
+
+async def serve_precompressed_elevation_tile(z: int, x: int, y: int, request: Request = None):
+    """Serve pre-compressed elevation tiles directly from disk via sendfile."""
+    from fastapi.responses import FileResponse
+    import time
+    
+    start_time = time.time()
+    
+    try:
+        # Determine preferred encoding
+        accept_enc = request.headers.get("accept-encoding", "") if request else ""
+        encoding = _negotiate_compression(accept_enc)
+        
+        # Look for pre-compressed file in VPS storage
+        # Path: /mnt/backup/floodmap/elevation-tiles/{z}/{x}/{y}.u16[.br|.gz]
+        precompressed_dir = PROJECT_ROOT / "elevation-tiles"
+        tile_dir = precompressed_dir / str(z) / str(x)
+        
+        # Try compressed variants first
+        if encoding == 'br' and brotli:
+            compressed_path = tile_dir / f"{y}.u16.br"
+            if compressed_path.exists():
+                latency_ms = (time.time() - start_time) * 1000
+                headers = {
+                    "Content-Encoding": "br",
+                    "Vary": "Accept-Encoding",
+                    "Cache-Control": TILE_CACHE_CONTROL,
+                    "Access-Control-Allow-Origin": "*",
+                    "X-Tile-Source": "precompressed-br",
+                    "X-Method": "precompressed",
+                    "X-Latency-Ms": str(round(latency_ms, 2)),
+                }
+                return FileResponse(
+                    path=str(compressed_path),
+                    media_type="application/octet-stream",
+                    headers=headers
+                )
+        
+        if encoding == 'gzip':
+            compressed_path = tile_dir / f"{y}.u16.gz"
+            if compressed_path.exists():
+                latency_ms = (time.time() - start_time) * 1000
+                headers = {
+                    "Content-Encoding": "gzip",
+                    "Vary": "Accept-Encoding",
+                    "Cache-Control": TILE_CACHE_CONTROL,
+                    "Access-Control-Allow-Origin": "*",
+                    "X-Tile-Source": "precompressed-gz",
+                    "X-Method": "precompressed",
+                    "X-Latency-Ms": str(round(latency_ms, 2)),
+                }
+                return FileResponse(
+                    path=str(compressed_path),
+                    media_type="application/octet-stream",
+                    headers=headers
+                )
+        
+        # Fallback to uncompressed pre-generated file
+        raw_path = tile_dir / f"{y}.u16"
+        if raw_path.exists():
+            latency_ms = (time.time() - start_time) * 1000
+            headers = {
+                "Cache-Control": TILE_CACHE_CONTROL,
+                "Access-Control-Allow-Origin": "*",
+                "X-Tile-Source": "precompressed-raw",
+                "X-Method": "precompressed",
+                "X-Latency-Ms": str(round(latency_ms, 2)),
+            }
+            return FileResponse(
+                path=str(raw_path),
+                media_type="application/octet-stream",
+                headers=headers
+            )
+            
+        # If no pre-compressed files exist, fall back to runtime generation
+        logger.warning(f"No precompressed tile found for {z}/{x}/{y}, falling back to runtime")
+        # Generate runtime tile data
+        loop = asyncio.get_event_loop()
+        elevation_data = await loop.run_in_executor(
+            CPU_EXECUTOR,
+            generate_elevation_data_sync,
+            z, x, y
+        )
+        
+        # Return with runtime compression
+        accept_enc = request.headers.get("accept-encoding", "") if request else ""
+        payload, cenc = _maybe_compress(elevation_data, accept_enc, min_size=512)
+        
+        latency_ms = (time.time() - start_time) * 1000
+        headers = {
+            "Cache-Control": TILE_CACHE_CONTROL,
+            "Access-Control-Allow-Origin": "*",
+            "X-Tile-Source": "precompressed-fallback",
+            "X-Method": "precompressed",
+            "X-Latency-Ms": str(round(latency_ms, 2)),
+        }
+        if cenc:
+            headers["Content-Encoding"] = cenc
+            headers["Vary"] = "Accept-Encoding"
+            
+        return Response(
+            content=payload,
+            media_type="application/octet-stream",
+            headers=headers
+        )
+        
+    except Exception as e:
+        logger.error(f"Precompressed tile error for {z}/{x}/{y}: {e}")
+        raise HTTPException(status_code=500, detail="Precompressed tile serving failed")
+
+
 @router.get("/elevation-data/{z}/{x}/{y}.u16")
 @log_performance
 async def get_elevation_data_tile(
     z: int = Path(..., description="Zoom level"),
     x: int = Path(..., description="Tile X coordinate"),
     y: int = Path(..., description="Tile Y coordinate"),
+    method: str = Query("runtime", description="Serving method: 'runtime' or 'precompressed'"),
     request: Request = None,
 ):
     """
@@ -505,9 +617,18 @@ async def get_elevation_data_tile(
     - Values 0-65534: Elevation from -500m to 9000m
     - Value 65535: NODATA (ocean/missing data)
     - Cached forever (immutable elevation data)
+    
+    Method parameter:
+    - runtime: Generate tiles with runtime compression (default)
+    - precompressed: Serve pre-compressed files directly via sendfile
     """
     validate_tile_coordinates(z, x, y)
     
+    # Route to pre-compressed serving if requested
+    if method == "precompressed":
+        return await serve_precompressed_elevation_tile(z, x, y, request)
+    
+    # Default runtime compression method
     try:
         # Check cache first (using special cache key for raw data)
         cache_key_format = -1000.0  # Special value for raw elevation data
