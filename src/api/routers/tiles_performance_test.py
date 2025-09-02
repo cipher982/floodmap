@@ -34,7 +34,7 @@ from config import (
     TILE_SIZE, NODATA_VALUE, MIN_ZOOM, MAX_ZOOM,
     PROJECT_ROOT, IS_DEVELOPMENT
 )
-from tiles_v1 import (
+from .tiles_v1 import (
     validate_tile_coordinates, _negotiate_compression, 
     _maybe_compress, create_tile_response
 )
