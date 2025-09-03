@@ -12,9 +12,9 @@ load_dotenv()
 
 # Project structure
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", "/Users/davidrose/git/floodmap"))
-ELEVATION_DATA_DIR = PROJECT_ROOT / os.getenv("ELEVATION_DATA_DIR", "output/elevation")
+ELEVATION_DATA_DIR = Path(os.getenv("ELEVATION_DATA_PATH", "/mnt/backup/floodmap/elevation"))
 COMPRESSED_DATA_DIR = PROJECT_ROOT / os.getenv("COMPRESSED_DATA_DIR", "compressed_data")
-MAP_DATA_DIR = PROJECT_ROOT / os.getenv("MAP_DATA_DIR", "map_data")
+MAP_DATA_DIR = Path(os.getenv("MAP_DATA_PATH", "/mnt/backup/floodmap"))
 PRECOMPRESSED_TILES_DIR = Path(os.getenv("PRECOMPRESSED_TILES_DIR")) if os.getenv("PRECOMPRESSED_TILES_DIR") else None
 
 # Server configuration
