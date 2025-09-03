@@ -11,27 +11,27 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Project structure
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", "/Users/davidrose/git/floodmap"))
-ELEVATION_DATA_DIR = Path(os.getenv("ELEVATION_DATA_PATH", "/mnt/backup/floodmap/elevation"))
-COMPRESSED_DATA_DIR = PROJECT_ROOT / os.getenv("COMPRESSED_DATA_DIR", "compressed_data")
-MAP_DATA_DIR = Path(os.getenv("MAP_DATA_PATH", "/mnt/backup/floodmap"))
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT"))
+ELEVATION_DATA_DIR = PROJECT_ROOT / os.getenv("ELEVATION_DATA_DIR")
+COMPRESSED_DATA_DIR = PROJECT_ROOT / os.getenv("COMPRESSED_DATA_DIR")
+MAP_DATA_DIR = PROJECT_ROOT / os.getenv("MAP_DATA_DIR")
 PRECOMPRESSED_TILES_DIR = Path(os.getenv("PRECOMPRESSED_TILES_DIR")) if os.getenv("PRECOMPRESSED_TILES_DIR") else None
 
 # Server configuration
-API_PORT = int(os.getenv("API_PORT") or "8000")
-TILESERVER_PORT = int(os.getenv("TILESERVER_PORT") or "8080")
-FRONTEND_PORT = int(os.getenv("FRONTEND_PORT") or "3000")
+API_PORT = int(os.getenv("API_PORT"))
+TILESERVER_PORT = int(os.getenv("TILESERVER_PORT"))
+FRONTEND_PORT = int(os.getenv("FRONTEND_PORT"))
 # Use 127.0.0.1 instead of localhost for more reliable connection to Docker
-TILESERVER_URL = os.getenv("TILESERVER_URL", f"http://127.0.0.1:{TILESERVER_PORT}")
+TILESERVER_URL = os.getenv("TILESERVER_URL")
 
 # Environment detection
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+ENVIRONMENT = os.getenv("ENVIRONMENT")
 IS_DEVELOPMENT = ENVIRONMENT.lower() in ["development", "dev", "local"]
 IS_PRODUCTION = ENVIRONMENT.lower() in ["production", "prod"]
 
 # Cache configuration - environment aware
-ELEVATION_CACHE_SIZE = int(os.getenv("ELEVATION_CACHE_SIZE") or "50")
-TILE_CACHE_SIZE = int(os.getenv("TILE_CACHE_SIZE") or "1000")
+ELEVATION_CACHE_SIZE = int(os.getenv("ELEVATION_CACHE_SIZE"))
+TILE_CACHE_SIZE = int(os.getenv("TILE_CACHE_SIZE"))
 
 # HTTP Cache settings - NO CACHING in development!
 if IS_DEVELOPMENT:
@@ -44,8 +44,8 @@ else:
     TILE_CACHE_CONTROL = f"public, max-age={TILE_CACHE_MAX_AGE}, immutable"
 
 # Data processing constants
-NODATA_VALUE = int(os.getenv("NODATA_VALUE", "-32768"))
-VECTOR_TILE_MIN_SIZE = int(os.getenv("VECTOR_TILE_MIN_SIZE", "100"))
+NODATA_VALUE = int(os.getenv("NODATA_VALUE"))
+VECTOR_TILE_MIN_SIZE = int(os.getenv("VECTOR_TILE_MIN_SIZE"))
 
 # Tile configuration
 TILE_SIZE = 256
