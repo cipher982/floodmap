@@ -72,7 +72,8 @@ class ElevationRenderer {
         
         // Start loading (with cache-busting in development)
         const cacheBuster = window.location.hostname === 'localhost' ? `?t=${Date.now()}` : '';
-        const loadPromise = fetch(`/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16${cacheBuster}`)
+        const precompressedParam = cacheBuster ? `&method=precompressed` : `?method=precompressed`;
+        const loadPromise = fetch(`/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16${cacheBuster}${precompressedParam}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Failed to load elevation tile ${key}: ${response.status}`);

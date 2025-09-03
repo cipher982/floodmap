@@ -42,6 +42,7 @@ from config import (
     TILE_CACHE_CONTROL,
     TILE_CACHE_MAX_AGE,
     VECTOR_TILE_MIN_SIZE,
+    PRECOMPRESSED_TILES_DIR,
 )
 
 router = APIRouter(prefix="/api/v1/tiles", tags=["tiles-v1"])
@@ -502,10 +503,11 @@ async def serve_precompressed_elevation_tile(z: int, x: int, y: int, request: Re
         accept_enc = request.headers.get("accept-encoding", "") if request else ""
         encoding = _negotiate_compression(accept_enc)
         
-        # Look for pre-compressed file in VPS storage
-        # Path: /mnt/backup/floodmap/elevation-tiles/{z}/{x}/{y}.u16[.br|.gz]
-        precompressed_dir = PROJECT_ROOT / "elevation-tiles"
-        tile_dir = precompressed_dir / str(z) / str(x)
+        # Look for pre-compressed file in configured storage
+        if PRECOMPRESSED_TILES_DIR is None:
+            raise HTTPException(status_code=501, detail="Pre-compressed tiles not configured")
+        
+        tile_dir = PRECOMPRESSED_TILES_DIR / str(z) / str(x)
         
         # Try compressed variants first
         if encoding == 'br' and brotli:
@@ -626,6 +628,8 @@ async def get_elevation_data_tile(
     
     # Route to pre-compressed serving if requested
     if method == "precompressed":
+        if PRECOMPRESSED_TILES_DIR is None:
+            raise HTTPException(status_code=501, detail="Pre-compressed tiles not configured (PRECOMPRESSED_TILES_DIR not set)")
         return await serve_precompressed_elevation_tile(z, x, y, request)
     
     # Default runtime compression method

@@ -15,6 +15,7 @@ PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", "/Users/davidrose/git/floodmap"))
 ELEVATION_DATA_DIR = PROJECT_ROOT / os.getenv("ELEVATION_DATA_DIR", "output/elevation")
 COMPRESSED_DATA_DIR = PROJECT_ROOT / os.getenv("COMPRESSED_DATA_DIR", "compressed_data")
 MAP_DATA_DIR = PROJECT_ROOT / os.getenv("MAP_DATA_DIR", "map_data")
+PRECOMPRESSED_TILES_DIR = Path(os.getenv("PRECOMPRESSED_TILES_DIR")) if os.getenv("PRECOMPRESSED_TILES_DIR") else None
 
 # Server configuration
 API_PORT = int(os.getenv("API_PORT") or "8000")
