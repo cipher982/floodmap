@@ -514,6 +514,8 @@ async def serve_precompressed_elevation_tile(z: int, x: int, y: int, request: Re
             compressed_path = tile_dir / f"{y}.u16.br"
             if compressed_path.exists():
                 latency_ms = (time.time() - start_time) * 1000
+                file_size = compressed_path.stat().st_size
+                logger.info(f"TILE {z}/{x}/{y}: precompressed-br, {latency_ms:.1f}ms, {file_size:,}b")
                 headers = {
                     "Content-Encoding": "br",
                     "Vary": "Accept-Encoding",
@@ -533,6 +535,8 @@ async def serve_precompressed_elevation_tile(z: int, x: int, y: int, request: Re
             compressed_path = tile_dir / f"{y}.u16.gz"
             if compressed_path.exists():
                 latency_ms = (time.time() - start_time) * 1000
+                file_size = compressed_path.stat().st_size
+                logger.info(f"TILE {z}/{x}/{y}: precompressed-gz, {latency_ms:.1f}ms, {file_size:,}b")
                 headers = {
                     "Content-Encoding": "gzip",
                     "Vary": "Accept-Encoding",
@@ -552,6 +556,8 @@ async def serve_precompressed_elevation_tile(z: int, x: int, y: int, request: Re
         raw_path = tile_dir / f"{y}.u16"
         if raw_path.exists():
             latency_ms = (time.time() - start_time) * 1000
+            file_size = raw_path.stat().st_size
+            logger.info(f"TILE {z}/{x}/{y}: precompressed-raw, {latency_ms:.1f}ms, {file_size:,}b")
             headers = {
                 "Cache-Control": TILE_CACHE_CONTROL,
                 "Access-Control-Allow-Origin": "*",
@@ -580,6 +586,8 @@ async def serve_precompressed_elevation_tile(z: int, x: int, y: int, request: Re
         payload, cenc = _maybe_compress(elevation_data, accept_enc, min_size=512)
         
         latency_ms = (time.time() - start_time) * 1000
+        compression_info = f"{cenc}" if cenc else "uncompressed"
+        logger.info(f"TILE {z}/{x}/{y}: fallback-runtime-{compression_info}, {latency_ms:.1f}ms, {len(payload):,}b")
         headers = {
             "Cache-Control": TILE_CACHE_CONTROL,
             "Access-Control-Allow-Origin": "*",
@@ -641,6 +649,8 @@ async def get_elevation_data_tile(
             # Negotiate compression per request (cache stores uncompressed bytes)
             accept_enc = request.headers.get("accept-encoding", "") if request else ""
             payload, cenc = _maybe_compress(cached_data, accept_enc, min_size=512)
+            compression_info = f"{cenc}" if cenc else "uncompressed"
+            logger.info(f"TILE {z}/{x}/{y}: runtime-cached-{compression_info}, <1ms, {len(payload):,}b")
             headers = {
                 "Cache-Control": TILE_CACHE_CONTROL,
                 "Access-Control-Allow-Origin": "*",
@@ -670,6 +680,10 @@ async def get_elevation_data_tile(
         # Negotiate compression per request (cache stores uncompressed bytes)
         accept_enc = request.headers.get("accept-encoding", "") if request else ""
         payload, cenc = _maybe_compress(elevation_data, accept_enc, min_size=512)
+        
+        latency_ms = (time.time() - start_time) * 1000
+        compression_info = f"{cenc}" if cenc else "uncompressed"
+        logger.info(f"TILE {z}/{x}/{y}: runtime-zst-{compression_info}, {latency_ms:.1f}ms, {len(payload):,}b")
         headers = {
             "Cache-Control": TILE_CACHE_CONTROL,
             "Access-Control-Allow-Origin": "*",
