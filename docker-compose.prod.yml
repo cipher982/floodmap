@@ -5,7 +5,10 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
     # No external port exposure in production
     volumes:
-      - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}:/data:ro
+      - type: bind
+        source: ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}
+        target: /data
+        read_only: true
     environment:
       - TILESERVER_CONFIG=/data/config.json
     restart: unless-stopped
@@ -26,11 +29,20 @@ services:
       - "8000:8000"  # Always expose in production for reverse proxy
     volumes:
       # Mount elevation data to fixed container paths
-      - ${ELEVATION_HOST_PATH:-/mnt/backup/floodmap/data/elevation/zst_compressed}:/app/data/elevation:ro
+      - type: bind
+        source: ${ELEVATION_HOST_PATH:-/mnt/backup/floodmap/data/elevation/zst_compressed}
+        target: /app/data/elevation
+        read_only: true
       # Mount precompressed elevation tiles  
-      - ${PRECOMPRESSED_HOST_PATH:-/mnt/backup/floodmap/data/elevation/brotli_tiles}:/app/data/precompressed:ro
+      - type: bind
+        source: ${PRECOMPRESSED_HOST_PATH:-/mnt/backup/floodmap/data/elevation/brotli_tiles}
+        target: /app/data/precompressed
+        read_only: true
       # Mount maps data directory  
-      - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}:/app/data/maps:ro
+      - type: bind
+        source: ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}
+        target: /app/data/maps
+        read_only: true
       # Mount cache directory
       - api-cache:/cache
     environment:
