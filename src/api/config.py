@@ -10,12 +10,15 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Project structure
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT"))
-ELEVATION_DATA_DIR = PROJECT_ROOT / os.getenv("ELEVATION_DATA_DIR")
-COMPRESSED_DATA_DIR = PROJECT_ROOT / os.getenv("COMPRESSED_DATA_DIR")
-MAP_DATA_DIR = PROJECT_ROOT / os.getenv("MAP_DATA_DIR")
-PRECOMPRESSED_TILES_DIR = Path(os.getenv("PRECOMPRESSED_TILES_DIR")) if os.getenv("PRECOMPRESSED_TILES_DIR") else None
+# Container paths (fixed internal structure)
+# These paths are ALWAYS the same inside the container - never configurable
+ELEVATION_DATA_DIR = Path("/app/data/elevation")
+MAP_DATA_DIR = Path("/app/data/maps") 
+PRECOMPRESSED_TILES_DIR = Path("/app/data/precompressed")
+
+# Legacy compatibility - remove these after updating dependent code
+PROJECT_ROOT = Path("/app")  # Fixed container root
+COMPRESSED_DATA_DIR = ELEVATION_DATA_DIR  # Same as elevation data
 
 # Server configuration
 API_PORT = int(os.getenv("API_PORT"))
@@ -56,11 +59,11 @@ MIN_ZOOM = 0
 MIN_WATER_LEVEL = -10.0
 MAX_WATER_LEVEL = 1000.0
 
-# Specific data paths
+# Specific data paths - fixed container locations
 ELEVATION_DIRS = [
-    COMPRESSED_DATA_DIR / "usa",
-    COMPRESSED_DATA_DIR / "usa_unified", 
-    COMPRESSED_DATA_DIR / "tampa"
+    ELEVATION_DATA_DIR / "usa",
+    ELEVATION_DATA_DIR / "usa_unified", 
+    ELEVATION_DATA_DIR / "tampa"
 ]
 
 VECTOR_TILE_PATHS = [
@@ -70,6 +73,6 @@ VECTOR_TILE_PATHS = [
 
 # Health check paths
 HEALTH_CHECK_DIRS = [
-    str(COMPRESSED_DATA_DIR),
+    str(ELEVATION_DATA_DIR),
     str(MAP_DATA_DIR)
 ]

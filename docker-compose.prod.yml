@@ -5,8 +5,8 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
     # No external port exposure in production
     volumes:
-      - ${MAP_DATA_PATH:-/mnt/backup/floodmap/data/maps}:/data:ro
-      - ${MAP_DATA_PATH:-/mnt/backup/floodmap/data/maps}/config.json:/config.json:ro
+      - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}:/data:ro
+      - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}/config.json:/config.json:ro
     environment:
       - TILESERVER_CONFIG=/config.json
     restart: unless-stopped
@@ -26,21 +26,19 @@ services:
     ports:
       - "8000:8000"  # Always expose in production for reverse proxy
     volumes:
-      # Mount elevation data from new clean structure
-      - ${ELEVATION_DATA_PATH:-/mnt/backup/floodmap/data/elevation/zst_compressed}:/app/output/elevation:ro
+      # Mount elevation data to fixed container paths
+      - ${ELEVATION_HOST_PATH:-/mnt/backup/floodmap/data/elevation/zst_compressed}:/app/data/elevation:ro
       # Mount precompressed elevation tiles  
-      - ${PRECOMPRESSED_TILES_DIR:-/mnt/backup/floodmap/data/elevation/brotli_tiles}:/mnt/backup/floodmap/data/elevation/brotli_tiles:ro
-      # Mount maps data directory
-      - ${MAP_DATA_PATH:-/mnt/backup/floodmap/data/maps}:/app/output:ro
+      - ${PRECOMPRESSED_HOST_PATH:-/mnt/backup/floodmap/data/elevation/brotli_tiles}:/app/data/precompressed:ro
+      # Mount maps data directory  
+      - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}:/app/data/maps:ro
       # Mount cache directory
       - api-cache:/cache
     environment:
       # Core app config
       - WEBAPP_PORT=8000
       - TILESERVER_URL=http://tileserver:8080
-      - PROJECT_ROOT=/app
-      - ELEVATION_DATA_DIR=output/elevation
-      - PRECOMPRESSED_TILES_DIR=${PRECOMPRESSED_TILES_DIR:-/mnt/backup/floodmap/data/elevation/brotli_tiles}
+      # All container paths are now fixed - no need for environment variables
       
       # Performance tuning (configurable)
       - ELEVATION_CACHE_SIZE=${ELEVATION_CACHE_SIZE:-100}

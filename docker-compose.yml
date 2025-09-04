@@ -4,8 +4,8 @@ services:
     image: maptiler/tileserver-gl:latest
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
     volumes:
-      - /mnt/backup/floodmap:/data:ro
-      - /mnt/backup/floodmap/config.json:/config.json:ro
+      - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}:/data:ro
+      - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}/config.json:/config.json:ro
     environment:
       - TILESERVER_CONFIG=/config.json
     restart: unless-stopped
@@ -26,18 +26,17 @@ services:
     expose:
       - "8000"
     volumes:
-      # Mount elevation data (no longer copied at build time)
-      - /mnt/backup/floodmap/elevation:/app/output/elevation:ro
-      # Mount MBTiles file (too large for build-time copy)
-      - /mnt/backup/floodmap/usa-complete.mbtiles:/app/output/usa-complete.mbtiles:ro
+      # Mount elevation data to fixed container paths
+      - ${ELEVATION_HOST_PATH:-/mnt/backup/floodmap/data/elevation/zst_compressed}:/app/data/elevation:ro
+      # Mount maps data directory  
+      - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}:/app/data/maps:ro
       # Mount cache directory
       - api-cache:/cache
     environment:
       # Core app config
       - WEBAPP_PORT=8000
       - TILESERVER_URL=http://tileserver:8080
-      - PROJECT_ROOT=/app
-      - ELEVATION_DATA_DIR=output/elevation
+      # All container paths are now fixed - no need for environment variables
       
       # Performance tuning (configurable)
       - ELEVATION_CACHE_SIZE=${ELEVATION_CACHE_SIZE:-100}
