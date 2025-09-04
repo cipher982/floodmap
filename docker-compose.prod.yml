@@ -5,8 +5,8 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
     # No external port exposure in production
     volumes:
-      - ${MAP_DATA_PATH:-/mnt/backup/floodmap}:/data:ro
-      - ${MAP_DATA_PATH:-/mnt/backup/floodmap}/config.json:/config.json:ro
+      - ${MAP_DATA_PATH:-/mnt/backup/floodmap/data/maps}:/data:ro
+      - ${MAP_DATA_PATH:-/mnt/backup/floodmap/data/maps}/config.json:/config.json:ro
     environment:
       - TILESERVER_CONFIG=/config.json
     restart: unless-stopped
@@ -26,10 +26,12 @@ services:
     ports:
       - "8000:8000"  # Always expose in production for reverse proxy
     volumes:
-      # Mount elevation data from host
-      - ${ELEVATION_DATA_PATH:-/mnt/backup/floodmap/elevation}:/app/output/elevation:ro
-      # Mount MBTiles file
-      - ${MAP_DATA_PATH:-/mnt/backup/floodmap}/usa-complete.mbtiles:/app/output/usa-complete.mbtiles:ro
+      # Mount elevation data from new clean structure
+      - ${ELEVATION_DATA_PATH:-/mnt/backup/floodmap/data/elevation/zst_compressed}:/app/output/elevation:ro
+      # Mount precompressed elevation tiles  
+      - ${PRECOMPRESSED_TILES_DIR:-/mnt/backup/floodmap/data/elevation/brotli_tiles}:/mnt/backup/floodmap/data/elevation/brotli_tiles:ro
+      # Mount maps data directory
+      - ${MAP_DATA_PATH:-/mnt/backup/floodmap/data/maps}:/app/output:ro
       # Mount cache directory
       - api-cache:/cache
     environment:
@@ -38,6 +40,7 @@ services:
       - TILESERVER_URL=http://tileserver:8080
       - PROJECT_ROOT=/app
       - ELEVATION_DATA_DIR=output/elevation
+      - PRECOMPRESSED_TILES_DIR=${PRECOMPRESSED_TILES_DIR:-/mnt/backup/floodmap/data/elevation/brotli_tiles}
       
       # Performance tuning (configurable)
       - ELEVATION_CACHE_SIZE=${ELEVATION_CACHE_SIZE:-100}
