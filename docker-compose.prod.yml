@@ -6,9 +6,8 @@ services:
     # No external port exposure in production
     volumes:
       - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}:/data:ro
-      - ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}/config.json:/config.json:ro
     environment:
-      - TILESERVER_CONFIG=/config.json
+      - TILESERVER_CONFIG=/data/config.json
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "8080"]
