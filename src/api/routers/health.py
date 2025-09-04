@@ -77,8 +77,7 @@ async def health_check():
         health_data["errors"].append(f"Critical: Elevation data directory missing: {ELEVATION_DATA_DIR}")
     
     # Check map data availability with validation
-    from config import PROJECT_ROOT
-    mbtiles_file = PROJECT_ROOT / "output" / "usa-complete.mbtiles"
+    mbtiles_file = MAP_DATA_DIR / "usa-complete.mbtiles"
     
     if mbtiles_file.exists():
         size_gb = mbtiles_file.stat().st_size / (1024**3)
@@ -98,8 +97,8 @@ async def health_check():
     
     # Add deployment context
     health_data["deployment_context"] = {
-        "project_root": str(PROJECT_ROOT),
         "elevation_data_dir": str(ELEVATION_DATA_DIR),
+        "map_data_dir": str(MAP_DATA_DIR),
         "environment": os.getenv("ENVIRONMENT", "unknown")
     }
     

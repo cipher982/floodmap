@@ -27,13 +27,15 @@ load_dotenv()
 
 # Critical data validation on startup
 def validate_critical_data():
-    """Validate that all critical data files exist and are accessible."""
+    """Validate that all critical data files exist and are accessible.
+    Uses fixed container paths from config and does not terminate the app.
+    """
     from pathlib import Path
-    import sys
     
-    project_root = Path(os.getenv("PROJECT_ROOT", "/Users/davidrose/git/floodmap"))
-    elevation_dir = project_root / "output" / "elevation"
-    mbtiles_file = project_root / "output" / "usa-complete.mbtiles"
+    # Use fixed container paths from config
+    from config import ELEVATION_DATA_DIR, MAP_DATA_DIR
+    elevation_dir: Path = ELEVATION_DATA_DIR
+    mbtiles_file: Path = MAP_DATA_DIR / "usa-complete.mbtiles"
     
     errors = []
     warnings = []
@@ -43,7 +45,7 @@ def validate_critical_data():
         errors.append(f"CRITICAL: Elevation data directory missing: {elevation_dir}")
     else:
         elevation_files = list(elevation_dir.glob("*.zst"))
-        if len(elevation_files) < 1000:  # Should have 2000+ files
+        if len(elevation_files) < 1000:  # Should have 2000+ files in full dataset
             errors.append(f"CRITICAL: Insufficient elevation files: {len(elevation_files)} (expected 2000+)")
         elif len(elevation_files) < 2000:
             warnings.append(f"WARNING: Low elevation file count: {len(elevation_files)} (expected 2000+)")
@@ -56,7 +58,7 @@ def validate_critical_data():
         if size_gb < 1.0:  # Should be ~1.6GB
             errors.append(f"CRITICAL: MBTiles file too small: {size_gb:.1f}GB (expected ~1.6GB)")
     
-    # Log results
+    # Log results without terminating the process
     if errors:
         print("🚨 STARTUP VALIDATION FAILED:")
         for error in errors:
@@ -64,16 +66,14 @@ def validate_critical_data():
         if warnings:
             for warning in warnings:
                 print(f"  ⚠️  {warning}")
-        print("\n💡 This explains performance issues and incorrect behavior!")
-        print("   Check your .dockerignore and Dockerfile COPY statements.")
-        sys.exit(1)
-    
-    if warnings:
+        print("\n💡 Check your host bind mounts and data presence.")
+        print("   Elevation: /app/data/elevation | Maps: /app/data/maps")
+    elif warnings:
         print("⚠️  STARTUP WARNINGS:")
         for warning in warnings:
             print(f"  {warning}")
-    
-    print("✅ Data validation passed - all critical files present")
+    else:
+        print("✅ Data validation passed - all critical files present")
 
 # Configure OpenTelemetry
 def configure_telemetry():

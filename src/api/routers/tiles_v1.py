@@ -738,7 +738,8 @@ async def get_tiles_metadata():
     }
     
     # Query actual MBTiles files for vector tile metadata
-    mbtiles_path = PROJECT_ROOT / "output" / "usa-complete.mbtiles"
+    from config import MAP_DATA_DIR
+    mbtiles_path = MAP_DATA_DIR / "usa-complete.mbtiles"
     
     if mbtiles_path.exists():
         try:
