@@ -85,6 +85,27 @@ See *.env.example* for a full list.
 
 ---
 
+## 🐳 Docker Compose
+
+- Dev (ports published): `docker compose up -d`
+- Prod (internal-only): `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
+
+Details:
+- Dev maps to host for easy access (clickable logs). Override file publishes `${API_PORT}:8000` and `${TILESERVER_PORT}:8080`.
+- Prod does not publish any host ports. The API listens on `8000` inside the compose network and the tileserver on `8080`.
+- Network name defaults to `${COMPOSE_PROJECT_NAME}-network` (e.g., `floodmap-network`).
+
+Reverse proxy:
+- Run your proxy on the same Docker network and target `webapp:8000`.
+- Example: `docker run -d --network floodmap-network your-proxy-image`
+- Nginx upstream example: `upstream floodmap { server webapp:8000; }`
+
+Verify prod:
+- `docker compose -f docker-compose.yml -f docker-compose.prod.yml config` (no `ports:` on webapp)
+- From a container on the network: `curl http://webapp:8000/api/health`
+
+Note: Only one Dockerfile is used. `Dockerfile.prod` has been removed to avoid confusion.
+
 ## 🏞️ Data Pipeline
 
 ### 1. Elevation (DEM) Compression
@@ -183,4 +204,3 @@ CI configuration lives in *.github/workflows/*. Pull-requests run the full matri
 
 Distributed under the **MIT License**.  
 © 2024 FloodMap contributors
-

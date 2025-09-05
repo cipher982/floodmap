@@ -1,0 +1,8 @@
+services:
+  tileserver:
+    ports:
+      - "${TILESERVER_PORT}:8080"
+      
+  webapp:
+    ports:
+      - "${API_PORT}:8000"

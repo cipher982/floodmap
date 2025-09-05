@@ -25,8 +25,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-webapp
-    ports:
-      - "8000:8000"  # Always expose in production for reverse proxy
+    # Do NOT publish ports in production; reverse proxy should join the network
+    expose:
+      - "8000"
     volumes:
       # Mount elevation source data (raw SRTM files for runtime generation)
       - type: bind
@@ -47,18 +48,20 @@ services:
       - api-cache:/cache
     environment:
       # Core app config
+      - API_PORT=8000               # required by app config
+      - TILESERVER_PORT=8080        # required by app config
+      - FRONTEND_PORT=3000          # required by app config
       - WEBAPP_PORT=8000
       - TILESERVER_URL=http://tileserver:8080
-      # All container paths are now fixed - no need for environment variables
-      
+
       # Performance tuning (configurable)
       - ELEVATION_CACHE_SIZE=${ELEVATION_CACHE_SIZE:-100}
       - TILE_CACHE_SIZE=${TILE_CACHE_SIZE:-2000}
-      
+
       # Environment and monitoring
-      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - ENVIRONMENT=production      # force production regardless of .env
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
-      
+
       # System settings
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
@@ -71,9 +74,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    # Production security
-    security_opt:
-      - no-new-privileges:true
     # Resource limits (configurable)
     deploy:
       resources:

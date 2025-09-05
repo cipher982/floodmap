@@ -3,8 +3,6 @@ services:
   tileserver:
     image: maptiler/tileserver-gl:latest
     container_name: ${COMPOSE_PROJECT_NAME}-tileserver
-    ports:
-      - "${TILESERVER_PORT_MAPPING}"
     volumes:
       - type: bind
         source: ${BASE_MAPS_PATH}
@@ -26,8 +24,6 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME}-webapp
-    ports:
-      - "${API_PORT_MAPPING}"
     volumes:
       # Mount elevation source data (raw SRTM files for runtime generation)
       - type: bind
