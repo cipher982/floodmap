@@ -74,6 +74,13 @@ def validate_critical_data():
             print(f"  {warning}")
     else:
         print("✅ Data validation passed - all critical files present")
+        # Show access URLs for development
+        from config import IS_DEVELOPMENT
+        if IS_DEVELOPMENT:
+            api_port = os.getenv("API_PORT", "8000")
+            tileserver_port = os.getenv("TILESERVER_PORT", "8080") 
+            print(f"🌐 Local development server: http://localhost:{api_port}")
+            print(f"🔧 Local tileserver: http://localhost:{tileserver_port}")
 
 # Configure OpenTelemetry
 def configure_telemetry():

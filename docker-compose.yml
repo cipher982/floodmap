@@ -2,11 +2,12 @@ services:
   # Map tile server
   tileserver:
     image: maptiler/tileserver-gl:latest
-    container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
-    # No external port exposure in production
+    container_name: ${COMPOSE_PROJECT_NAME}-tileserver
+    ports:
+      - "${TILESERVER_PORT}:8080"  # Local development port
     volumes:
       - type: bind
-        source: ${BASE_MAPS_PATH:-data/base-maps}
+        source: ${BASE_MAPS_PATH}
         target: /data
         read_only: true
     environment:
@@ -24,40 +25,48 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-webapp
+    container_name: ${COMPOSE_PROJECT_NAME}-webapp
     ports:
-      - "8000:8000"  # Always expose in production for reverse proxy
+      - "${API_PORT}:8000"  # Local development port
     volumes:
       # Mount elevation source data (raw SRTM files for runtime generation)
       - type: bind
-        source: ${ELEVATION_SOURCE_PATH:-data/elevation-source}
+        source: ${ELEVATION_SOURCE_PATH}
         target: /app/data/elevation-source
         read_only: true
       # Mount precompressed elevation tiles (Q10 optimized: 95% storage reduction)
       - type: bind
-        source: ${ELEVATION_TILES_PATH:-data/elevation-tiles}
+        source: ${ELEVATION_TILES_PATH}
         target: /app/data/elevation-tiles
         read_only: true
       # Mount base map data directory
       - type: bind
-        source: ${BASE_MAPS_PATH:-data/base-maps}
+        source: ${BASE_MAPS_PATH}
         target: /app/data/base-maps
         read_only: true
       # Mount cache directory
       - api-cache:/cache
     environment:
-      # Core app config
+      # Port Configuration
+      - API_PORT=${API_PORT}
+      - TILESERVER_PORT=${TILESERVER_PORT}
+      - FRONTEND_PORT=${FRONTEND_PORT}
       - WEBAPP_PORT=8000
       - TILESERVER_URL=http://tileserver:8080
-      # All container paths are now fixed - no need for environment variables
       
-      # Performance tuning (configurable)
-      - ELEVATION_CACHE_SIZE=${ELEVATION_CACHE_SIZE:-100}
-      - TILE_CACHE_SIZE=${TILE_CACHE_SIZE:-2000}
+      # Performance Configuration  
+      - ELEVATION_CACHE_SIZE=${ELEVATION_CACHE_SIZE}
+      - TILE_CACHE_SIZE=${TILE_CACHE_SIZE}
+      - NODATA_VALUE=${NODATA_VALUE}
+      - VECTOR_TILE_MIN_SIZE=${VECTOR_TILE_MIN_SIZE}
       
       # Environment and monitoring
-      - ENVIRONMENT=${ENVIRONMENT:-production}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
+      
+      # Docker Compose
+      - MEMORY_LIMIT=${MEMORY_LIMIT}
+      - CPU_LIMIT=${CPU_LIMIT}
       
       # System settings
       - PYTHONDONTWRITEBYTECODE=1
@@ -78,8 +87,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${MEMORY_LIMIT:-20G}
-          cpus: ${CPU_LIMIT:-2.0}
+          memory: ${MEMORY_LIMIT}
+          cpus: ${CPU_LIMIT}
 
 volumes:
   api-cache:
@@ -87,4 +96,4 @@ volumes:
 
 networks:
   default:
-    name: ${COMPOSE_PROJECT_NAME:-floodmap}-network
+    name: ${COMPOSE_PROJECT_NAME}-network
