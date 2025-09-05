@@ -147,7 +147,7 @@ def get_transparent_tile_bytes() -> bytes:
 
 @router.get("/vector/{source}/{z}/{x}/{y}.pbf")
 async def get_vector_tile(
-    source: Literal["usa", "tampa"] = Path(..., description="Vector tile source"),
+    source: Literal["usa"] = Path(..., description="Vector tile source"),
     z: int = Path(..., description="Zoom level", ge=0, le=18),
     x: int = Path(..., description="Tile X coordinate"),
     y: int = Path(..., description="Tile Y coordinate"),
@@ -158,7 +158,6 @@ async def get_vector_tile(
     
     Sources:
     - usa: USA-wide vector tiles from usa-complete dataset
-    - tampa: Tampa-specific vector tiles (fallback for specific regions)
     """
     # Validate coordinates for vector tiles (broader zoom range)
     if not (0 <= z <= 18):
@@ -170,8 +169,7 @@ async def get_vector_tile(
     
     # Map source names to tileserver sources
     source_mapping = {
-        "usa": "usa-complete",
-        "tampa": "tampa"
+        "usa": "usa-complete"
     }
     
     tileserver_source = source_mapping.get(source)

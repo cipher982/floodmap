@@ -28,15 +28,20 @@ services:
     expose:
       - "8000"
     volumes:
-      # Mount elevation data to fixed container paths
+      # Mount elevation source data (raw SRTM files for runtime generation)
       - type: bind
-        source: ${ELEVATION_HOST_PATH:-/mnt/backup/floodmap/data/elevation/zst_compressed}
-        target: /app/data/elevation
+        source: ${ELEVATION_SOURCE_PATH:-data/elevation-source}
+        target: /app/data/elevation-source
         read_only: true
-      # Mount maps data directory  
+      # Mount precompressed elevation tiles (Q10 optimized)
       - type: bind
-        source: ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}
-        target: /app/data/maps
+        source: ${ELEVATION_TILES_PATH:-data/elevation-tiles}
+        target: /app/data/elevation-tiles
+        read_only: true
+      # Mount base map data directory
+      - type: bind
+        source: ${BASE_MAPS_PATH:-data/base-maps}
+        target: /app/data/base-maps
         read_only: true
       # Mount cache directory
       - api-cache:/cache

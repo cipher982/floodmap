@@ -12,9 +12,14 @@ load_dotenv()
 
 # Container paths (fixed internal structure)
 # These paths are ALWAYS the same inside the container - never configurable
-ELEVATION_DATA_DIR = Path("/app/data/elevation")
-MAP_DATA_DIR = Path("/app/data/maps") 
-PRECOMPRESSED_TILES_DIR = Path("/app/data/precompressed")
+ELEVATION_SOURCE_DIR = Path("/app/data/elevation-source")  # Raw SRTM files (.zst)
+ELEVATION_TILES_DIR = Path("/app/data/elevation-tiles")    # Precompressed tiles (.u16.br)
+BASE_MAPS_DIR = Path("/app/data/base-maps")               # Background maps (.mbtiles)
+
+# Legacy compatibility - remove after updating dependent code
+ELEVATION_DATA_DIR = ELEVATION_SOURCE_DIR
+MAP_DATA_DIR = BASE_MAPS_DIR
+PRECOMPRESSED_TILES_DIR = ELEVATION_TILES_DIR
 
 # Legacy compatibility - remove these after updating dependent code
 PROJECT_ROOT = Path("/app")  # Fixed container root
@@ -59,20 +64,22 @@ MIN_ZOOM = 0
 MIN_WATER_LEVEL = -10.0
 MAX_WATER_LEVEL = 1000.0
 
-# Specific data paths - fixed container locations
+# Specific data paths - fixed container locations  
 ELEVATION_DIRS = [
-    ELEVATION_DATA_DIR / "usa",
-    ELEVATION_DATA_DIR / "usa_unified", 
-    ELEVATION_DATA_DIR / "tampa"
+    ELEVATION_SOURCE_DIR / "usa",
+    ELEVATION_SOURCE_DIR / "usa_unified"
 ]
 
-VECTOR_TILE_PATHS = [
-    MAP_DATA_DIR / "usa-complete.mbtiles",
-    MAP_DATA_DIR / "tampa.mbtiles"
+BASE_MAP_PATHS = [
+    BASE_MAPS_DIR / "usa-complete.mbtiles"
 ]
+
+# Legacy compatibility
+VECTOR_TILE_PATHS = BASE_MAP_PATHS
 
 # Health check paths
 HEALTH_CHECK_DIRS = [
-    str(ELEVATION_DATA_DIR),
-    str(MAP_DATA_DIR)
+    str(ELEVATION_SOURCE_DIR),
+    str(ELEVATION_TILES_DIR), 
+    str(BASE_MAPS_DIR)
 ]

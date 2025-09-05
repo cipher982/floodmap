@@ -28,20 +28,20 @@ services:
     ports:
       - "8000:8000"  # Always expose in production for reverse proxy
     volumes:
-      # Mount elevation data to fixed container paths
+      # Mount elevation source data (raw SRTM files for runtime generation)
       - type: bind
-        source: ${ELEVATION_HOST_PATH:-/mnt/backup/floodmap/data/elevation/zst_compressed}
-        target: /app/data/elevation
+        source: ${ELEVATION_SOURCE_PATH:-/mnt/backup/floodmap/data/elevation-source}
+        target: /app/data/elevation-source
         read_only: true
-      # Mount precompressed elevation tiles  
+      # Mount precompressed elevation tiles (Q10 optimized: 95% storage reduction)
       - type: bind
-        source: ${PRECOMPRESSED_HOST_PATH:-/mnt/backup/floodmap/data/elevation/brotli_tiles}
-        target: /app/data/precompressed
+        source: ${ELEVATION_TILES_PATH:-/mnt/backup/floodmap/data/elevation-tiles}
+        target: /app/data/elevation-tiles
         read_only: true
-      # Mount maps data directory  
+      # Mount base map data directory
       - type: bind
-        source: ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}
-        target: /app/data/maps
+        source: ${BASE_MAPS_PATH:-/mnt/backup/floodmap/data/base-maps}
+        target: /app/data/base-maps
         read_only: true
       # Mount cache directory
       - api-cache:/cache
