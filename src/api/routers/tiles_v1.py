@@ -640,6 +640,7 @@ async def get_elevation_data_tile(
     
     # Default runtime compression method
     try:
+        start_time = time.time()
         # Check cache first (using special cache key for raw data)
         cache_key_format = -1000.0  # Special value for raw elevation data
         cached_data = tile_cache.get(cache_key_format, z, x, y)
