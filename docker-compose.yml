@@ -4,7 +4,7 @@ services:
     image: maptiler/tileserver-gl:latest
     container_name: ${COMPOSE_PROJECT_NAME}-tileserver
     ports:
-      - "${TILESERVER_PORT}:8080"  # Local development port
+      - "${TILESERVER_PORT_MAPPING}"
     volumes:
       - type: bind
         source: ${BASE_MAPS_PATH}
@@ -27,7 +27,7 @@ services:
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME}-webapp
     ports:
-      - "${API_PORT}:8000"  # Local development port
+      - "${API_PORT_MAPPING}"
     volumes:
       # Mount elevation source data (raw SRTM files for runtime generation)
       - type: bind
@@ -80,10 +80,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    # Production security
     security_opt:
       - no-new-privileges:true
-    # Resource limits (configurable)
     deploy:
       resources:
         limits:
