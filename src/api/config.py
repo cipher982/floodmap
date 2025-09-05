@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Container paths (fixed internal structure)
-# These paths are ALWAYS the same inside the container - never configurable
+# These paths are ALWAYS the same inside containers - never configurable
 ELEVATION_SOURCE_DIR = Path("/app/data/elevation-source")  # Raw SRTM files (.zst)
 ELEVATION_TILES_DIR = Path("/app/data/elevation-tiles")    # Precompressed tiles (.u16.br)
 BASE_MAPS_DIR = Path("/app/data/base-maps")               # Background maps (.mbtiles)

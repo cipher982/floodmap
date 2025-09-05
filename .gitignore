@@ -253,3 +253,5 @@ floodmap.egg-info/
 # Development artifacts
 test_*.html
 test_tile.png
+
+*.u16

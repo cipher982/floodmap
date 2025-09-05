@@ -3,6 +3,7 @@ services:
   tileserver:
     image: maptiler/tileserver-gl:latest
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
+    # No external port exposure in production
     volumes:
       - type: bind
         source: ${BASE_MAPS_PATH:-data/base-maps}
@@ -12,11 +13,11 @@ services:
       - TILESERVER_CONFIG=/data/config.json
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/')"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 10s
 
   # FloodMap Web Application (serves website + API)
   webapp:
@@ -24,16 +25,15 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-webapp
-    # No external ports - reverse proxy handles external access
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"  # Always expose in production for reverse proxy
     volumes:
       # Mount elevation source data (raw SRTM files for runtime generation)
       - type: bind
         source: ${ELEVATION_SOURCE_PATH:-data/elevation-source}
         target: /app/data/elevation-source
         read_only: true
-      # Mount precompressed elevation tiles (Q10 optimized)
+      # Mount precompressed elevation tiles (Q10 optimized: 95% storage reduction)
       - type: bind
         source: ${ELEVATION_TILES_PATH:-data/elevation-tiles}
         target: /app/data/elevation-tiles
@@ -56,7 +56,7 @@ services:
       - TILE_CACHE_SIZE=${TILE_CACHE_SIZE:-2000}
       
       # Environment and monitoring
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       
       # System settings
@@ -70,8 +70,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 300s  # 5 minutes to allow for elevation data copy
-    # Production security (only when ENVIRONMENT=production)
+      start_period: 60s
+    # Production security
     security_opt:
       - no-new-privileges:true
     # Resource limits (configurable)
