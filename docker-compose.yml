@@ -5,7 +5,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-floodmap}-tileserver
     volumes:
       - type: bind
-        source: ${MAPS_HOST_PATH:-/mnt/backup/floodmap/data/maps}
+        source: ${BASE_MAPS_PATH:-data/base-maps}
         target: /data
         read_only: true
     environment:
