@@ -128,6 +128,95 @@ Results: **≈4 × space saving** and ~25–30 ms decompression per tile on a la
 
 `process_maps_usa.py` ingests the latest OpenStreetMap extract, filters layers (roads, admin boundaries, landuse, places) and writes an **MBTiles** database with tiles up to `z14`.
 
+### 3. Precompressed Elevation Tiles (.u16.br)
+
+Precompressed raw elevation tiles eliminate server CPU work and reduce bandwidth by sending compact **uint16** arrays to the browser. These are served by the v1 API and consumed by the client renderer.
+
+- Endpoint: `/api/v1/tiles/elevation-data/{z}/{x}/{y}.u16?method=precompressed`
+- Encoding: negotiate `br` (Brotli) or `gzip` via `Accept-Encoding`; server uses sendfile for `.u16.br/.gz`.
+- Runtime fallback: if a precompressed file is missing, the API generates a runtime tile and compresses it on the fly.
+
+#### Generate (Host / Dev)
+
+Use the hardened generator (loud checks; no silent bad writes):
+
+```bash
+uv run python tools/generate_precompressed_elevation_tiles.py \
+  --source-dir data/elevation-source \
+  --output-dir data/elevation-tiles \
+  --zoom-min 8 --zoom-max 11 \
+  --no-gz         # only .u16.br
+```
+
+Tips:
+- Add `--bbox <minLon> <minLat> <maxLon> <maxLat>` to constrain coverage (e.g., a metro).
+- Add `--no-skip` to overwrite previously generated tiles.
+
+#### Generate (In Container / Prod)
+
+Ensure the volumes are mounted (see docker-compose.prod.yml) and the output mount is writable during generation.
+
+```bash
+docker compose run --rm webapp \
+  python tools/generate_precompressed_elevation_tiles.py \
+    --output-dir /app/data/elevation-tiles \
+    --zoom-min 8 --zoom-max 11 \
+    --no-gz --no-skip
+```
+
+#### Loud Safety Checks (What The Script Enforces)
+
+- Validates `--source-dir` exists and has thousands of `.zst` files; otherwise aborts with a fatal message.
+- Skips writing when the loader returns no data (ocean/outside coverage). These are counted as `tiles_skipped_missing` in the per‑zoom summary and manifest.
+- Writes a manifest at `output_dir/manifest.json` with totals and variants.
+
+#### Validate A Random Sample
+
+Fetch a generated tile using precompressed mode and inspect the payload:
+
+```bash
+API=http://127.0.0.1:8000
+Z=9; X=140; Y=215
+curl -sS -D /tmp/h.txt -o /tmp/tile.br -H 'Accept-Encoding: br' \
+  "$API/api/v1/tiles/elevation-data/$Z/$X/$Y.u16?method=precompressed"
+brotli -d -f /tmp/tile.br -o /tmp/tile.dec
+python3 - <<'PY'
+from array import array
+b=open('/tmp/tile.dec','rb').read(); a=array('H'); a.frombytes(b)
+mn=min(a); mx=max(a); nod=sum(1 for v in a if v==65535); tot=len(a)
+print('bytes',len(b),'min',mn,'max',mx,'nodata%',round(nod*100.0/tot,2))
+PY
+```
+
+Heuristics:
+- Land tiles should have nodata% near 0 and realistic min/max; precompressed `.br` typically tens of KB.
+- Tiny `.br` (~14 bytes) indicates an all‑65535 tile (pure ocean is OK; large swaths of land are not). Re‑generate if unexpected.
+
+#### Smart Coverage Validation Script
+
+Use the helper to summarise counts/sizes and decode a random sample per zoom.
+
+```bash
+# Local file validation
+python tools/validate_precompressed_tiles.py \
+  --tiles-dir data/elevation-tiles \
+  --zooms 8 9 10 11 \
+  --samples 100
+
+# API validation (fetches via precompressed endpoint)
+python tools/validate_precompressed_tiles.py \
+  --api http://127.0.0.1:8000 \
+  --zooms 9 10 11 \
+  --samples 50
+```
+
+Output includes per-zoom size buckets and nodata% percentiles for quick sanity.
+
+#### Size Planning (USA Coverage)
+
+- z0–11: ~5–6 GB total (Brotli Q10). Manageable on a laptop.
+- z12 adds ~15–16 GB; z13 adds ~60+ GB; prefer regional bboxes for z12+.
+
 ---
 
 ## 🚀 Runtime Architecture
@@ -150,12 +239,14 @@ Results: **≈4 × space saving** and ~25–30 ms decompression per tile on a la
 
 ## 🔌 Public API
 
-### Tiles
+### v1 Tiles
 
-Endpoint                                   | Description
------------------------------------------- | ---------------------------------------------
-`/tiles/{water}/{z}/{x}/{y}.png`           | Flood-level tile (water level in **metres**)
-`/tiles/topographical/{z}/{x}/{y}.png`     | Absolute-elevation colour map
+Endpoint                                                   | Description
+---------------------------------------------------------- | ---------------------------------------------
+`/api/v1/tiles/elevation-data/{z}/{x}/{y}.u16`             | Raw uint16 elevation tile (runtime by default)
+`/api/v1/tiles/elevation-data/{z}/{x}/{y}.u16?method=precompressed` | Serve precompressed `.u16.br`/`.gz` if present
+`/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf`                 | Vector tiles proxy (tileserver-gl)
+`/api/v1/tiles/health`                                     | Health/metadata for tile endpoints
 
 ### Risk assessment
 
@@ -188,6 +279,7 @@ CI configuration lives in *.github/workflows/*. Pull-requests run the full matri
 • **Debug helpers** – A set of `debug_*.py` scripts lives at repo root for quick profiling and visual checks.  
 • **Hot reload** – `uvicorn src.api.main:app --reload` watches for changes.  
 • **Data outside repo** – Large raw datasets are symlinked via `ARCHIVED_DATA → /Volumes/Storage/floodmap-archive`.
+• **Gotchas** – When generating precompressed tiles on host, always pass `--source-dir data/elevation-source` and `--output-dir data/elevation-tiles`. Avoid using container‑only paths (`/app/...`) outside Docker — this will yield empty data and tiny `.br` files.
 
 ---
 
