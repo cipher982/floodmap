@@ -204,18 +204,46 @@ async def serve_frontend():
 
 @app.get("/favicon.svg", include_in_schema=False)
 async def favicon_svg():
-    """Serve an emoji-based SVG favicon without a static file."""
-    svg = (
-        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
-        "<text x='50%' y='50%' dominant-baseline='central' text-anchor='middle' font-size='52'>🌊</text>"
-        "</svg>"
-    )
-    return Response(content=svg, media_type="image/svg+xml")
+    """Serve the app's SVG favicon from the static web directory."""
+    try:
+        with open("../web/favicon.svg", "r") as f:
+            return Response(content=f.read(), media_type="image/svg+xml")
+    except Exception:
+        # Fallback to a simple emoji-based favicon if file missing
+        svg = (
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>"
+            "<text x='50%' y='50%' dominant-baseline='central' text-anchor='middle' font-size='52'>🌊</text>"
+            "</svg>"
+        )
+        return Response(content=svg, media_type="image/svg+xml")
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon_ico():
     """Redirect .ico requests to the SVG favicon to avoid 404s."""
     return RedirectResponse(url="/favicon.svg")
+
+@app.get("/site.webmanifest", include_in_schema=False)
+async def site_manifest():
+    """Serve a minimal web app manifest for installability and theming."""
+    manifest = {
+        "name": "FloodMap USA",
+        "short_name": "FloodMap",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0d47a1",
+        "theme_color": "#0d47a1",
+        # Use SVG so we don't require raster generation; modern browsers support this.
+        "icons": [
+            {
+                "src": "/favicon.svg",
+                "sizes": "any",
+                "type": "image/svg+xml",
+                "purpose": "any maskable"
+            }
+        ]
+    }
+    import json
+    return Response(content=json.dumps(manifest), media_type="application/manifest+json")
 
 if __name__ == "__main__":
     import os
