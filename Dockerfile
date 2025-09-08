@@ -37,7 +37,7 @@ RUN mkdir -p ${CACHE_DIR}
 
 # Create non-root user and set permissions
 RUN addgroup -S app && adduser -S -G app appuser \
-    && chown -R app:app /app ${CACHE_DIR}
+    && chown -R appuser:app /app ${CACHE_DIR}
 
 # Expose API port
 EXPOSE 8000
