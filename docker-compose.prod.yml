@@ -80,6 +80,14 @@ services:
         limits:
           memory: ${MEMORY_LIMIT:-20G}
           cpus: ${CPU_LIMIT:-2.0}
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
 
 volumes:
   api-cache:

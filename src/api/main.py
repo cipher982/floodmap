@@ -9,6 +9,8 @@ import uvicorn
 import os
 import logging
 from dotenv import load_dotenv
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 
 # Get logger
 logger = logging.getLogger(__name__)
@@ -116,6 +118,7 @@ validate_critical_data()
 # Import routers
 from routers import tiles_v1, risk, health, tiles_performance_test
 from routers import diagnostics as diagnostics_router
+from config import IS_DEVELOPMENT, ALLOWED_HOSTS, FORCE_HTTPS, ENABLE_DIAGNOSTICS, ENABLE_PERF_TEST_ROUTES
 
 # Import middleware
 from middleware.rate_limiter import RateLimitMiddleware
@@ -151,6 +154,26 @@ async def shutdown_event():
 # Add middleware
 app.add_middleware(RateLimitMiddleware, default_limit=60)
 
+# Trusted hosts (mitigates Host header attacks)
+if ALLOWED_HOSTS:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
+
+# Enforce HTTPS redirects if configured (common in production behind proxy)
+if FORCE_HTTPS:
+    app.add_middleware(HTTPSRedirectMiddleware)
+
+# Minimal security headers for all responses
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    # Safe, broadly-applicable defaults
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "cross-origin")
+    return response
+
 # Instrument FastAPI with OpenTelemetry
 if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
     FastAPIInstrumentor.instrument_app(app)
@@ -158,9 +181,16 @@ if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
 
 # Include API routers
 app.include_router(health.router, prefix="/api", tags=["health"])
-app.include_router(diagnostics_router.router)  # /api/diagnostics
+
+# Diagnostics and performance routes are disabled in production by default
+if IS_DEVELOPMENT or ENABLE_DIAGNOSTICS:
+    app.include_router(diagnostics_router.router)  # /api/diagnostics
+
 app.include_router(tiles_v1.router, tags=["tiles-v1"])  # New v1 routes (already prefixed)
-app.include_router(tiles_performance_test.router, tags=["performance-testing"])  # Performance test routes
+
+if IS_DEVELOPMENT or ENABLE_PERF_TEST_ROUTES:
+    app.include_router(tiles_performance_test.router, tags=["performance-testing"])  # Perf test routes
+
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 
 # Serve static frontend files

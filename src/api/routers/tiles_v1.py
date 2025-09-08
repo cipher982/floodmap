@@ -125,7 +125,9 @@ def create_tile_response(content: bytes, content_type: str, tile_source: str,
         "Cache-Control": TILE_CACHE_CONTROL,
         "X-Tile-Source": tile_source,
         "X-Cache": cache_status,
-        "Access-Control-Allow-Origin": "*"
+        "Access-Control-Allow-Origin": "*",
+        # Always vary on Accept-Encoding as payload may differ
+        "Vary": "Accept-Encoding",
     }
     
     if water_level is not None:
@@ -562,6 +564,8 @@ async def serve_precompressed_elevation_tile(z: int, x: int, y: int, request: Re
                 "X-Tile-Source": "precompressed-raw",
                 "X-Method": "precompressed",
                 "X-Latency-Ms": str(round(latency_ms, 2)),
+                # Ensure caches separate by Accept-Encoding even for identity
+                "Vary": "Accept-Encoding",
             }
             return FileResponse(
                 path=str(raw_path),
@@ -655,10 +659,10 @@ async def get_elevation_data_tile(
                 "Access-Control-Allow-Origin": "*",
                 "X-Tile-Source": "elevation-data",
                 "X-Cache": "HIT",
+                "Vary": "Accept-Encoding",
             }
             if cenc:
                 headers["Content-Encoding"] = cenc
-                headers["Vary"] = "Accept-Encoding"
             return Response(
                 content=payload,
                 media_type="application/octet-stream",
@@ -688,10 +692,10 @@ async def get_elevation_data_tile(
             "Access-Control-Allow-Origin": "*",
             "X-Tile-Source": "elevation-data",
             "X-Cache": "MISS",
+            "Vary": "Accept-Encoding",
         }
         if cenc:
             headers["Content-Encoding"] = cenc
-            headers["Vary"] = "Accept-Encoding"
         return Response(
             content=payload,
             media_type="application/octet-stream",

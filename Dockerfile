@@ -35,11 +35,18 @@ ENV PROJECT_ROOT=/app \
 # Create required directories
 RUN mkdir -p ${CACHE_DIR}
 
+# Create non-root user and set permissions
+RUN addgroup -S app && adduser -S -G app appuser \
+    && chown -R app:app /app ${CACHE_DIR}
+
 # Expose API port
 EXPOSE 8000
 
 # Change to API directory for relative imports
 WORKDIR /app/src/api
 
+# Drop root privileges
+USER appuser:app
+
 # Use uv to run the application
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
