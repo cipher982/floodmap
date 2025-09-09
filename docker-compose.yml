@@ -12,7 +12,7 @@ services:
       - TILESERVER_CONFIG=/data/config.json
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep 'node /usr/src/app' > /dev/null"]
       interval: 10s
       timeout: 5s
       retries: 3
