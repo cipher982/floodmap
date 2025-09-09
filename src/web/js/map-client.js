@@ -78,9 +78,14 @@ class FloodMapClient {
         const imageData = ctx.createImageData(256, 256);
         const data = imageData.data;
 
-        // Fast-path: if the entire tile is NODATA, fill with ocean color
+        // Fast-path: if the entire tile is NODATA, fill with a consistent water/ocean color
+        // Use FLOODED blue in flood mode so offshore tiles match per-pixel NODATA handling
+        // Use OCEAN color in elevation mode
         if (this.elevationRenderer.isAllNoData(elevationData)) {
-            this.elevationRenderer.fillImageData(imageData, this.elevationRenderer.OCEAN_RGBA);
+            const fillColor = (mode === 'flood')
+                ? this.elevationRenderer.colors.FLOODED
+                : this.elevationRenderer.OCEAN_RGBA;
+            this.elevationRenderer.fillImageData(imageData, fillColor);
             ctx.putImageData(imageData, 0, 0);
             return new Promise((resolve, reject) => {
                 canvas.toBlob(blob => {
