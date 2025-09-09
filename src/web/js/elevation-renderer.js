@@ -178,16 +178,13 @@ class ElevationRenderer {
      * @returns {Array} RGBA color array
      */
     calculateElevationColor(elevation) {
-        // Handle NODATA (ocean/missing data)
-        if (elevation === -32768 || Number.isNaN(elevation)) {
-            return this.OCEAN_RGBA; // Steel blue for water
+        // Handle NODATA or below sea level consistently as ocean
+        if (elevation === -32768 || Number.isNaN(elevation) || elevation < 0) {
+            return this.OCEAN_RGBA; // Consistent ocean color
         }
         
         // Topographical color scheme based on elevation
-        if (elevation < 0) {
-            // Below sea level - dark blue
-            return [25, 25, 112, 255]; // Midnight blue
-        } else if (elevation < 50) {
+        if (elevation < 50) {
             // Low coastal areas - green to yellow-green
             const t = elevation / 50;
             return this.interpolateColors([34, 139, 34, 255], [154, 205, 50, 255], t); // Forest green to yellow-green

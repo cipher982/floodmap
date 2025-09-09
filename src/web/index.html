@@ -76,8 +76,9 @@
         }
     </script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-    <script src="/static/js/elevation-renderer.js"></script>
-    <script src="/static/js/map-client.js"></script>
+    <!-- Cache-busting version for static assets -->
+    <script src="/static/js/elevation-renderer.js?v=20250909"></script>
+    <script src="/static/js/map-client.js?v=20250909"></script>
     <!-- Fallback: map-simple.js or original map.js -->
 </body>
 </html>
