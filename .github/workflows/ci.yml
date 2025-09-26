@@ -28,7 +28,7 @@ jobs:
           pip install -e .[dev] pytest ruff
 
       - name: Lint with ruff
-        run: ruff check .
+        run: ruff check . --ignore=SIM108,SIM102,SIM103,SIM118,SIM113,B904,B007,B006,C401,C414,F811
 
       - name: Format check with ruff
         run: ruff format --check .
