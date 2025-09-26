@@ -30,19 +30,16 @@ Notes
 from __future__ import annotations
 
 import argparse
-import os
 import random
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
-
 
 BR_AVAILABLE = False
 try:
-    import brotli  # type: ignore
     BR_AVAILABLE = True
 except Exception:
     BR_AVAILABLE = False
@@ -51,22 +48,27 @@ except Exception:
 def decompress_br(data: bytes) -> bytes:
     if BR_AVAILABLE:
         import brotli as _br  # type: ignore
+
         return _br.decompress(data)
     # Fall back to brotli CLI if present
-    if shutil.which('brotli'):
-        p = subprocess.run(['brotli', '-d', '-c'], input=data, capture_output=True, check=True)
+    if shutil.which("brotli"):
+        p = subprocess.run(
+            ["brotli", "-d", "-c"], input=data, capture_output=True, check=True
+        )
         return p.stdout
     raise RuntimeError("No brotli support (install 'brotli' Python package or CLI)")
 
 
 def decompress_gz(data: bytes) -> bytes:
     import gzip
+
     return gzip.decompress(data)
 
 
 def stats_u16(payload: bytes) -> tuple[int, int, float]:
     from array import array
-    a = array('H')
+
+    a = array("H")
     a.frombytes(payload)
     if not a:
         return (0, 0, 100.0)
@@ -89,7 +91,7 @@ class ZoomSummary:
 
 
 def human(n: int) -> str:
-    for unit in ['B','K','M','G','T']:
+    for unit in ["B", "K", "M", "G", "T"]:
         if n < 1024:
             return f"{n}{unit}"
         n //= 1024
@@ -139,7 +141,7 @@ def validate_local(files: Iterable[Path]) -> list[tuple[Path, int, int, float]]:
     results = []
     for p in files:
         b = p.read_bytes()
-        if p.suffix == '.gz':
+        if p.suffix == ".gz":
             dec = decompress_gz(b)
         else:
             dec = decompress_br(b)
@@ -150,6 +152,7 @@ def validate_local(files: Iterable[Path]) -> list[tuple[Path, int, int, float]]:
 
 def validate_api(api: str, files: Iterable[Path]) -> list[tuple[str, int, int, float]]:
     import urllib.request
+
     results = []
     opener = urllib.request.build_opener()
     opener.addheaders = [("Accept-Encoding", "br,gzip")]
@@ -157,15 +160,17 @@ def validate_api(api: str, files: Iterable[Path]) -> list[tuple[str, int, int, f
         # Extract z/x/y from path
         parts = p.parts
         # .../tiles_dir/z/x/y.u16.br
-        z = parts[-3]; x = parts[-2]; y = p.stem.split('.')[0]
+        z = parts[-3]
+        x = parts[-2]
+        y = p.stem.split(".")[0]
         url = f"{api}/api/v1/tiles/elevation-data/{z}/{x}/{y}.u16?method=precompressed"
         with opener.open(url, timeout=30) as r:
             data = r.read()
             # Decompress based on response header
-            enc = r.headers.get('Content-Encoding', '')
-            if 'br' in enc:
+            enc = r.headers.get("Content-Encoding", "")
+            if "br" in enc:
                 dec = decompress_br(data)
-            elif 'gzip' in enc:
+            elif "gzip" in enc:
                 dec = decompress_gz(data)
             else:
                 dec = data
@@ -175,14 +180,21 @@ def validate_api(api: str, files: Iterable[Path]) -> list[tuple[str, int, int, f
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Validate precompressed tiles (.u16.br/.u16.gz)")
-    ap.add_argument('--tiles-dir', type=Path, default=Path('data/elevation-tiles'))
-    ap.add_argument('--zooms', type=int, nargs='+', default=[8,9,10,11])
-    ap.add_argument('--samples', type=int, default=100, help='Samples per zoom')
-    ap.add_argument('--api', type=str, default=None, help='Optional API base (e.g., http://127.0.0.1:8000)')
+    ap = argparse.ArgumentParser(
+        description="Validate precompressed tiles (.u16.br/.u16.gz)"
+    )
+    ap.add_argument("--tiles-dir", type=Path, default=Path("data/elevation-tiles"))
+    ap.add_argument("--zooms", type=int, nargs="+", default=[8, 9, 10, 11])
+    ap.add_argument("--samples", type=int, default=100, help="Samples per zoom")
+    ap.add_argument(
+        "--api",
+        type=str,
+        default=None,
+        help="Optional API base (e.g., http://127.0.0.1:8000)",
+    )
     args = ap.parse_args()
 
-    root: Path = args.tiles-dir
+    root: Path = args.tiles - dir
     if not root.exists():
         print(f"Tiles dir not found: {root}")
         sys.exit(2)
@@ -196,7 +208,9 @@ def main() -> None:
         summaries.append(s)
         total_files += s.files
         total_bytes += s.size_bytes
-        print(f"z={s.zoom:>2} files={s.files:>6} size={human(s.size_bytes):>6}  buckets: <5KB={s.lt5k:>5} 5-20KB={s.bt5_20k:>5} >20KB={s.gt20k:>6} >100KB={s.gt100k:>4}")
+        print(
+            f"z={s.zoom:>2} files={s.files:>6} size={human(s.size_bytes):>6}  buckets: <5KB={s.lt5k:>5} 5-20KB={s.bt5_20k:>5} >20KB={s.gt20k:>6} >100KB={s.gt100k:>4}"
+        )
 
     print(f"Total: files={total_files} size={human(total_bytes)}")
 
@@ -217,10 +231,12 @@ def main() -> None:
             print(f"z={z}: no results")
             continue
         nodatas_sorted = sorted(nodatas)
-        p50 = nodatas_sorted[len(nodatas_sorted)//2]
-        p90 = nodatas_sorted[int(len(nodatas_sorted)*0.9)]
-        p99 = nodatas_sorted[int(len(nodatas_sorted)*0.99)]
-        print(f"z={z}: samples={len(results)} nodata%% p50={p50:.2f} p90={p90:.2f} p99={p99:.2f}")
+        p50 = nodatas_sorted[len(nodatas_sorted) // 2]
+        p90 = nodatas_sorted[int(len(nodatas_sorted) * 0.9)]
+        p99 = nodatas_sorted[int(len(nodatas_sorted) * 0.99)]
+        print(
+            f"z={z}: samples={len(results)} nodata%% p50={p50:.2f} p90={p90:.2f} p99={p99:.2f}"
+        )
         # Show a couple of examples
         show = results[:3]
         for r in show:
@@ -230,6 +246,5 @@ def main() -> None:
     print("\nDone.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

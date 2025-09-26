@@ -40,7 +40,7 @@ tileserver: ## 🔧 Start tileserver only
 	fi
 	@# Create simple config for tileserver
 	@echo '{"options":{"paths":{"root":"/data","mbtiles":"/data"}},"data":{"usa-complete":{"mbtiles":"usa-complete.mbtiles"}}}' > output/config.json
-	@# Start tileserver container  
+	@# Start tileserver container
 	@docker run -d --name tileserver-local \
 		-p 8080:8080 \
 		-v $(PWD)/output:/data \

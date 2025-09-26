@@ -2,14 +2,15 @@
 Global pytest configuration and fixtures for floodmap tests.
 """
 
-import pytest
-import sys
 import os
-import time
 import subprocess
-import requests
+import sys
+import time
 from pathlib import Path
-from typing import Generator, Dict, Any
+from typing import Any
+
+import pytest
+import requests
 
 # Add API module to path
 API_PATH = Path(__file__).parent.parent / "src" / "api"
@@ -29,7 +30,7 @@ BASE_URL = f"http://{TEST_CONFIG['api_host']}:{TEST_CONFIG['api_port']}"
 
 
 @pytest.fixture(scope="session")
-def test_config() -> Dict[str, Any]:
+def test_config() -> dict[str, Any]:
     """Global test configuration."""
     return TEST_CONFIG
 
@@ -51,20 +52,20 @@ def api_server():
             return
     except requests.exceptions.RequestException:
         pass
-    
+
     # Start server
     env = os.environ.copy()
     env["API_PORT"] = str(TEST_CONFIG["api_port"])
-    
+
     process = subprocess.Popen(
         ["uv", "run", "python", "main.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=str(API_PATH),
         env=env,
-        text=True
+        text=True,
     )
-    
+
     # Wait for server to be ready
     for attempt in range(TEST_CONFIG["max_retries"]):
         try:
@@ -76,10 +77,12 @@ def api_server():
     else:
         process.terminate()
         process.wait()
-        raise RuntimeError(f"Failed to start API server after {TEST_CONFIG['max_retries']} attempts")
-    
+        raise RuntimeError(
+            f"Failed to start API server after {TEST_CONFIG['max_retries']} attempts"
+        )
+
     yield BASE_URL
-    
+
     # Cleanup
     process.terminate()
     process.wait()
@@ -89,18 +92,18 @@ def api_server():
 def api_client(base_url):
     """HTTP client for API requests."""
     import requests
-    
+
     class APIClient:
         def __init__(self, base_url):
             self.base_url = base_url
             self.session = requests.Session()
-        
+
         def get(self, endpoint, **kwargs):
             return self.session.get(f"{self.base_url}{endpoint}", **kwargs)
-        
+
         def post(self, endpoint, **kwargs):
             return self.session.post(f"{self.base_url}{endpoint}", **kwargs)
-    
+
     return APIClient(base_url)
 
 
@@ -108,11 +111,11 @@ def api_client(base_url):
 def performance_thresholds():
     """Performance thresholds for different test scenarios."""
     return {
-        "fast": 100,          # < 100ms - Excellent
-        "acceptable": 500,    # < 500ms - Good
-        "slow": 1000,         # < 1s - Acceptable
-        "very_slow": 5000,    # < 5s - Poor
-        "unacceptable": 10000 # > 10s - Unacceptable
+        "fast": 100,  # < 100ms - Excellent
+        "acceptable": 500,  # < 500ms - Good
+        "slow": 1000,  # < 1s - Acceptable
+        "very_slow": 5000,  # < 5s - Poor
+        "unacceptable": 10000,  # > 10s - Unacceptable
     }
 
 
@@ -134,7 +137,7 @@ def sample_tile_coords():
             "zoom_10": (10, 279, 447),
             "zoom_11": (11, 559, 895),
             "zoom_12": (12, 1119, 1791),
-        }
+        },
     }
 
 
@@ -147,27 +150,17 @@ def test_water_levels():
 # Markers for different test types
 def pytest_configure(config):
     """Configure custom pytest markers."""
-    config.addinivalue_line(
-        "markers", "unit: fast unit tests (< 1s each)"
-    )
+    config.addinivalue_line("markers", "unit: fast unit tests (< 1s each)")
     config.addinivalue_line(
         "markers", "integration: integration tests that require running services"
     )
-    config.addinivalue_line(
-        "markers", "e2e: end-to-end tests using browser automation"
-    )
-    config.addinivalue_line(
-        "markers", "performance: performance and load tests"
-    )
-    config.addinivalue_line(
-        "markers", "visual: visual regression tests"
-    )
+    config.addinivalue_line("markers", "e2e: end-to-end tests using browser automation")
+    config.addinivalue_line("markers", "performance: performance and load tests")
+    config.addinivalue_line("markers", "visual: visual regression tests")
     config.addinivalue_line(
         "markers", "slow: slow tests that can be skipped in development"
     )
-    config.addinivalue_line(
-        "markers", "security: security-related tests"
-    )
+    config.addinivalue_line("markers", "security: security-related tests")
 
 
 def pytest_collection_modifyitems(config, items):
@@ -186,7 +179,7 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.visual)
         elif "security/" in str(item.fspath):
             item.add_marker(pytest.mark.security)
-        
+
         # Mark slow tests
         if "slow" in item.name.lower() or "stress" in item.name.lower():
             item.add_marker(pytest.mark.slow)
@@ -195,7 +188,9 @@ def pytest_collection_modifyitems(config, items):
 def pytest_runtest_setup(item):
     """Skip tests based on markers and conditions."""
     # Skip slow tests unless explicitly requested
-    if "slow" in item.keywords and not item.config.getoption("--runslow", default=False):
+    if "slow" in item.keywords and not item.config.getoption(
+        "--runslow", default=False
+    ):
         pytest.skip("slow test (use --runslow to run)")
 
 
@@ -204,6 +199,4 @@ def pytest_addoption(parser):
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
-    parser.addoption(
-        "--api-url", default=BASE_URL, help="API base URL for testing"
-    )
+    parser.addoption("--api-url", default=BASE_URL, help="API base URL for testing")

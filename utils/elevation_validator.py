@@ -12,18 +12,16 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
-from typing import Tuple, List
 
 import numpy as np
 import zstandard as zstd
-
 
 # ---------------------------------------------------------------------------
 # Low-level helpers
 # ---------------------------------------------------------------------------
 
 
-def _decompress_tile(file_path: Path, shape: Tuple[int, int]) -> np.ndarray:
+def _decompress_tile(file_path: Path, shape: tuple[int, int]) -> np.ndarray:
     """Safely decompress a *.zst file into a numpy array of the expected shape.
 
     This function uses `max_output_size` to avoid allocating crazy amounts of
@@ -70,7 +68,7 @@ def validate_elevation_file(file_path: Path) -> dict:
 
     metadata = json.loads(metadata_path.read_text())
 
-    shape: Tuple[int, int]
+    shape: tuple[int, int]
     if "shape" in metadata:
         shape = tuple(metadata["shape"])
     else:  # legacy format
@@ -87,7 +85,7 @@ def validate_elevation_file(file_path: Path) -> dict:
     }
 
 
-def sample_elevation_files(data_root: Path, sample_size: int = 10) -> List[Path]:
+def sample_elevation_files(data_root: Path, sample_size: int = 10) -> list[Path]:
     """Pick a random subset of `sample_size` compressed DEM files from the folder."""
 
     all_files = list(data_root.glob("*.zst"))
@@ -103,11 +101,14 @@ def sample_elevation_files(data_root: Path, sample_size: int = 10) -> List[Path]
 
 
 def main() -> None:  # pragma: no cover
-    import argparse, pprint
+    import argparse
+    import pprint
 
     parser = argparse.ArgumentParser(description="Validate compressed SRTM tiles")
     parser.add_argument("data_dir", type=Path, help="Directory with *.zst files")
-    parser.add_argument("--sample", type=int, default=5, help="Number of random files to inspect")
+    parser.add_argument(
+        "--sample", type=int, default=5, help="Number of random files to inspect"
+    )
 
     args = parser.parse_args()
 

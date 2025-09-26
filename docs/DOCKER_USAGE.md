@@ -21,7 +21,7 @@ curl http://localhost:8000/api/health
 curl http://localhost:8080  # Tileserver UI
 ```
 
-### **Production Deployment**  
+### **Production Deployment**
 ```bash
 # Add to your existing .env file (don't overwrite!)
 echo "ENVIRONMENT=production" >> .env
@@ -117,7 +117,7 @@ MEMORY_LIMIT=6G
 ELEVATION_CACHE_SIZE=400
 TILE_CACHE_SIZE=10000
 
-# Small VPS (2GB RAM)  
+# Small VPS (2GB RAM)
 MEMORY_LIMIT=1G
 ELEVATION_CACHE_SIZE=50
 TILE_CACHE_SIZE=1000

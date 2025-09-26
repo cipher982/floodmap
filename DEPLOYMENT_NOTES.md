@@ -2,7 +2,7 @@
 
 ## Critical Environment Variables
 
-### ⚠️ **REQUIRED**: TileServer Configuration  
+### ⚠️ **REQUIRED**: TileServer Configuration
 
 **Before deploying, ensure your `.env` or environment has:**
 
@@ -11,7 +11,7 @@
 TILESERVER_PORT=8080                    # Must match Docker container port
 TILESERVER_URL=http://127.0.0.1:8080   # API proxy target (use 127.0.0.1, not localhost)
 
-# API Configuration  
+# API Configuration
 API_PORT=60197                          # Your API server port
 
 # Data Paths
@@ -33,21 +33,21 @@ PROJECT_ROOT=/path/to/your/project      # Project root path
 ## 🧪 Testing Checklist
 
 After deployment:
-1. ✅ Health endpoint: `curl http://your-domain/api/health`  
+1. ✅ Health endpoint: `curl http://your-domain/api/health`
 2. ✅ Elevation tiles: `curl http://your-domain/api/v1/tiles/elevation-data/8/68/106.u16`
-3. ✅ Vector tiles: `curl http://your-domain/api/v1/tiles/vector/usa/8/68/106.pbf` 
+3. ✅ Vector tiles: `curl http://your-domain/api/v1/tiles/vector/usa/8/68/106.pbf`
 4. ✅ **Map drag test**: Open map, drag rapidly - no 503 errors in browser console
 
 ## 🚨 Common Deployment Issues
 
 ### "503 Service Unavailable" on Vector Tiles
-**Root Cause**: Wrong TILESERVER_URL port  
+**Root Cause**: Wrong TILESERVER_URL port
 **Fix**: Ensure TILESERVER_URL matches your actual tileserver port
 
-### "Connection refused" errors  
-**Root Cause**: Using `localhost` instead of `127.0.0.1`  
+### "Connection refused" errors
+**Root Cause**: Using `localhost` instead of `127.0.0.1`
 **Fix**: Use `127.0.0.1` in TILESERVER_URL for Docker compatibility
 
 ### Map tiles load but dragging is "glitchy"
-**Root Cause**: Vector tiles not loading (check browser console)  
+**Root Cause**: Vector tiles not loading (check browser console)
 **Fix**: Verify tileserver is running and accessible from API container

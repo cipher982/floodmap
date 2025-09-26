@@ -3,7 +3,7 @@
 ![Architecture](docs/arch.svg)
 
 ## 1. Overview
-Flood Buddy turns raw public-domain elevation data into colored map tiles and serves them through a FastAPI backend.  
+Flood Buddy turns raw public-domain elevation data into colored map tiles and serves them through a FastAPI backend.
 Key design choices:
 
 * **Single MBTiles datastore** – tiles are stored in `elevation.mbtiles`, avoiding millions of tiny PNG files and heavy inode usage.
@@ -55,12 +55,12 @@ See `.env.example` for a full template.
 | `GET` | `/metrics` | Prometheus metrics in OpenMetrics format. |
 
 ## 5. Development workflow
-1. `pytest -q` – runs unit + integration tests (builds sample MBTiles in temp dir).  
-2. `scripts/download_aws_dem.py` – pulls COGs into `INPUT_DIR`.  
-3. `scripts/process_tif.py` – mosaics, tiles, and writes MBTiles.  
+1. `pytest -q` – runs unit + integration tests (builds sample MBTiles in temp dir).
+2. `scripts/download_aws_dem.py` – pulls COGs into `INPUT_DIR`.
+3. `scripts/process_tif.py` – mosaics, tiles, and writes MBTiles.
 4. `uvicorn main:app --reload` – hot-reload API during development.
 
 ## 6. Production notes
-* Behind a reverse-proxy/CDN, be sure to forward `X-Real-IP` so rate-limiter sees the real client.  
-* Mount `/data` on fast SSD; GDAL tiling is I/O-heavy the first time.  
+* Behind a reverse-proxy/CDN, be sure to forward `X-Real-IP` so rate-limiter sees the real client.
+* Mount `/data` on fast SSD; GDAL tiling is I/O-heavy the first time.
 * Scrape `/metrics` every 15 s to size Redis and tune rate limit thresholds.

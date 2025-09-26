@@ -205,7 +205,7 @@ button:hover {
     z-index: 1;
     user-select: none;
     -webkit-user-select: none;
-    
+
     /* Smooth interaction feedback */
     transform: scale(1);
 }
@@ -223,14 +223,14 @@ button:hover {
     background: white;
     color: #2563eb;
     font-weight: 600;
-    box-shadow: 
+    box-shadow:
         0 1px 3px rgba(0,0,0,0.1),
         0 1px 2px rgba(0,0,0,0.06);
     transform: scale(1);
 }
 
 .segmented-control input[type="radio"]:checked + label:hover {
-    box-shadow: 
+    box-shadow:
         0 2px 4px rgba(0,0,0,0.1),
         0 2px 3px rgba(0,0,0,0.06);
 }
@@ -250,7 +250,7 @@ button:hover {
     }
     100% {
         transform: scale(1);
-        box-shadow: 
+        box-shadow:
             0 1px 3px rgba(0,0,0,0.1),
             0 1px 2px rgba(0,0,0,0.06);
     }
@@ -303,19 +303,19 @@ button:hover {
         gap: 10px;
         padding: 10px;
     }
-    
+
     header {
         flex-direction: column;
         gap: 8px;
         text-align: center;
     }
-    
+
     .sidebar {
         flex-direction: row;
         overflow-x: auto;
         overflow-y: visible;
     }
-    
+
     #controls, #risk-panel {
         flex: 1;
         min-width: 280px;

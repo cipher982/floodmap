@@ -51,25 +51,25 @@ class FloodRenderLayer {
     onAdd(map, gl) {
         // Compile shaders
         this.program = this.createShaderProgram(gl);
-        
+
         // Create texture for elevation data
         this.elevationTexture = gl.createTexture();
-        
+
         // Set up vertex buffer (full-screen quad)
         this.vertexBuffer = this.createQuadBuffer(gl);
     }
 
     render(gl, matrix) {
         gl.useProgram(this.program);
-        
+
         // Bind elevation texture
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.elevationTexture);
-        
+
         // Set uniforms
         gl.uniform1f(this.waterLevelUniform, this.currentWaterLevel);
         gl.uniformMatrix4fv(this.matrixUniform, false, matrix);
-        
+
         // Draw
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
@@ -88,26 +88,26 @@ varying vec2 v_texCoord;
 
 // Color constants matching server-side color_mapping.py
 const vec4 SAFE_COLOR = vec4(0.298, 0.686, 0.314, 0.47);      // Green
-const vec4 CAUTION_COLOR = vec4(1.0, 0.757, 0.027, 0.627);    // Yellow  
+const vec4 CAUTION_COLOR = vec4(1.0, 0.757, 0.027, 0.627);    // Yellow
 const vec4 DANGER_COLOR = vec4(0.957, 0.263, 0.212, 0.784);   // Red
 const vec4 FLOODED_COLOR = vec4(0.129, 0.588, 0.953, 0.863);  // Blue
 
 void main() {
     // Sample elevation from texture (16-bit value normalized to 0-1)
     float normalizedElevation = texture2D(u_elevation, v_texCoord).r;
-    
+
     // Convert to actual elevation in meters
     float elevation = normalizedElevation * 9500.0 - 500.0;
-    
+
     // Check for NODATA (ocean)
     if (normalizedElevation >= 0.9999) {
         gl_FragColor = FLOODED_COLOR;
         return;
     }
-    
+
     // Calculate relative elevation
     float relativeElevation = elevation - u_waterLevel;
-    
+
     // Determine flood risk color
     vec4 color;
     if (relativeElevation >= 5.0) {
@@ -127,7 +127,7 @@ void main() {
     } else {
         color = FLOODED_COLOR;
     }
-    
+
     gl_FragColor = color;
 }
 ```
@@ -140,20 +140,20 @@ class ElevationDataManager {
         this.cache = new Map(); // Permanent cache
         this.loadingTiles = new Map(); // Prevent duplicate requests
     }
-    
+
     async loadElevationTile(z, x, y) {
         const key = `${z}/${x}/${y}`;
-        
+
         // Check cache
         if (this.cache.has(key)) {
             return this.cache.get(key);
         }
-        
+
         // Check if already loading
         if (this.loadingTiles.has(key)) {
             return this.loadingTiles.get(key);
         }
-        
+
         // Load elevation data
         const loadPromise = fetch(`/api/tiles/elevation-data/${z}/${x}/${y}.bin`)
             .then(response => response.arrayBuffer())
@@ -163,7 +163,7 @@ class ElevationDataManager {
                 this.loadingTiles.delete(key);
                 return elevationData;
             });
-        
+
         this.loadingTiles.set(key, loadPromise);
         return loadPromise;
     }
@@ -175,21 +175,21 @@ class ElevationDataManager {
 ```python
 @router.get("/elevation-data/{z}/{x}/{y}.bin")
 async def get_elevation_data_tile(
-    z: int = Path(...), 
-    x: int = Path(...), 
+    z: int = Path(...),
+    x: int = Path(...),
     y: int = Path(...)
 ):
     """Serve raw elevation data as binary uint16 array."""
-    
+
     # Get elevation data (reuse existing elevation_loader)
     elevation_data = get_elevation_for_tile(z, x, y)  # Returns numpy array
-    
+
     # Convert to uint16 (0-65535 range)
     # Map -500m to +9000m → 0 to 65534, with 65535 as NODATA
     normalized = np.clip((elevation_data + 500) / 9500 * 65534, 0, 65534)
     normalized[elevation_data == NODATA_VALUE] = 65535
     elevation_uint16 = normalized.astype(np.uint16)
-    
+
     # Return as binary data
     return Response(
         content=elevation_uint16.tobytes(),
@@ -245,7 +245,7 @@ async def get_elevation_data_tile(
 ### Risk: WebGL Support
 - **Mitigation**: Fallback to current server-side rendering for ~2% of users without WebGL
 
-### Risk: Initial Load Size  
+### Risk: Initial Load Size
 - **Mitigation**: Progressive loading, show low-res first, compress with zstd
 
 ### Risk: Mobile GPU Performance
@@ -257,7 +257,7 @@ async def get_elevation_data_tile(
 
 1. **Slider latency**: < 16ms (60fps)
 2. **Bandwidth reduction**: > 90% for active users
-3. **Server CPU reduction**: > 80% 
+3. **Server CPU reduction**: > 80%
 4. **User satisfaction**: Smooth, instant flood visualization
 
 ---

@@ -6,8 +6,8 @@ These scripts were created during debugging the "green square artifact" issue.
 Disables all caching layers for debugging purposes. Use when you need to ensure fresh data on every request.
 **WARNING**: Makes the app very slow. Restore with git checkout after use.
 
-## fix_ocean_zeros.py  
-Attempted fix that treated elevation=0 as NODATA. 
+## fix_ocean_zeros.py
+Attempted fix that treated elevation=0 as NODATA.
 **DO NOT USE**: This is a footgun that breaks legitimate 0m elevation areas (Netherlands, New Orleans, etc).
 Keep for reference of what NOT to do.
 

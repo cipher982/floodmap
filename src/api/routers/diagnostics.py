@@ -1,14 +1,14 @@
 """Diagnostics endpoints for programmatic tile coverage auditing."""
-from fastapi import APIRouter, Query, HTTPException
-from typing import Optional
 
+from config import IS_DEVELOPMENT
 from diagnostics.tile_coverage import audit_bbox
 from elevation_loader import elevation_loader
-from config import IS_DEVELOPMENT
+from fastapi import APIRouter, HTTPException, Query
 
 try:
-    from tile_cache import tile_cache
     from persistent_elevation_cache import persistent_elevation_cache
+    from tile_cache import tile_cache
+
     HAVE_CACHE = True
 except Exception:
     HAVE_CACHE = False
@@ -27,7 +27,9 @@ async def tile_coverage(
 ):
     """Return a coverage report for elevation tiles within a bbox at zoom z."""
     if min_lon > max_lon or min_lat > max_lat:
-        raise HTTPException(status_code=400, detail="Invalid bbox: ensure min <= max for lon/lat")
+        raise HTTPException(
+            status_code=400, detail="Invalid bbox: ensure min <= max for lon/lat"
+        )
 
     report = audit_bbox(min_lon, min_lat, max_lon, max_lat, z)
     return report
@@ -41,11 +43,14 @@ async def tile_debug(
 ):
     """Debug a single tile: report vector presence and elevation availability."""
     lat_top, lat_bottom, lon_left, lon_right = elevation_loader.num2deg(x, y, z)
-    overlap = elevation_loader.find_elevation_files_for_tile(lat_top, lat_bottom, lon_left, lon_right)
+    overlap = elevation_loader.find_elevation_files_for_tile(
+        lat_top, lat_bottom, lon_left, lon_right
+    )
 
     # Vector presence (roads etc.)
     try:
         import asyncio
+
         loop = asyncio.get_event_loop()
         roads = loop.run_until_complete(elevation_loader._check_vector_tile(x, y, z))
     except Exception:
@@ -63,7 +68,12 @@ async def tile_debug(
         "z": z,
         "x": x,
         "y": y,
-        "bounds": {"lat_top": lat_top, "lat_bottom": lat_bottom, "lon_left": lon_left, "lon_right": lon_right},
+        "bounds": {
+            "lat_top": lat_top,
+            "lat_bottom": lat_bottom,
+            "lon_left": lon_left,
+            "lon_right": lon_right,
+        },
         "overlapping_files": len(overlap),
         "roads_present": bool(roads),
         "has_elevation": arr is not None,
@@ -73,32 +83,40 @@ async def tile_debug(
     if arr is not None:
         try:
             import numpy as np
+
             resp["elevation_stats"] = {
-                "min": int(np.min(arr[arr != -32768])) if (arr != -32768).any() else None,
-                "max": int(np.max(arr[arr != -32768])) if (arr != -32768).any() else None,
+                "min": int(np.min(arr[arr != -32768]))
+                if (arr != -32768).any()
+                else None,
+                "max": int(np.max(arr[arr != -32768]))
+                if (arr != -32768).any()
+                else None,
             }
         except Exception:
             pass
 
     return resp
 
+
 @router.post("/clear-cache")
 async def clear_cache():
     """Clear server-side caches (development only)."""
     if not IS_DEVELOPMENT:
-        raise HTTPException(status_code=404, detail="Endpoint only available in development")
+        raise HTTPException(
+            status_code=404, detail="Endpoint only available in development"
+        )
     if not HAVE_CACHE:
         raise HTTPException(status_code=500, detail="Cache system not available")
-    
+
     tile_cache.clear()
     persistent_elevation_cache.clear_cache()
-    
+
     return {
         "status": "success",
         "message": "Caches cleared",
         "environment": "development",
         "cache_stats": {
             "tile_cache": tile_cache.stats(),
-            "elevation_cache": persistent_elevation_cache.get_stats()
-        }
+            "elevation_cache": persistent_elevation_cache.get_stats(),
+        },
     }

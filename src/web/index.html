@@ -24,7 +24,7 @@
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="FloodMap USA — Elevation & Flood Risk">
     <meta name="twitter:description" content="Explore elevation and flood risk levels across the US.">
-    
+
 </head>
 <body>
     <div id="app">
@@ -32,9 +32,9 @@
             <h1>🌊 Flood Risk Map</h1>
             <div id="location-info"></div>
         </header>
-        
+
         <div id="map"></div>
-        
+
         <div class="sidebar">
             <div id="controls">
                 <div class="control-group">
@@ -56,7 +56,7 @@
                 </div>
                 <button id="find-location">📍 Find My Location</button>
             </div>
-            
+
             <div id="risk-panel">
                 <h3>Risk Assessment</h3>
                 <div id="risk-details">
@@ -68,7 +68,7 @@
 
     <script>
         // Debug mode detection (enable with ?debug=1 or localStorage)
-        window.DEBUG_TILES = new URLSearchParams(window.location.search).get('debug') === '1' || 
+        window.DEBUG_TILES = new URLSearchParams(window.location.search).get('debug') === '1' ||
                              localStorage.getItem('DEBUG_TILES') === 'true' ||
                              window.location.hostname === 'localhost';
         if (window.DEBUG_TILES) {

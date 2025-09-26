@@ -29,4 +29,3 @@ Outputs
 Notes
 - All runs use a fresh browser context (no prior cache) except the warm scenario (reload within the same context).
 - The harness captures actual transferred bytes (compressed) and groups elevation/vector tiles by zoom level.
-

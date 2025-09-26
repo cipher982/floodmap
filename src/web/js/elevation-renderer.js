@@ -7,13 +7,13 @@ class ElevationRenderer {
     constructor() {
         // Elevation data cache - permanent storage
         this.elevationCache = new Map();
-        
+
         // Rendered tile cache - temporary, cleared on water level change
         this.renderedCache = new Map();
-        
+
         // Loading state tracking
         this.loadingTiles = new Map();
-        
+
         // Statistics
         this.stats = {
             tilesLoaded: 0,
@@ -21,7 +21,7 @@ class ElevationRenderer {
             cacheHits: 0,
             renderTime: 0
         };
-        
+
         // Color scheme matching server's color_mapping.py
         this.colors = {
             SAFE: [76, 175, 80, 120],      // Green, semi-transparent
@@ -30,14 +30,14 @@ class ElevationRenderer {
             FLOODED: [33, 150, 243, 220],  // Blue, very visible
             TRANSPARENT: [0, 0, 0, 0]      // Fully transparent
         };
-        
+
         // Risk thresholds (meters relative to water level)
         this.thresholds = {
             SAFE: 5.0,       // 5m+ above water = safe
             CAUTION: 2.0,    // 2-5m above water = caution
             DANGER: 0.5      // 0.5-2m above water = danger
         };
-        
+
         // Constants
         this.TILE_SIZE = 256;
         this.NODATA_VALUE = 65535;
@@ -48,7 +48,7 @@ class ElevationRenderer {
         // Precomputed ocean color for elevation mode (steel blue)
         this.OCEAN_RGBA = [70, 130, 180, 255];
     }
-    
+
     /**
      * Load elevation data for a tile
      * @param {number} z - Zoom level
@@ -58,18 +58,18 @@ class ElevationRenderer {
      */
     async loadElevationTile(z, x, y) {
         const key = `${z}/${x}/${y}`;
-        
+
         // Check cache first
         if (this.elevationCache.has(key)) {
             this.stats.cacheHits++;
             return this.elevationCache.get(key);
         }
-        
+
         // Check if already loading
         if (this.loadingTiles.has(key)) {
             return this.loadingTiles.get(key);
         }
-        
+
         // Start loading (with cache-busting in development)
         const cacheBuster = window.location.hostname === 'localhost' ? `?t=${Date.now()}` : '';
         const precompressedParam = cacheBuster ? `&method=precompressed` : `?method=precompressed`;
@@ -82,14 +82,14 @@ class ElevationRenderer {
             })
             .then(buffer => {
                 const elevationData = new Uint16Array(buffer);
-                
+
                 // Validate data size
                 if (elevationData.length !== this.TILE_SIZE * this.TILE_SIZE) {
                     console.warn(`⚠️ Invalid data size for tile ${key}: ${elevationData.length} bytes (expected ${this.TILE_SIZE * this.TILE_SIZE})`);
                     // Return NODATA tile for invalid data size
                     return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);
                 }
-                
+
                 // Debug: log tile loading (development mode only)
                 if (window.DEBUG_TILES && Math.random() < 0.02) { // 2% of tiles when debugging enabled
                     console.log(`✅ Loaded tile data ${key}:`, {
@@ -98,12 +98,12 @@ class ElevationRenderer {
                         allSameValue: new Set(elevationData).size === 1
                     });
                 }
-                
+
                 // Cache the data
                 this.elevationCache.set(key, elevationData);
                 this.loadingTiles.delete(key);
                 this.stats.tilesLoaded++;
-                
+
                 return elevationData;
             })
             .catch(error => {
@@ -113,11 +113,11 @@ class ElevationRenderer {
                 // Return NODATA tile on error
                 return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);
             });
-        
+
         this.loadingTiles.set(key, loadPromise);
         return loadPromise;
     }
-    
+
     /**
      * Decode elevation value from uint16
      * @param {number} uint16Value - Raw uint16 value
@@ -131,7 +131,7 @@ class ElevationRenderer {
         // Decode from 0-65534 range to -500 to 9000m
         return (uint16Value / 65534) * this.ELEVATION_RANGE + this.ELEVATION_MIN;
     }
-    
+
     /**
      * Calculate flood risk color based on elevation and water level
      * @param {number} elevation - Elevation in meters
@@ -143,27 +143,27 @@ class ElevationRenderer {
         if (elevation === -32768) {
             return this.colors.FLOODED;
         }
-        
+
         // Calculate relative elevation
         const relativeElevation = elevation - waterLevel;
-        
+
         // Determine risk level and color
         if (relativeElevation >= this.thresholds.SAFE) {
             // Safe - transparent or very light green
             return this.colors.TRANSPARENT;
         } else if (relativeElevation >= this.thresholds.CAUTION) {
             // Interpolate between safe and caution
-            const t = (this.thresholds.SAFE - relativeElevation) / 
+            const t = (this.thresholds.SAFE - relativeElevation) /
                      (this.thresholds.SAFE - this.thresholds.CAUTION);
             return this.interpolateColors(this.colors.SAFE, this.colors.CAUTION, t);
         } else if (relativeElevation >= this.thresholds.DANGER) {
             // Interpolate between caution and danger
-            const t = (this.thresholds.CAUTION - relativeElevation) / 
+            const t = (this.thresholds.CAUTION - relativeElevation) /
                      (this.thresholds.CAUTION - this.thresholds.DANGER);
             return this.interpolateColors(this.colors.CAUTION, this.colors.DANGER, t);
         } else if (relativeElevation >= -0.5) {
             // Interpolate between danger and flooded
-            const t = (this.thresholds.DANGER - relativeElevation) / 
+            const t = (this.thresholds.DANGER - relativeElevation) /
                      (this.thresholds.DANGER + 0.5);
             return this.interpolateColors(this.colors.DANGER, this.colors.FLOODED, t);
         } else {
@@ -171,7 +171,7 @@ class ElevationRenderer {
             return this.colors.FLOODED;
         }
     }
-    
+
     /**
      * Calculate elevation (topographical) color based on absolute elevation
      * @param {number} elevation - Elevation in meters
@@ -182,7 +182,7 @@ class ElevationRenderer {
         if (elevation === -32768 || Number.isNaN(elevation) || elevation < 0) {
             return this.OCEAN_RGBA; // Consistent ocean color
         }
-        
+
         // Topographical color scheme based on elevation
         if (elevation < 50) {
             // Low coastal areas - green to yellow-green
@@ -205,7 +205,7 @@ class ElevationRenderer {
             return [255, 255, 255, 255]; // White
         }
     }
-    
+
     /**
      * Interpolate between two colors
      * @param {Array} color1 - Start color [r, g, b, a]
@@ -221,8 +221,8 @@ class ElevationRenderer {
             Math.round(color1[3] * (1 - t) + color2[3] * t)
         ];
     }
-    
-    
+
+
     /**
      * Clear rendered tile cache (call when water level changes)
      */
@@ -230,7 +230,7 @@ class ElevationRenderer {
         this.renderedCache.clear();
         // Cache cleared
     }
-    
+
     /**
      * Get statistics
      * @returns {Object} Current statistics
@@ -243,7 +243,7 @@ class ElevationRenderer {
             loadingCount: this.loadingTiles.size
         };
     }
-    
+
     /**
      * Preload elevation tiles for an area
      * @param {Array} tiles - Array of {z, x, y} objects
@@ -253,7 +253,7 @@ class ElevationRenderer {
         const promises = tiles.map(({z, x, y}) => this.loadElevationTile(z, x, y));
         return Promise.all(promises);
     }
-    
+
     /**
      * Clear all caches
      */

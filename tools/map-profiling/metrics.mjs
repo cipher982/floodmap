@@ -38,9 +38,9 @@ function sizeOf(entry) {
 }
 
 function byZoomMetrics(entries) {
-  const out = { 
-    elevation: { totalBytes:0,totalCount:0, totalTime:0, avgTime:0, maxTime:0, byZoom:{} , encodings:new Set(), caches:new Set() }, 
-    vector: { totalBytes:0,totalCount:0, totalTime:0, avgTime:0, maxTime:0, byZoom:{}, encodings:new Set(), caches:new Set() } 
+  const out = {
+    elevation: { totalBytes:0,totalCount:0, totalTime:0, avgTime:0, maxTime:0, byZoom:{} , encodings:new Set(), caches:new Set() },
+    vector: { totalBytes:0,totalCount:0, totalTime:0, avgTime:0, maxTime:0, byZoom:{}, encodings:new Set(), caches:new Set() }
   };
   for (const e of entries) {
     const url = e.request.url;
@@ -85,13 +85,13 @@ function byZoomMetrics(entries) {
 function collect(har) {
   const entries = har.log && har.log.entries ? har.log.entries : [];
   const pages = har.log && har.log.pages ? har.log.pages : [];
-  
+
   // Extract page timing
   const pageTimings = pages.length > 0 ? {
     onContentLoad: pages[0].pageTimings?.onContentLoad || 0,
     onLoad: pages[0].pageTimings?.onLoad || 0
   } : { onContentLoad: 0, onLoad: 0 };
-  
+
   const totals = { bytes: 0, count: entries.length, byHost: {}, byType: {} };
   for (const e of entries) {
     const sz = sizeOf(e);
@@ -119,4 +119,3 @@ function main() {
 }
 
 main();
-

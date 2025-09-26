@@ -118,10 +118,10 @@ docker-compose -f docker-compose.prod.yml up -d --scale api=2
 server {
     listen 443 ssl http2;
     server_name your-domain.com;
-    
+
     ssl_certificate /path/to/ssl/cert.pem;
     ssl_certificate_key /path/to/ssl/key.pem;
-    
+
     # API endpoints
     location /api/ {
         proxy_pass http://localhost:8000;
@@ -130,18 +130,18 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-    
-    # Tile endpoints  
+
+    # Tile endpoints
     location /v1/ {
         proxy_pass http://localhost:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        
+
         # Cache tiles aggressively
         proxy_cache_valid 200 7d;
         add_header X-Cache-Status $upstream_cache_status;
     }
-    
+
     # Frontend
     location / {
         proxy_pass http://localhost:8000;
@@ -219,7 +219,7 @@ docker logs floodmap-tileserver-prod
 
 # Common issues:
 # - Missing data volume
-# - Permission issues  
+# - Permission issues
 # - Port conflicts
 ```
 
@@ -304,5 +304,5 @@ For high-traffic deployments:
 
 For deployment issues:
 1. Check logs: `docker-compose logs`
-2. Verify data: `./deploy/data-sync.sh --verify-only`  
+2. Verify data: `./deploy/data-sync.sh --verify-only`
 3. Test health: `curl https://your-domain.com/api/health`

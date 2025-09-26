@@ -11,52 +11,59 @@ Prints basic stats to confirm non-NODATA content.
 
 from __future__ import annotations
 
-import os
+import sys
 from pathlib import Path
-from dataclasses import dataclass
-
-import gzip
 
 import brotli
 
-import sys
 ROOT = Path(__file__).resolve().parents[2]  # project root
-sys.path.insert(0, str(ROOT / 'src' / 'api'))
+sys.path.insert(0, str(ROOT / "src" / "api"))
 
+from config import NODATA_VALUE, TILE_SIZE
 from elevation_loader import ElevationDataLoader
-from config import TILE_SIZE, NODATA_VALUE
 
 
 def normalize_to_uint16(elevation_data):
     import numpy as np
+
     if elevation_data is None:
         return np.full((TILE_SIZE, TILE_SIZE), 65535, dtype=np.uint16).tobytes()
     normalized = np.zeros_like(elevation_data, dtype=np.float32)
-    nodata_mask = (elevation_data == NODATA_VALUE) | (elevation_data < -500) | (elevation_data > 9000)
+    nodata_mask = (
+        (elevation_data == NODATA_VALUE)
+        | (elevation_data < -500)
+        | (elevation_data > 9000)
+    )
     valid_mask = ~nodata_mask
-    normalized[valid_mask] = np.clip((elevation_data[valid_mask] + 500) / 9500 * 65534, 0, 65534)
+    normalized[valid_mask] = np.clip(
+        (elevation_data[valid_mask] + 500) / 9500 * 65534, 0, 65534
+    )
     normalized[nodata_mask] = 65535
-    return normalized.astype('uint16').tobytes()
+    return normalized.astype("uint16").tobytes()
 
 
 def stats_u16(data: bytes) -> str:
     from array import array
-    a = array('H'); a.frombytes(data)
+
+    a = array("H")
+    a.frombytes(data)
     tot = len(a)
-    mn = min(a); mx = max(a)
+    mn = min(a)
+    mx = max(a)
     nodata = sum(1 for v in a if v == 65535)
     zeros = sum(1 for v in a if v == 0)
-    return f"bytes={len(data)} min={mn} max={mx} nodata%={nodata*100.0/tot:.2f}% zeros%={zeros*100.0/tot:.2f}%"
+    return f"bytes={len(data)} min={mn} max={mx} nodata%={nodata * 100.0 / tot:.2f}% zeros%={zeros * 100.0 / tot:.2f}%"
 
 
 def main():
     import argparse
+
     ap = argparse.ArgumentParser()
-    ap.add_argument('--z', type=int, required=True)
-    ap.add_argument('--x', type=int, required=True)
-    ap.add_argument('--y', type=int, required=True)
-    ap.add_argument('--src', type=Path, default=Path('data/elevation-source'))
-    ap.add_argument('--out', type=Path, default=Path('output_sample'))
+    ap.add_argument("--z", type=int, required=True)
+    ap.add_argument("--x", type=int, required=True)
+    ap.add_argument("--y", type=int, required=True)
+    ap.add_argument("--src", type=Path, default=Path("data/elevation-source"))
+    ap.add_argument("--out", type=Path, default=Path("output_sample"))
     args = ap.parse_args()
 
     loader = ElevationDataLoader(data_dir=args.src)
@@ -74,6 +81,7 @@ def main():
 
         # Verify round-trip
         import brotli as _br
+
         dec = _br.decompress(br)
         print("runtime:", stats_u16(payload))
         print("br-dec:", stats_u16(dec))
@@ -85,6 +93,5 @@ def main():
     print(f"Wrote samples to {out_dir}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

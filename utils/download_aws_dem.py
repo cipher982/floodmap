@@ -1,13 +1,13 @@
-import os
 import logging
+import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
-import time
 
 import fsspec
-from tqdm import tqdm
-from dotenv import load_dotenv
 import rasterio
+from dotenv import load_dotenv
+from tqdm import tqdm
 
 load_dotenv()
 
@@ -20,7 +20,9 @@ PREFIX = "SRTMGL1/"
 
 VALIDATE = bool(os.getenv("VALIDATE_DEM", "1") == "1")
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 def list_cogs(fs: fsspec.AbstractFileSystem, prefix: str, limit: int | None = None):
@@ -32,7 +34,9 @@ def list_cogs(fs: fsspec.AbstractFileSystem, prefix: str, limit: int | None = No
     return urls
 
 
-def download_one(fs: fsspec.AbstractFileSystem, url: str, dest_dir: str, retries: int = 3):
+def download_one(
+    fs: fsspec.AbstractFileSystem, url: str, dest_dir: str, retries: int = 3
+):
     """Download a single COG with retry logic."""
     parsed = urlparse(url)
     filename = os.path.basename(parsed.path)
@@ -81,7 +85,9 @@ def main(max_workers: int = 8, limit: int | None = None):
         futures = {
             executor.submit(download_one, fs, url, INPUT_DIR): url for url in cog_urls
         }
-        for f in tqdm(as_completed(futures), total=len(futures), desc="Downloading COGs"):
+        for f in tqdm(
+            as_completed(futures), total=len(futures), desc="Downloading COGs"
+        ):
             if f.result():
                 downloaded += 1
     logging.info(f"Newly downloaded {downloaded} files. Stored in {INPUT_DIR}")
@@ -91,7 +97,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Download sample DEM COGs from AWS")
-    parser.add_argument("--limit", type=int, default=None, help="Maximum number of COGs to download")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Maximum number of COGs to download"
+    )
     parser.add_argument("--workers", type=int, default=8, help="Thread workers")
     args = parser.parse_args()
 

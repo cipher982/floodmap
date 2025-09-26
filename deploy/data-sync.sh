@@ -45,28 +45,28 @@ check_permissions() {
 # Verify source data exists and is complete
 verify_source_data() {
     log "Verifying source elevation data..."
-    
+
     if [[ ! -d "$DATA_SOURCE" ]]; then
         error "Source data directory not found: $DATA_SOURCE"
         exit 1
     fi
-    
+
     # Count files
     zst_count=$(find "$DATA_SOURCE" -name "*.zst" | wc -l)
     json_count=$(find "$DATA_SOURCE" -name "*.json" | wc -l)
-    
+
     log "Found $zst_count compressed elevation files and $json_count metadata files"
-    
+
     if [[ $zst_count -eq 0 ]]; then
         error "No elevation data files found in $DATA_SOURCE"
         exit 1
     fi
-    
+
     if [[ $zst_count -ne $json_count ]]; then
         error "Mismatch: $zst_count .zst files but $json_count .json files"
         exit 1
     fi
-    
+
     # Check total size
     total_size=$(du -sh "$DATA_SOURCE" | cut -f1)
     log "Total data size: $total_size"
@@ -85,70 +85,70 @@ backup_existing_data() {
 # Sync data with verification
 sync_data() {
     log "Starting data synchronization..."
-    
+
     # Create destination directory
     mkdir -p "$DATA_DEST"
-    
+
     # Use rsync for efficient, resumable transfer
     rsync -avh --progress --checksum \
         --exclude="*.tmp" \
         --exclude=".*" \
         "$DATA_SOURCE/" "$DATA_DEST/"
-    
+
     success "Data synchronization completed"
 }
 
 # Verify deployment integrity
 verify_deployment() {
     log "Verifying deployment integrity..."
-    
+
     # Check file counts
     src_zst_count=$(find "$DATA_SOURCE" -name "*.zst" | wc -l)
     dest_zst_count=$(find "$DATA_DEST" -name "*.zst" | wc -l)
-    
+
     if [[ $src_zst_count -ne $dest_zst_count ]]; then
         error "File count mismatch: source=$src_zst_count, dest=$dest_zst_count"
         exit 1
     fi
-    
+
     # Spot check a few files with checksums
     log "Performing spot check with checksums..."
     sample_files=$(find "$DATA_SOURCE" -name "*.zst" | head -5)
-    
+
     for src_file in $sample_files; do
         filename=$(basename "$src_file")
         dest_file="$DATA_DEST/$filename"
-        
+
         if [[ ! -f "$dest_file" ]]; then
             error "Missing file: $dest_file"
             exit 1
         fi
-        
+
         src_checksum=$(sha256sum "$src_file" | cut -d' ' -f1)
         dest_checksum=$(sha256sum "$dest_file" | cut -d' ' -f1)
-        
+
         if [[ "$src_checksum" != "$dest_checksum" ]]; then
             error "Checksum mismatch for $filename"
             exit 1
         fi
     done
-    
+
     success "Deployment verification completed"
 }
 
 # Set appropriate permissions
 set_permissions() {
     log "Setting appropriate permissions..."
-    
+
     # Make data read-only for security
     find "$DATA_DEST" -type f -exec chmod 444 {} \;
     find "$DATA_DEST" -type d -exec chmod 555 {} \;
-    
+
     # If running as root, set ownership to a non-root user
     if [[ $EUID -eq 0 ]] && command -v id >/dev/null && id -u 1000 >/dev/null 2>&1; then
         chown -R 1000:1000 "$DATA_DEST"
     fi
-    
+
     success "Permissions set"
 }
 
@@ -156,18 +156,18 @@ set_permissions() {
 cleanup_old_backups() {
     local backup_parent="$(dirname "$DATA_DEST")"
     local backup_pattern="$(basename "$DATA_DEST").backup.*"
-    
+
     # Find and remove old backups (keep last 3)
     find "$backup_parent" -maxdepth 1 -name "$backup_pattern" -type d | \
         sort -r | tail -n +4 | xargs rm -rf
-    
+
     log "Cleaned up old backups"
 }
 
 # Main execution
 main() {
     log "Starting FloodMap elevation data deployment"
-    
+
     check_permissions
     verify_source_data
     backup_existing_data
@@ -175,7 +175,7 @@ main() {
     verify_deployment
     set_permissions
     cleanup_old_backups
-    
+
     success "Elevation data deployment completed successfully!"
     success "Data location: $DATA_DEST"
     success "Data ready for docker-compose deployment"

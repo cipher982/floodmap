@@ -7,15 +7,18 @@ Utilities to reason about SRTM 1 arc-second (1x1 degree) tile coverage.
 - Audit a directory of .tif files for missing/extra tiles relative to expected
 - Detect suspicious interior holes based on neighbor presence
 """
+
 from __future__ import annotations
 
 import math
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Set, Tuple, Dict, Optional
 
-TILE_RE = re.compile(r"^(?P<ns>[ns])(?P<lat>\d{1,2})_(?P<ew>[ew])(?P<lon>\d{3})_1arc_v\d+", re.IGNORECASE)
+TILE_RE = re.compile(
+    r"^(?P<ns>[ns])(?P<lat>\d{1,2})_(?P<ew>[ew])(?P<lon>\d{3})_1arc_v\d+", re.IGNORECASE
+)
 
 
 def tile_id(lat: int, lon: int, version: int = 3) -> str:
@@ -24,7 +27,7 @@ def tile_id(lat: int, lon: int, version: int = 3) -> str:
     return f"{ns}{abs(lat):02d}_{ew}{abs(lon):03d}_1arc_v{version}"
 
 
-def parse_tile_id(name: str) -> Optional[Tuple[int, int]]:
+def parse_tile_id(name: str) -> tuple[int, int] | None:
     m = TILE_RE.match(Path(name).stem)
     if not m:
         return None
@@ -40,15 +43,15 @@ class BBox:
     max_lon: float
     max_lat: float
 
-    def normalized(self) -> "BBox":
+    def normalized(self) -> BBox:
         min_lon, max_lon = sorted((self.min_lon, self.max_lon))
         min_lat, max_lat = sorted((self.min_lat, self.max_lat))
         return BBox(min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat)
 
 
-def enumerate_expected_tiles(bbox: BBox) -> List[str]:
+def enumerate_expected_tiles(bbox: BBox) -> list[str]:
     """Enumerate all SRTM tile IDs that intersect the given bbox (inclusive).
-    
+
     WARNING: This function assumes elevation data exists for ALL coordinate squares
     within the bbox, including ocean areas. SRTM only covers land areas, so this
     will report false positives for ocean-only tiles. Use with caution for auditing.
@@ -58,23 +61,25 @@ def enumerate_expected_tiles(bbox: BBox) -> List[str]:
     lon1 = math.floor(bb.max_lon)
     lat0 = math.floor(bb.min_lat)
     lat1 = math.floor(bb.max_lat)
-    expected: List[str] = []
+    expected: list[str] = []
     for lat in range(lat0, lat1 + 1):
         for lon in range(lon0, lon1 + 1):
             expected.append(tile_id(lat, lon))
     return expected
 
 
-def find_present_tiles(input_dir: Path, patterns: Iterable[str] = ("*.tif", "*.TIF")) -> Set[str]:
-    stems: Set[str] = set()
+def find_present_tiles(
+    input_dir: Path, patterns: Iterable[str] = ("*.tif", "*.TIF")
+) -> set[str]:
+    stems: set[str] = set()
     for pat in patterns:
         for p in input_dir.glob(pat):
             stems.add(p.stem)
     return stems
 
 
-def set_from_stems(stems: Iterable[str]) -> Set[Tuple[int, int]]:
-    coords: Set[Tuple[int, int]] = set()
+def set_from_stems(stems: Iterable[str]) -> set[tuple[int, int]]:
+    coords: set[tuple[int, int]] = set()
     for s in stems:
         parsed = parse_tile_id(s)
         if parsed:
@@ -82,9 +87,9 @@ def set_from_stems(stems: Iterable[str]) -> Set[Tuple[int, int]]:
     return coords
 
 
-def audit_directory_against_bbox(input_dir: Path, bbox: BBox) -> Dict[str, object]:
+def audit_directory_against_bbox(input_dir: Path, bbox: BBox) -> dict[str, object]:
     """Audit SRTM coverage against a bounding box.
-    
+
     WARNING: This will report ocean-only coordinate squares as "missing" even though
     SRTM data doesn't exist for water areas. Most "missing" tiles are false positives.
     """
@@ -109,12 +114,12 @@ def audit_directory_against_bbox(input_dir: Path, bbox: BBox) -> Dict[str, objec
     }
 
 
-def audit_interior_holes(input_dir: Path) -> Dict[str, object]:
+def audit_interior_holes(input_dir: Path) -> dict[str, object]:
     """Detect holes inside the rectangular envelope of present tiles.
 
     Returns a list of missing tile IDs within [lon_min..lon_max] x [lat_min..lat_lat_max]
     where neighbor presence suggests a gap. This does not require an external bbox.
-    
+
     NOTE: This is more reliable than bbox auditing since it only looks for gaps
     within areas that should have data based on existing coverage patterns.
     """
@@ -134,19 +139,29 @@ def audit_interior_holes(input_dir: Path) -> Dict[str, object]:
     lat_min, lat_max = min(lats), max(lats)
     lon_min, lon_max = min(lons), max(lons)
 
-    envelope_expected: Set[Tuple[int, int]] = set(
-        (lat, lon) for lat in range(lat_min, lat_max + 1) for lon in range(lon_min, lon_max + 1)
+    envelope_expected: set[tuple[int, int]] = set(
+        (lat, lon)
+        for lat in range(lat_min, lat_max + 1)
+        for lon in range(lon_min, lon_max + 1)
     )
     envelope_missing = sorted(envelope_expected - coords)
 
     def neighbor_count(lat: int, lon: int) -> int:
         neighbors = [
-            (lat + 1, lon), (lat - 1, lon), (lat, lon + 1), (lat, lon - 1),
-            (lat + 1, lon + 1), (lat + 1, lon - 1), (lat - 1, lon + 1), (lat - 1, lon - 1),
+            (lat + 1, lon),
+            (lat - 1, lon),
+            (lat, lon + 1),
+            (lat, lon - 1),
+            (lat + 1, lon + 1),
+            (lat + 1, lon - 1),
+            (lat - 1, lon + 1),
+            (lat - 1, lon - 1),
         ]
         return sum((n in coords) for n in neighbors)
 
-    suspicious_coords = [(lat, lon) for (lat, lon) in envelope_missing if neighbor_count(lat, lon) >= 2]
+    suspicious_coords = [
+        (lat, lon) for (lat, lon) in envelope_missing if neighbor_count(lat, lon) >= 2
+    ]
     suspicious_ids = [tile_id(lat, lon) for (lat, lon) in suspicious_coords]
 
     return {

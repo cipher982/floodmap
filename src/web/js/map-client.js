@@ -9,18 +9,18 @@ class FloodMapClient {
         this.currentWaterLevel = 1.0;
         this.viewMode = 'elevation';
         this.elevationRenderer = new ElevationRenderer();
-        
+
         // Always use client-side rendering for flood tiles
         this.setupCustomProtocol();
         console.log('🚀 Client-side rendering initialized');
-        
+
         this.init();
     }
-    
-    
+
+
     setupCustomProtocol() {
         const self = this;
-        
+
         // Register a custom protocol with MapLibre (4.7.1+ Promise-based API)
         maplibregl.addProtocol('client', async (params, abortController) => {
             try {
@@ -28,18 +28,18 @@ class FloodMapClient {
                 // Format: client://flood/{z}/{x}/{y}
                 const url = params.url.replace('client://', '');
                 const parts = url.split('/');
-                
+
                 if ((parts[0] === 'flood' || parts[0] === 'elevation') && parts.length >= 4) {
                     const mode = parts[0];
                     const z = parseInt(parts[1]);
                     const x = parseInt(parts[2]);
                     const y = parseInt(parts[3].split('?')[0]);
-                    
+
                     // Generate tile (logging in production can be removed)
-                    
+
                     // Generate tile based on mode
                     const blob = await self.generateTile(z, x, y, mode, self.currentWaterLevel);
-                    
+
                     const arrayBuffer = await blob.arrayBuffer();
                     return { data: arrayBuffer };
                 } else {
@@ -50,14 +50,14 @@ class FloodMapClient {
                 throw error;
             }
         });
-        
+
         console.log('✅ Client protocol registered successfully');
     }
-    
+
     async generateTile(z, x, y, mode, waterLevel = null) {
         // Load elevation data
         const elevationData = await this.elevationRenderer.loadElevationTile(z, x, y);
-        
+
         // Debug logging (development mode only)
         if (window.DEBUG_TILES && Math.random() < 0.05) { // 5% of tiles when debugging enabled
             console.log(`🔍 Debug tile ${z}/${x}/${y}:`, {
@@ -67,13 +67,13 @@ class FloodMapClient {
                 decodedCenter: this.elevationRenderer.decodeElevation(elevationData[128 * 256 + 128])
             });
         }
-        
+
         // Create canvas
         const canvas = document.createElement('canvas');
         canvas.width = 256;
         canvas.height = 256;
         const ctx = canvas.getContext('2d', { alpha: true });
-        
+
         // Create image data
         const imageData = ctx.createImageData(256, 256);
         const data = imageData.data;
@@ -93,39 +93,39 @@ class FloodMapClient {
                 }, 'image/png');
             });
         }
-        
+
         // Process each pixel - simple 1:1 mapping
         let debugColorSample = null;
         for (let i = 0; i < elevationData.length; i++) {
             const elevation = this.elevationRenderer.decodeElevation(elevationData[i]);
-            const color = mode === 'elevation' 
+            const color = mode === 'elevation'
                 ? this.elevationRenderer.calculateElevationColor(elevation)
                 : this.elevationRenderer.calculateFloodColor(elevation, waterLevel);
-            
+
             // Debug: sample first non-transparent color
             if (!debugColorSample && color[3] > 0) {
-                debugColorSample = { 
-                    raw: elevationData[i], 
-                    elevation, 
+                debugColorSample = {
+                    raw: elevationData[i],
+                    elevation,
                     color,
-                    mode 
+                    mode
                 };
             }
-            
+
             const offset = i * 4;
             data[offset] = color[0];
             data[offset + 1] = color[1];
             data[offset + 2] = color[2];
             data[offset + 3] = color[3];
         }
-        
+
         // Log debug info (development mode only)
         if (window.DEBUG_TILES && debugColorSample && Math.random() < 0.05) {
             console.log(`🎨 Color sample for tile ${z}/${x}/${y}:`, debugColorSample);
         }
-        
+
         ctx.putImageData(imageData, 0, 0);
-        
+
         // Convert to blob
         return new Promise((resolve, reject) => {
             canvas.toBlob(blob => {
@@ -133,22 +133,22 @@ class FloodMapClient {
             }, 'image/png');
         });
     }
-    
+
     init() {
         this.initializeMap();
         this.setupEventListeners();
     }
-    
+
     async initializeMap() {
         const config = {
             zoom: 8,
             minZoom: 0,
             maxZoom: 18
         };
-        
+
         // Determine tile URL based on mode
         const tileUrl = this.getTileUrl();
-        
+
         this.map = new maplibregl.Map({
             container: 'map',
             style: {
@@ -191,16 +191,16 @@ class FloodMapClient {
             minZoom: config.minZoom,
             maxZoom: config.maxZoom
         });
-        
+
         this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
-        
+
         this.map.on('click', (e) => {
             this.assessLocationRisk(e.lngLat.lat, e.lngLat.lng, e.lngLat);
         });
-        
+
         // Optional: Add tile loading listeners for debugging
     }
-    
+
     getTileUrl() {
         if (this.viewMode === 'elevation') {
             // Client-side elevation rendering (no server requests)
@@ -210,7 +210,7 @@ class FloodMapClient {
             return 'client://flood/{z}/{x}/{y}';
         }
     }
-    
+
     setupEventListeners() {
         // View mode radio buttons
         const viewModeRadios = document.querySelectorAll('input[name="view-mode"]');
@@ -220,38 +220,38 @@ class FloodMapClient {
                 this.updateViewMode();
             });
         });
-        
+
         // Water level slider
         const waterLevelSlider = document.getElementById('water-level');
         const waterLevelDisplay = document.getElementById('water-level-display');
         const waterLevelVibe = document.getElementById('water-level-vibe');
-        
+
         waterLevelSlider.addEventListener('input', (e) => {
             const sliderValue = parseFloat(e.target.value);
             const oldWaterLevel = this.currentWaterLevel;
             this.currentWaterLevel = this.sliderToWaterLevel(sliderValue);
-            
+
             waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
             this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
-            
+
             // Only update if water level actually changed
             if (oldWaterLevel !== this.currentWaterLevel) {
                 this.updateFloodLayer();
             }
         });
-        
+
         // Initialize with default value
         this.currentWaterLevel = this.sliderToWaterLevel(30);
         waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
         this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
-        
+
         // Find location button
         document.getElementById('find-location').addEventListener('click', () => {
             this.findUserLocation();
         });
-        
+
         // Status display can be added for debugging if needed
-        
+
         // Wait for map to be loaded before initial update
         if (this.map && this.map.loaded()) {
             this.updateViewMode();
@@ -261,11 +261,11 @@ class FloodMapClient {
             });
         }
     }
-    
-    
+
+
     updateViewMode() {
         const waterLevelControls = document.getElementById('water-level-controls');
-        
+
         if (this.viewMode === 'elevation') {
             waterLevelControls.style.opacity = '0';
             waterLevelControls.style.transform = 'translateY(-10px)';
@@ -279,35 +279,35 @@ class FloodMapClient {
                 waterLevelControls.style.transform = 'translateY(0)';
             }, 10);
         }
-        
+
         this.updateFloodLayer();
     }
-    
+
     updateFloodLayer() {
         if (!this.map || !this.map.loaded()) {
             return;
         }
-        
+
         const source = this.map.getSource('elevation-tiles');
         if (!source) return;
-        
+
         if (this.viewMode === 'flood') {
             // Clear the renderer cache to force re-render with new water level
             if (this.elevationRenderer) {
                 this.elevationRenderer.clearRenderedCache();
             }
-            
+
             source.setTiles(['client://flood/{z}/{x}/{y}']);
         } else {
             source.setTiles(['client://elevation/{z}/{x}/{y}']);
         }
     }
-    
+
     sliderToWaterLevel(sliderValue) {
         const waterLevel = 0.1 * Math.pow(10, sliderValue / 25);
         return Math.round(waterLevel * 10) / 10;
     }
-    
+
     getTileCoordinates(lat, lng, zoom) {
         // Convert lat/lng to tile coordinates using Web Mercator projection
         const n = Math.pow(2, zoom);
@@ -316,13 +316,13 @@ class FloodMapClient {
         const y = Math.floor(n * (1 - (Math.log(Math.tan(latRad) + (1 / Math.cos(latRad))) / Math.PI)) / 2);
         return { x, y };
     }
-    
+
     updateWaterLevelVibe(waterLevel, vibeElement) {
         vibeElement.className = '';
-        
+
         let vibeText = '';
         let vibeClass = '';
-        
+
         if (waterLevel <= 2) {
             vibeText = 'Normal';
             vibeClass = 'vibe-normal';
@@ -339,18 +339,18 @@ class FloodMapClient {
             vibeText = 'APOCALYPTIC';
             vibeClass = 'vibe-apocalyptic';
         }
-        
+
         vibeElement.textContent = vibeText;
         vibeElement.className = vibeClass;
     }
-    
+
     async findUserLocation() {
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     const lat = position.coords.latitude;
                     const lng = position.coords.longitude;
-                    
+
                     this.map.setCenter([lng, lat]);
                     this.map.setZoom(this.map.getMaxZoom());
                     this.assessLocationRisk(lat, lng);
@@ -364,7 +364,7 @@ class FloodMapClient {
             alert('Geolocation is not supported by this browser.');
         }
     }
-    
+
     async assessLocationRisk(lat, lng, lngLat = null) {
         try {
             // Calculate tile coordinates for current zoom level if lngLat provided
@@ -375,26 +375,26 @@ class FloodMapClient {
                 const tilePath = `/api/v1/tiles/elevation-data/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`;
                 tileInfo = `🗂️ Tile: ${zoom}/${tileCoords.x}/${tileCoords.y} (${tilePath})`;
             }
-            
+
             const response = await fetch('/api/risk/location', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ latitude: lat, longitude: lng })
             });
-            
+
             const data = await response.json();
             // Add tile info to data for display
             data.tileInfo = tileInfo;
-            
+
             this.updateRiskPanel(data);
             this.updateLocationInfo(data);
             this.addLocationMarker(lng, lat, data);
-            
+
         } catch (error) {
             console.error('Risk assessment error:', error);
         }
     }
-    
+
     updateLocationInfo(data) {
         const locationInfo = document.getElementById('location-info');
         locationInfo.innerHTML = `
@@ -403,11 +403,11 @@ class FloodMapClient {
             ${data.tileInfo ? `<br>${data.tileInfo}` : ''}
         `;
     }
-    
+
     updateRiskPanel(data) {
         const riskDetails = document.getElementById('risk-details');
         const riskClass = `risk-${data.flood_risk_level}`;
-        
+
         riskDetails.innerHTML = `
             <div class="risk-summary ${riskClass}">
                 <strong>Risk Level: ${data.flood_risk_level.toUpperCase()}</strong>
@@ -419,11 +419,11 @@ class FloodMapClient {
             ${data.tileInfo ? `<p><strong>Debug:</strong> ${data.tileInfo}</p>` : ''}
         `;
     }
-    
+
     addLocationMarker(lng, lat, data) {
         const existingMarkers = document.querySelectorAll('.maplibregl-marker');
         existingMarkers.forEach(marker => marker.remove());
-        
+
         const marker = new maplibregl.Marker({ color: '#ef4444' })
             .setLngLat([lng, lat])
             .setPopup(new maplibregl.Popup().setHTML(`

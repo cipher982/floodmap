@@ -1,5 +1,5 @@
 # 2025-08-26: Elevation Tile Debugging Investigation
-**Status**: Completed  
+**Status**: Completed
 **Duration**: ~4 hours
 **Context**: Investigation of missing elevation data tiles causing "green square island" visual artifacts on flood map
 
@@ -11,10 +11,10 @@ User reported visual gaps in flood map elevation rendering appearing as light bl
 ### Phase 1: Initial Misdiagnosis - Missing File Approach
 - **Attempted systematic SRTM download** for 373 "missing" tiles identified by audit script
 - **Fixed NASA Earthdata authentication** using proper cookie-based approach vs broken redirect loops
-- **Downloaded n27w081 tile** for specific problem coordinate (27.4970°, -80.4766°) 
+- **Downloaded n27w081 tile** for specific problem coordinate (27.4970°, -80.4766°)
 - **Result**: Only 2 out of 373 tiles had real download issues; rest were ocean false positives
 
-### Phase 2: Root Cause Discovery - Hidden Fallback Bug  
+### Phase 2: Root Cause Discovery - Hidden Fallback Bug
 - **Discovered elevation API fallback** in `risk.py` that masked missing data:
   ```python
   # BAD: Hides missing data with fake approximation
@@ -30,7 +30,7 @@ User reported visual gaps in flood map elevation rendering appearing as light bl
   - Created vector-aware missing tile inventory tool
 - **Assessment**: More targeted than file download approach, addresses rendering bugs vs data gaps
 
-## Results  
+## Results
 - **Removed elevation fallback bug** that was hiding missing data problems
 - **Fixed specific missing tile**: n27w081_1arc_v3.tif successfully downloaded and installed
 - **Identified systematic audit limitations** - bbox approach generates ocean false positives

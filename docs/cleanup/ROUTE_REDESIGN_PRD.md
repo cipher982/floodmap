@@ -5,7 +5,7 @@
 The current tile serving routes have grown organically and are inconsistent, causing:
 
 - **Testing failures** - Integration tests use wrong endpoints and accept 404s as valid
-- **Frontend confusion** - Multiple URL patterns for similar resources  
+- **Frontend confusion** - Multiple URL patterns for similar resources
 - **Maintenance burden** - Inconsistent naming makes debugging difficult
 - **Caching issues** - Unclear cache keys due to inconsistent patterns
 - **Integration complexity** - Different URL structures for vector vs elevation tiles
@@ -13,7 +13,7 @@ The current tile serving routes have grown organically and are inconsistent, cau
 ### Current Route Problems:
 ```
 ❌ /api/tiles/vector/{z}/{x}/{y}.pbf          # API proxy
-❌ /api/tiles/elevation/{water_level}/{z}/{x}/{y}.png  # API generated  
+❌ /api/tiles/elevation/{water_level}/{z}/{x}/{y}.png  # API generated
 ❌ /data/usa-complete/{z}/{x}/{y}.pbf         # Direct tileserver
 ❌ /tiles/flood/{level}/{z}/{x}/{y}.png       # Legacy endpoint
 ```
@@ -55,7 +55,7 @@ GET /api/v1/tiles/vector/tampa/{z}/{x}/{y}.pbf
 Parameters:
 - z: Zoom level (0-18)
 - x, y: Tile coordinates
-Returns: 
+Returns:
 - 200: application/x-protobuf with vector tile data
 - 404: Tile not found
 - 400: Invalid coordinates
@@ -67,7 +67,7 @@ GET /api/v1/tiles/elevation/{z}/{x}/{y}.png
 
 Parameters:
 - z: Zoom level (8-14)
-- x, y: Tile coordinates  
+- x, y: Tile coordinates
 Returns:
 - 200: image/png with elevation visualization
 - 204: No elevation data (transparent tile)
@@ -122,7 +122,7 @@ Content-Type: image/png|application/x-protobuf
 - Maintain backward compatibility
 - Update health checks to validate new routes
 
-### Phase 2: Frontend Migration  
+### Phase 2: Frontend Migration
 - Update MapLibre/Leaflet tile URL templates
 - Test new routes in staging environment
 - Monitor performance and error rates
@@ -145,7 +145,7 @@ Content-Type: image/png|application/x-protobuf
 - ✅ Cache hit rate > 80%
 - ✅ Error rate < 1%
 
-### Consistency  
+### Consistency
 - ✅ All routes follow same URL pattern
 - ✅ Consistent HTTP headers across all endpoints
 - ✅ Standardized error responses
@@ -163,7 +163,7 @@ Content-Type: image/png|application/x-protobuf
 ```python
 # routers/tiles_v1.py - New clean implementation
 @router.get("/api/v1/tiles/vector/{source}/{z}/{x}/{y}.pbf")
-@router.get("/api/v1/tiles/elevation/{z}/{x}/{y}.png") 
+@router.get("/api/v1/tiles/elevation/{z}/{x}/{y}.png")
 @router.get("/api/v1/tiles/flood/{water_level}/{z}/{x}/{y}.png")
 @router.get("/api/v1/tiles/composite/{water_level}/{z}/{x}/{y}.png")
 ```
@@ -190,7 +190,7 @@ const TILE_ENDPOINTS = {
 **Risk**: Breaking existing frontend during migration
 **Mitigation**: Parallel deployment, feature flags, staged rollout
 
-**Risk**: Performance regression with new routes  
+**Risk**: Performance regression with new routes
 **Mitigation**: Benchmarking, monitoring, rollback plan
 
 **Risk**: Cache invalidation during migration

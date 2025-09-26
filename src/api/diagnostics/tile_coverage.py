@@ -1,7 +1,7 @@
-import math
 import asyncio
+import math
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Dict, Any
+from typing import Any
 
 from elevation_loader import elevation_loader
 
@@ -18,11 +18,11 @@ class TileStatus:
     coord: TileCoord
     has_elevation: bool
     overlapping_files: int
-    bounds: Tuple[float, float, float, float]
-    note: Optional[str] = None
+    bounds: tuple[float, float, float, float]
+    note: str | None = None
     roads_present: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "z": self.coord.z,
             "x": self.coord.x,
@@ -40,7 +40,9 @@ class TileStatus:
         }
 
 
-def bbox_to_tiles(min_lon: float, min_lat: float, max_lon: float, max_lat: float, z: int) -> List[TileCoord]:
+def bbox_to_tiles(
+    min_lon: float, min_lat: float, max_lon: float, max_lat: float, z: int
+) -> list[TileCoord]:
     """Convert a lat/lon bbox to a list of tile coords at zoom z (inclusive)."""
     # clamp inputs
     min_lat = max(-85.05112878, min(85.05112878, min_lat))
@@ -48,9 +50,9 @@ def bbox_to_tiles(min_lon: float, min_lat: float, max_lon: float, max_lat: float
     min_lon = max(-180.0, min(180.0, min_lon))
     max_lon = max(-180.0, min(180.0, max_lon))
 
-    def deg2num(lat_deg: float, lon_deg: float, zoom: int) -> Tuple[int, int]:
+    def deg2num(lat_deg: float, lon_deg: float, zoom: int) -> tuple[int, int]:
         lat_rad = math.radians(lat_deg)
-        n = 2.0 ** zoom
+        n = 2.0**zoom
         xtile = int((lon_deg + 180.0) / 360.0 * n)
         ytile = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
         return xtile, ytile
@@ -61,7 +63,7 @@ def bbox_to_tiles(min_lon: float, min_lat: float, max_lon: float, max_lat: float
     x0, x1 = min(x_min, x_max), max(x_min, x_max)
     y0, y1 = min(y_min, y_max), max(y_min, y_max)
 
-    tiles: List[TileCoord] = []
+    tiles: list[TileCoord] = []
     for x in range(x0, x1 + 1):
         for y in range(y0, y1 + 1):
             tiles.append(TileCoord(z, x, y))
@@ -72,13 +74,17 @@ def inspect_tile(coord: TileCoord) -> TileStatus:
     """Check what elevation files overlap and whether we can extract data. Also check vector presence (roads)."""
     z, x, y = coord.z, coord.x, coord.y
     lat_top, lat_bottom, lon_left, lon_right = elevation_loader.num2deg(x, y, z)
-    overlapping = elevation_loader.find_elevation_files_for_tile(lat_top, lat_bottom, lon_left, lon_right)
+    overlapping = elevation_loader.find_elevation_files_for_tile(
+        lat_top, lat_bottom, lon_left, lon_right
+    )
 
     # Check whether vector tile appears to have features (roads etc.)
     roads_present = False
     try:
         loop = asyncio.get_event_loop()
-        roads_present = loop.run_until_complete(elevation_loader._check_vector_tile(x, y, z))
+        roads_present = loop.run_until_complete(
+            elevation_loader._check_vector_tile(x, y, z)
+        )
     except Exception:
         roads_present = False
 
@@ -106,7 +112,7 @@ def inspect_tile(coord: TileCoord) -> TileStatus:
     )
 
 
-def summarize(statuses: List[TileStatus]) -> Dict[str, Any]:
+def summarize(statuses: list[TileStatus]) -> dict[str, Any]:
     total = len(statuses)
     have = sum(1 for s in statuses if s.has_elevation)
     with_overlap = sum(1 for s in statuses if s.overlapping_files > 0)
@@ -122,7 +128,12 @@ def summarize(statuses: List[TileStatus]) -> Dict[str, Any]:
         "with_overlap": with_overlap,
         "no_overlap": no_overlap,
         "overlap_no_extract": [
-            {"z": s.coord.z, "x": s.coord.x, "y": s.coord.y, "files": s.overlapping_files}
+            {
+                "z": s.coord.z,
+                "x": s.coord.x,
+                "y": s.coord.y,
+                "files": s.overlapping_files,
+            }
             for s in overlap_no_extract
         ],
         "errors": [
@@ -136,7 +147,9 @@ def summarize(statuses: List[TileStatus]) -> Dict[str, Any]:
     }
 
 
-def audit_bbox(min_lon: float, min_lat: float, max_lon: float, max_lat: float, z: int) -> Dict[str, Any]:
+def audit_bbox(
+    min_lon: float, min_lat: float, max_lon: float, max_lat: float, z: int
+) -> dict[str, Any]:
     tiles = bbox_to_tiles(min_lon, min_lat, max_lon, max_lat, z)
     statuses = [inspect_tile(t) for t in tiles]
     report = summarize(statuses)

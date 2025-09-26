@@ -71,7 +71,7 @@ show_progress() {
         COMPLETED=$(cat "$PROGRESS_FILE" 2>/dev/null || echo 0)
         PERCENT=$((COMPLETED * 100 / TOTAL_FILES))
         printf "\r${BLUE}[Overall Progress]${NC} %d/%d files (%d%%) " "$COMPLETED" "$TOTAL_FILES" "$PERCENT"
-        
+
         # Progress bar
         BAR_LENGTH=30
         FILLED=$((PERCENT * BAR_LENGTH / 100))
@@ -79,7 +79,7 @@ show_progress() {
         for ((i=0; i<FILLED; i++)); do printf "█"; done
         for ((i=FILLED; i<BAR_LENGTH; i++)); do printf "░"; done
         printf "]"
-        
+
         sleep 0.5
     done
 }
@@ -97,7 +97,7 @@ transfer_batch() {
     else
         COMPRESS="--compress-level=1"
     fi
-    
+
     rsync -aq \
         --partial \
         --inplace \
@@ -110,7 +110,7 @@ transfer_batch() {
         -e "ssh -T -c aes128-gcm@openssh.com -o Compression=no -o ControlMaster=no -o ServerAliveInterval=10 -x" \
         "$file" \
         "$DEST_HOST:$DEST_DIR/${file#./}" 2>/dev/null
-    
+
     if [ $? -eq 0 ]; then
         # Update progress
         CURRENT=$(cat "$PROGRESS_FILE")

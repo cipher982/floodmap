@@ -81,4 +81,3 @@ function proxy(req, res){
 http.createServer(proxy).listen(PORT, () => {
   console.log(`Proxy listening on http://localhost:${PORT} -> ${UPSTREAM}`);
 });
-

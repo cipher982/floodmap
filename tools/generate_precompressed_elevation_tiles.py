@@ -47,14 +47,13 @@ import math
 import os
 import sys
 import time
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, Tuple
-
-from dotenv import load_dotenv
 
 # Third-party
 import numpy as np
+from dotenv import load_dotenv
 
 try:
     import brotli  # type: ignore
@@ -64,15 +63,16 @@ except Exception:  # pragma: no cover - optional
 
 # Ensure src/api is importable when the script is run from project root
 ROOT = Path(__file__).resolve().parents[1]
-for p in (ROOT / 'src', ROOT / 'src' / 'api'):
+for p in (ROOT / "src", ROOT / "src" / "api"):
     sys.path.insert(0, str(p))
 
 # Load environment (.env) for config
 load_dotenv()
 
-from config import ELEVATION_DATA_DIR, TILE_SIZE, NODATA_VALUE  # type: ignore
+from config import ELEVATION_DATA_DIR, NODATA_VALUE, TILE_SIZE  # type: ignore
+from elevation_loader import ElevationDataLoader
+
 # Import both the global instance and the class so we can override the data dir when needed
-from elevation_loader import elevation_loader as _default_loader, ElevationDataLoader  # type: ignore
 
 
 @dataclass(frozen=True)
@@ -82,24 +82,28 @@ class Tile:
     y: int
 
 
-def deg2num(lat_deg: float, lon_deg: float, zoom: int) -> Tuple[int, int]:
+def deg2num(lat_deg: float, lon_deg: float, zoom: int) -> tuple[int, int]:
     lat_rad = math.radians(lat_deg)
-    n = 2.0 ** zoom
+    n = 2.0**zoom
     xtile = int((lon_deg + 180.0) / 360.0 * n)
     ytile = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
     return (xtile, ytile)
 
 
-def num2deg(xtile: int, ytile: int, zoom: int) -> Tuple[float, float, float, float]:
-    n = 2.0 ** zoom
+def num2deg(xtile: int, ytile: int, zoom: int) -> tuple[float, float, float, float]:
+    n = 2.0**zoom
     lon_deg_left = xtile / n * 360.0 - 180.0
     lon_deg_right = (xtile + 1) / n * 360.0 - 180.0
     lat_deg_top = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * ytile / n))))
-    lat_deg_bottom = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (ytile + 1) / n))))
+    lat_deg_bottom = math.degrees(
+        math.atan(math.sinh(math.pi * (1 - 2 * (ytile + 1) / n)))
+    )
     return (lat_deg_top, lat_deg_bottom, lon_deg_left, lon_deg_right)
 
 
-def discover_coverage_bbox_from_metadata(src_dir: Path) -> Tuple[float, float, float, float]:
+def discover_coverage_bbox_from_metadata(
+    src_dir: Path,
+) -> tuple[float, float, float, float]:
     """Scan .json sidecars to compute the union coverage bbox.
 
     Returns (min_lon, min_lat, max_lon, max_lat).
@@ -113,11 +117,11 @@ def discover_coverage_bbox_from_metadata(src_dir: Path) -> Tuple[float, float, f
     for meta in src_dir.glob("*.json"):
         try:
             data = json.loads(meta.read_text())
-            b = data.get('bounds') or {}
-            left = float(b.get('left'))
-            right = float(b.get('right'))
-            top = float(b.get('top'))
-            bottom = float(b.get('bottom'))
+            b = data.get("bounds") or {}
+            left = float(b.get("left"))
+            right = float(b.get("right"))
+            top = float(b.get("top"))
+            bottom = float(b.get("bottom"))
         except Exception:
             continue
 
@@ -132,7 +136,9 @@ def discover_coverage_bbox_from_metadata(src_dir: Path) -> Tuple[float, float, f
     return (min_lon, min_lat, max_lon, max_lat)
 
 
-def tiles_for_bbox(z: int, min_lon: float, min_lat: float, max_lon: float, max_lat: float) -> Iterator[Tile]:
+def tiles_for_bbox(
+    z: int, min_lon: float, min_lat: float, max_lon: float, max_lat: float
+) -> Iterator[Tile]:
     # Clamp to Web Mercator limits
     min_lat_c = max(-85.05112878, min(85.05112878, min_lat))
     max_lat_c = max(-85.05112878, min(85.05112878, max_lat))
@@ -159,7 +165,11 @@ def normalize_to_uint16(elevation_data: np.ndarray) -> bytes:
 
     normalized = np.zeros_like(elevation_data, dtype=np.float32)
 
-    nodata_mask = (elevation_data == NODATA_VALUE) | (elevation_data < -500) | (elevation_data > 9000)
+    nodata_mask = (
+        (elevation_data == NODATA_VALUE)
+        | (elevation_data < -500)
+        | (elevation_data > 9000)
+    )
     valid_mask = ~nodata_mask
 
     normalized[valid_mask] = np.clip(
@@ -178,14 +188,24 @@ def ensure_dir(p: Path) -> None:
 
 def write_atomic(path: Path, data: bytes) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
-    with open(tmp, 'wb') as f:
+    with open(tmp, "wb") as f:
         f.write(data)
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
 
 
-def process_tile(z: int, x: int, y: int, out_dir: Path, generate_br: bool, generate_gz: bool, write_raw: bool, loader: ElevationDataLoader, skip_existing: bool = True) -> Optional[dict]:
+def process_tile(
+    z: int,
+    x: int,
+    y: int,
+    out_dir: Path,
+    generate_br: bool,
+    generate_gz: bool,
+    write_raw: bool,
+    loader: ElevationDataLoader,
+    skip_existing: bool = True,
+) -> dict | None:
     """Generate and write one tile in all requested variants.
 
     Returns stats dict on success, or None if skipped/missing.
@@ -193,8 +213,8 @@ def process_tile(z: int, x: int, y: int, out_dir: Path, generate_br: bool, gener
     # Short-circuit if any final artifact exists and skipping is enabled
     base_dir = out_dir / str(z) / str(x)
     base = base_dir / f"{y}.u16"
-    br_path = base.with_suffix('.u16.br')
-    gz_path = base.with_suffix('.u16.gz')
+    br_path = base.with_suffix(".u16.br")
+    gz_path = base.with_suffix(".u16.gz")
 
     if skip_existing and (base.exists() or br_path.exists() or gz_path.exists()):
         return None
@@ -212,26 +232,32 @@ def process_tile(z: int, x: int, y: int, out_dir: Path, generate_br: bool, gener
     if arr is None:
         # Do NOT silently write bogus tiles; skip writing, record as skipped.
         return {
-            'z': z, 'x': x, 'y': y,
-            'skipped_missing': True,
+            "z": z,
+            "x": x,
+            "y": y,
+            "skipped_missing": True,
         }
     else:
         payload = normalize_to_uint16(arr)
         # Detect 100% NODATA outputs; often legitimate over ocean, but useful to track loudly
         from array import array as _arr
-        a = _arr('H'); a.frombytes(payload)
+
+        a = _arr("H")
+        a.frombytes(payload)
         tot = len(a)
         nod = sum(1 for v in a if v == 65535)
-        all_nodata = (nod == tot)
+        all_nodata = nod == tot
 
     ensure_dir(base_dir)
 
     stats = {
-        'z': z, 'x': x, 'y': y,
-        'bytes_raw': len(payload),
-        'bytes_br': None,
-        'bytes_gz': None,
-        'all_nodata': all_nodata,
+        "z": z,
+        "x": x,
+        "y": y,
+        "bytes_raw": len(payload),
+        "bytes_br": None,
+        "bytes_gz": None,
+        "all_nodata": all_nodata,
     }
 
     # Raw (optional)
@@ -244,7 +270,7 @@ def process_tile(z: int, x: int, y: int, out_dir: Path, generate_br: bool, gener
             # Use higher quality for better compression (Q10: 9% smaller, minimal decode overhead)
             br = brotli.compress(payload, quality=10)  # type: ignore[arg-type]
             write_atomic(br_path, br)
-            stats['bytes_br'] = len(br)
+            stats["bytes_br"] = len(br)
         except Exception:
             # Skip brotli on failure
             pass
@@ -254,14 +280,25 @@ def process_tile(z: int, x: int, y: int, out_dir: Path, generate_br: bool, gener
         try:
             gz = gzip.compress(payload, compresslevel=1)
             write_atomic(gz_path, gz)
-            stats['bytes_gz'] = len(gz)
+            stats["bytes_gz"] = len(gz)
         except Exception:
             pass
 
     return stats
 
 
-def generate_for_zoom(z: int, bbox: Tuple[float, float, float, float], out_dir: Path, workers: int, generate_br: bool, generate_gz: bool, write_raw: bool, loader: ElevationDataLoader, skip_existing: bool = True, max_tasks_inflight: int = 2000) -> dict:
+def generate_for_zoom(
+    z: int,
+    bbox: tuple[float, float, float, float],
+    out_dir: Path,
+    workers: int,
+    generate_br: bool,
+    generate_gz: bool,
+    write_raw: bool,
+    loader: ElevationDataLoader,
+    skip_existing: bool = True,
+    max_tasks_inflight: int = 2000,
+) -> dict:
     """Generate tiles for a single zoom level within a bbox.
 
     Streams tasks to a process pool to cap memory usage.
@@ -286,7 +323,18 @@ def generate_for_zoom(z: int, bbox: Tuple[float, float, float, float], out_dir: 
         def submit_next(batch: Iterable[Tile]) -> None:
             nonlocal submitted
             for t in batch:
-                fut = pool.submit(process_tile, t.z, t.x, t.y, out_dir, generate_br, generate_gz, write_raw, loader, skip_existing)
+                fut = pool.submit(
+                    process_tile,
+                    t.z,
+                    t.x,
+                    t.y,
+                    out_dir,
+                    generate_br,
+                    generate_gz,
+                    write_raw,
+                    loader,
+                    skip_existing,
+                )
                 futures.add(fut)
                 submitted += 1
 
@@ -305,13 +353,13 @@ def generate_for_zoom(z: int, bbox: Tuple[float, float, float, float], out_dir: 
                     completed += 1
                     res = d.result()
                     if res is not None:
-                        if res.get('skipped_missing'):
+                        if res.get("skipped_missing"):
                             skipped_missing += 1
                         else:
                             have += 1
-                            bytes_raw += res.get('bytes_raw') or 0
-                            bytes_br += res.get('bytes_br') or 0
-                            bytes_gz += res.get('bytes_gz') or 0
+                            bytes_raw += res.get("bytes_raw") or 0
+                            bytes_br += res.get("bytes_br") or 0
+                            bytes_gz += res.get("bytes_gz") or 0
 
         # Submit any remaining tiles in the last batch
         if batch:
@@ -324,49 +372,81 @@ def generate_for_zoom(z: int, bbox: Tuple[float, float, float, float], out_dir: 
                 completed += 1
                 res = d.result()
                 if res is not None:
-                    if res.get('skipped_missing'):
+                    if res.get("skipped_missing"):
                         skipped_missing += 1
                     else:
                         have += 1
-                        bytes_raw += res.get('bytes_raw') or 0
-                        bytes_br += res.get('bytes_br') or 0
-                        bytes_gz += res.get('bytes_gz') or 0
+                        bytes_raw += res.get("bytes_raw") or 0
+                        bytes_br += res.get("bytes_br") or 0
+                        bytes_gz += res.get("bytes_gz") or 0
 
     t1 = time.time()
 
     return {
-        'z': z,
-        'tiles_examined': submitted,
-        'tiles_written': have,
-        'tiles_skipped_missing': skipped_missing,
-        'elapsed_sec': round(t1 - t0, 2),
-        'bytes_raw': bytes_raw,
-        'bytes_br': bytes_br,
-        'bytes_gz': bytes_gz,
+        "z": z,
+        "tiles_examined": submitted,
+        "tiles_written": have,
+        "tiles_skipped_missing": skipped_missing,
+        "elapsed_sec": round(t1 - t0, 2),
+        "bytes_raw": bytes_raw,
+        "bytes_br": bytes_br,
+        "bytes_gz": bytes_gz,
     }
 
 
 def write_manifest(out_dir: Path, summary: dict) -> None:
-    manifest_path = out_dir / 'manifest.json'
+    manifest_path = out_dir / "manifest.json"
     ensure_dir(out_dir)
-    with open(manifest_path, 'w') as f:
+    with open(manifest_path, "w") as f:
         json.dump(summary, f, indent=2)
 
 
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description='Generate pre-compressed elevation tiles')
-    ap.add_argument('--output-dir', type=Path, default=Path(os.getenv('PRECOMPRESSED_TILES_DIR') or 'elevation-tiles'), help='Output directory for {z}/{x}/{y} tiles')
-    ap.add_argument('--source-dir', type=Path, default=None, help='Override elevation source directory (default: config.ELEVATION_DATA_DIR)')
-    ap.add_argument('--zoom-min', type=int, default=8, help='Minimum zoom level (inclusive)')
-    ap.add_argument('--zoom-max', type=int, default=15, help='Maximum zoom level (inclusive)')
-    ap.add_argument('--bbox', type=float, nargs=4, metavar=('MIN_LON','MIN_LAT','MAX_LON','MAX_LAT'), help='Optional bounding box to constrain generation')
-    ap.add_argument('--workers', type=int, default=max(1, (os.cpu_count() or 4) - 1), help='Parallel workers (processes)')
-    ap.add_argument('--no-br', action='store_true', help='Disable Brotli generation')
+    ap = argparse.ArgumentParser(description="Generate pre-compressed elevation tiles")
+    ap.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(os.getenv("PRECOMPRESSED_TILES_DIR") or "elevation-tiles"),
+        help="Output directory for {z}/{x}/{y} tiles",
+    )
+    ap.add_argument(
+        "--source-dir",
+        type=Path,
+        default=None,
+        help="Override elevation source directory (default: config.ELEVATION_DATA_DIR)",
+    )
+    ap.add_argument(
+        "--zoom-min", type=int, default=8, help="Minimum zoom level (inclusive)"
+    )
+    ap.add_argument(
+        "--zoom-max", type=int, default=15, help="Maximum zoom level (inclusive)"
+    )
+    ap.add_argument(
+        "--bbox",
+        type=float,
+        nargs=4,
+        metavar=("MIN_LON", "MIN_LAT", "MAX_LON", "MAX_LAT"),
+        help="Optional bounding box to constrain generation",
+    )
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, (os.cpu_count() or 4) - 1),
+        help="Parallel workers (processes)",
+    )
+    ap.add_argument("--no-br", action="store_true", help="Disable Brotli generation")
     # Default to no gzip: single best format by default is Brotli
-    ap.add_argument('--no-gz', action='store_true', default=True, help='Disable Gzip generation (default: disabled)')
+    ap.add_argument(
+        "--no-gz",
+        action="store_true",
+        default=True,
+        help="Disable Gzip generation (default: disabled)",
+    )
     # Default to no raw: reduce storage; enable for debugging if needed
-    ap.add_argument('--write-raw', action='store_true', help='Also write raw .u16 alongside .u16.br')
-    ap.add_argument('--no-skip', action='store_true', help='Do not skip existing tiles')
+    ap.add_argument(
+        "--write-raw", action="store_true", help="Also write raw .u16 alongside .u16.br"
+    )
+    ap.add_argument("--no-skip", action="store_true", help="Do not skip existing tiles")
     return ap.parse_args()
 
 
@@ -380,12 +460,18 @@ def main() -> None:
     src_dir = Path(args.source_dir) if args.source_dir else Path(ELEVATION_DATA_DIR)
     if not src_dir.exists():
         print(f"FATAL: Elevation source dir not found: {src_dir}")
-        print("Hint: run inside the container or pass --source-dir to a valid path (e.g., data/elevation-source)")
+        print(
+            "Hint: run inside the container or pass --source-dir to a valid path (e.g., data/elevation-source)"
+        )
         sys.exit(2)
-    zst_files = list(src_dir.glob('*.zst'))
+    zst_files = list(src_dir.glob("*.zst"))
     if len(zst_files) < 100:
-        print(f"FATAL: Source dir {src_dir} has only {len(zst_files)} .zst files (expected thousands)")
-        print("This usually means you're pointing at the wrong path. Aborting to avoid writing bogus tiles.")
+        print(
+            f"FATAL: Source dir {src_dir} has only {len(zst_files)} .zst files (expected thousands)"
+        )
+        print(
+            "This usually means you're pointing at the wrong path. Aborting to avoid writing bogus tiles."
+        )
         sys.exit(2)
 
     # Determine bbox
@@ -402,26 +488,39 @@ def main() -> None:
     skip_existing = not args.no_skip
 
     overall = {
-        'generated_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-        'source_dir': str(src_dir),
-        'output_dir': str(out_dir),
-        'bbox': {
-            'min_lon': bbox[0], 'min_lat': bbox[1], 'max_lon': bbox[2], 'max_lat': bbox[3]
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "source_dir": str(src_dir),
+        "output_dir": str(out_dir),
+        "bbox": {
+            "min_lon": bbox[0],
+            "min_lat": bbox[1],
+            "max_lon": bbox[2],
+            "max_lat": bbox[3],
         },
-        'zoom_min': zoom_min,
-        'zoom_max': zoom_max,
-        'variants': [v for v in ['raw', 'br', 'gz'] if ((v != 'br' or generate_br) and (v != 'gz' or generate_gz) and (v != 'raw' or write_raw))],
-        'zooms': [],
-        'totals': {
-            'tiles_written': 0,
-            'bytes_raw': 0,
-            'bytes_br': 0,
-            'bytes_gz': 0,
-            'elapsed_sec': 0,
-        }
+        "zoom_min": zoom_min,
+        "zoom_max": zoom_max,
+        "variants": [
+            v
+            for v in ["raw", "br", "gz"]
+            if (
+                (v != "br" or generate_br)
+                and (v != "gz" or generate_gz)
+                and (v != "raw" or write_raw)
+            )
+        ],
+        "zooms": [],
+        "totals": {
+            "tiles_written": 0,
+            "bytes_raw": 0,
+            "bytes_br": 0,
+            "bytes_gz": 0,
+            "elapsed_sec": 0,
+        },
     }
 
-    print(f"➡️  Generating tiles to {out_dir} for z={zoom_min}..{zoom_max} within bbox {bbox}")
+    print(
+        f"➡️  Generating tiles to {out_dir} for z={zoom_min}..{zoom_max} within bbox {bbox}"
+    )
     print(f"📦 Using elevation source: {src_dir}  (files: {len(zst_files)})")
     if zoom_max - zoom_min >= 6:
         print("⚠️  Large zoom span selected; expect very large tile counts.")
@@ -431,7 +530,7 @@ def main() -> None:
         print(f"→ z={z} ...")
         zsum = generate_for_zoom(
             z=z,
-            bbox=bbox, 
+            bbox=bbox,
             out_dir=out_dir,
             workers=args.workers,
             generate_br=generate_br,
@@ -440,21 +539,27 @@ def main() -> None:
             loader=loader,
             skip_existing=skip_existing,
         )
-        overall['zooms'].append(zsum)
-        overall['totals']['tiles_written'] += zsum['tiles_written']
+        overall["zooms"].append(zsum)
+        overall["totals"]["tiles_written"] += zsum["tiles_written"]
         # Tally skipped tiles loudly
-        overall.setdefault('totals', {}).setdefault('tiles_skipped_missing', 0)
-        overall['totals']['tiles_skipped_missing'] += zsum.get('tiles_skipped_missing', 0)
-        overall['totals']['bytes_raw'] += zsum['bytes_raw']
-        overall['totals']['bytes_br'] += zsum['bytes_br']
-        overall['totals']['bytes_gz'] += zsum['bytes_gz']
+        overall.setdefault("totals", {}).setdefault("tiles_skipped_missing", 0)
+        overall["totals"]["tiles_skipped_missing"] += zsum.get(
+            "tiles_skipped_missing", 0
+        )
+        overall["totals"]["bytes_raw"] += zsum["bytes_raw"]
+        overall["totals"]["bytes_br"] += zsum["bytes_br"]
+        overall["totals"]["bytes_gz"] += zsum["bytes_gz"]
         write_manifest(out_dir, overall)
-        print(f"  ✓ z={z} wrote {zsum['tiles_written']} tiles (skipped missing: {zsum.get('tiles_skipped_missing', 0)}) in {zsum['elapsed_sec']}s")
+        print(
+            f"  ✓ z={z} wrote {zsum['tiles_written']} tiles (skipped missing: {zsum.get('tiles_skipped_missing', 0)}) in {zsum['elapsed_sec']}s"
+        )
 
-    overall['totals']['elapsed_sec'] = round(time.time() - t_start, 2)
+    overall["totals"]["elapsed_sec"] = round(time.time() - t_start, 2)
     write_manifest(out_dir, overall)
-    print(f"✅ Done. Wrote {overall['totals']['tiles_written']} tiles across z={zoom_min}..{zoom_max}. Skipped missing: {overall['totals'].get('tiles_skipped_missing', 0)}")
+    print(
+        f"✅ Done. Wrote {overall['totals']['tiles_written']} tiles across z={zoom_min}..{zoom_max}. Skipped missing: {overall['totals'].get('tiles_skipped_missing', 0)}"
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

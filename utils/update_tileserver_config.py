@@ -5,36 +5,32 @@ Scans for .mbtiles files and updates the config.json accordingly.
 """
 
 import json
-import os
-from pathlib import Path
 import logging
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
 
 def update_tileserver_config():
     """Update TileServer-GL configuration with available .mbtiles files."""
     base_dir = Path("/Users/davidrose/git/floodmap")
     config_path = base_dir / "map_data" / "config.json"
-    
+
     # Find all .mbtiles files
     sources = {}
-    
+
     # Main map data directory
     map_data_dir = base_dir / "map_data"
     if map_data_dir.exists():
         for mbtiles_file in map_data_dir.glob("*.mbtiles"):
             source_name = mbtiles_file.stem
-            sources[source_name] = {
-                "type": "mbtiles",
-                "path": mbtiles_file.name
-            }
+            sources[source_name] = {"type": "mbtiles", "path": mbtiles_file.name}
             logger.info(f"Found main tile source: {source_name}")
-    
+
     # Regional map data directory
     regions_dir = map_data_dir / "regions"
     if regions_dir.exists():
@@ -42,39 +38,33 @@ def update_tileserver_config():
             source_name = mbtiles_file.stem
             sources[source_name] = {
                 "type": "mbtiles",
-                "path": f"regions/{mbtiles_file.name}"
+                "path": f"regions/{mbtiles_file.name}",
             }
             logger.info(f"Found regional tile source: {source_name}")
-    
+
     if not sources:
         logger.warning("No .mbtiles files found!")
         return False
-    
+
     # Create working tileserver config using simple "data" format
     # Convert sources to data format that actually works
     data_sources = {}
     for source_name, source_config in sources.items():
-        data_sources[source_name] = {
-            "mbtiles": source_config["path"]
-        }
-    
+        data_sources[source_name] = {"mbtiles": source_config["path"]}
+
     config = {
-        "options": {
-            "paths": {
-                "root": "/data",
-                "mbtiles": "/data"
-            }
-        },
-        "data": data_sources
+        "options": {"paths": {"root": "/data", "mbtiles": "/data"}},
+        "data": data_sources,
     }
-    
+
     # Write updated config
-    with open(config_path, 'w') as f:
+    with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
-    
+
     logger.info(f"✅ Updated TileServer config with {len(sources)} sources")
     logger.info(f"Sources: {', '.join(sources.keys())}")
     return True
+
 
 def main():
     """Main function."""
@@ -84,6 +74,7 @@ def main():
         logger.info("🎯 Configuration update completed successfully")
     else:
         logger.error("❌ Configuration update failed")
+
 
 if __name__ == "__main__":
     main()

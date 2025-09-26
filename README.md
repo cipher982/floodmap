@@ -1,6 +1,6 @@
 # FloodMap 🗺️🌊
 
-FloodMap is **an end-to-end, high-performance flood-risk mapping platform** covering the entire United States.  
+FloodMap is **an end-to-end, high-performance flood-risk mapping platform** covering the entire United States.
 It combines a FastAPI micro-service, an optimized elevation–processing pipeline and a zero-dependency HTML/JS viewer to deliver near-real-time flood visualisations down to 256 × 256 px map tiles.
 
 
@@ -110,8 +110,8 @@ Note: Only one Dockerfile is used. `Dockerfile.prod` has been removed to avoid c
 
 ### 1. Elevation (DEM) Compression
 
-The raw US SRTM 1-arc-second GeoTIFFs are *huge* (≈45 GB).  
-`process_elevation_usa.py` chunks them into 256 × 256 tiles, serialises each tile as *little-endian int16* bytes and compresses with **Zstandard (level 3)**.  
+The raw US SRTM 1-arc-second GeoTIFFs are *huge* (≈45 GB).
+`process_elevation_usa.py` chunks them into 256 × 256 tiles, serialises each tile as *little-endian int16* bytes and compresses with **Zstandard (level 3)**.
 Metadata (bounds, CRS, nodata, etc.) is persisted per-tile in a side-car JSON.
 
 ```bash
@@ -223,11 +223,11 @@ Output includes per-zoom size buckets and nodata% percentiles for quick sanity.
 
 1. **HTTP request** `GET /tiles/{water}/{z}/{x}/{y}.png` arrives.
 2. ASGI **rate-limiter** & **tracing** middleware run.
-3. `tile_cache` is queried (key = water+z+x+y).  
-   • **HIT ➜** return cached 256 × 256 PNG immediately.  
+3. `tile_cache` is queried (key = water+z+x+y).
+   • **HIT ➜** return cached 256 × 256 PNG immediately.
    • **MISS ➜** proceed.
-4. `elevation_loader` fetches & mosaics the required DEM bytes:  
-   – Persistent on-disk Zstd *Context* avoids re-allocations.  
+4. `elevation_loader` fetches & mosaics the required DEM bytes:
+   – Persistent on-disk Zstd *Context* avoids re-allocations.
    – A tiny `diskcache` layer keeps LRU decompressed arrays on SSD.
 5. `color_mapper` converts the `int16` NumPy array ➜ RGBA via pre-computed LUTs (vectorised, no Python loop).
 6. A *ThreadPoolExecutor* encodes the array to PNG (Pillow), level 1.
@@ -276,8 +276,8 @@ CI configuration lives in *.github/workflows/*. Pull-requests run the full matri
 
 ## 📝 Development Tips
 
-• **Debug helpers** – A set of `debug_*.py` scripts lives at repo root for quick profiling and visual checks.  
-• **Hot reload** – `uvicorn src.api.main:app --reload` watches for changes.  
+• **Debug helpers** – A set of `debug_*.py` scripts lives at repo root for quick profiling and visual checks.
+• **Hot reload** – `uvicorn src.api.main:app --reload` watches for changes.
 • **Data outside repo** – Large raw datasets are symlinked via `ARCHIVED_DATA → /Volumes/Storage/floodmap-archive`.
 • **Gotchas** – When generating precompressed tiles on host, always pass `--source-dir data/elevation-source` and `--output-dir data/elevation-tiles`. Avoid using container‑only paths (`/app/...`) outside Docker — this will yield empty data and tiny `.br` files.
 
@@ -294,5 +294,5 @@ CI configuration lives in *.github/workflows/*. Pull-requests run the full matri
 
 ## 📄 License
 
-Distributed under the **MIT License**.  
+Distributed under the **MIT License**.
 © 2024 FloodMap contributors

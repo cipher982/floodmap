@@ -49,21 +49,21 @@ services:
       - FRONTEND_PORT=${FRONTEND_PORT}
       - WEBAPP_PORT=8000
       - TILESERVER_URL=http://tileserver:8080
-      
-      # Performance Configuration  
+
+      # Performance Configuration
       - ELEVATION_CACHE_SIZE=${ELEVATION_CACHE_SIZE}
       - TILE_CACHE_SIZE=${TILE_CACHE_SIZE}
       - NODATA_VALUE=${NODATA_VALUE}
       - VECTOR_TILE_MIN_SIZE=${VECTOR_TILE_MIN_SIZE}
-      
+
       # Environment and monitoring
       - ENVIRONMENT=${ENVIRONMENT}
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT}
-      
+
       # Docker Compose
       - MEMORY_LIMIT=${MEMORY_LIMIT}
       - CPU_LIMIT=${CPU_LIMIT}
-      
+
       # System settings
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
