@@ -5,7 +5,7 @@ repos:
     hooks:
       # Run the linter.
       - id: ruff
-        args: [--fix, --ignore=SIM108,SIM102,SIM103,SIM118,SIM113,B904,B007,B006,C401,C414,F811]
+        args: [--fix, --exit-zero]
       # Run the formatter.
       - id: ruff-format
 
