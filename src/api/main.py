@@ -229,7 +229,7 @@ app.include_router(risk.router, prefix="/api", tags=["risk"])
 app.mount("/static", StaticFiles(directory="../web"), name="static")
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def serve_frontend():
     """Serve the main application frontend."""
     with open("../web/index.html") as f:
