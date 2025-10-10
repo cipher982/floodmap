@@ -1,8 +1,9 @@
 services:
   # Map tile server
-  tileserver:
+  floodmap-tileserver:
     image: maptiler/tileserver-gl:latest
-    container_name: ${COMPOSE_PROJECT_NAME}-tileserver
+    expose:
+      - "8080"
     volumes:
       - type: bind
         source: ${BASE_MAPS_PATH}
@@ -11,6 +12,8 @@ services:
     environment:
       - TILESERVER_CONFIG=/data/config.json
     restart: unless-stopped
+    networks:
+      - coolify
     healthcheck:
       test: ["CMD", "sh", "-c", "ps aux | grep -v grep | grep 'node /usr/src/app' > /dev/null"]
       interval: 10s
@@ -19,11 +22,12 @@ services:
       start_period: 10s
 
   # FloodMap Web Application (serves website + API)
-  webapp:
+  floodmap-webapp:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME}-webapp
+    expose:
+      - "8000"
     volumes:
       # Mount elevation source data (raw SRTM files for runtime generation)
       - type: bind
@@ -48,7 +52,7 @@ services:
       - TILESERVER_PORT=${TILESERVER_PORT}
       - FRONTEND_PORT=${FRONTEND_PORT}
       - WEBAPP_PORT=8000
-      - TILESERVER_URL=http://tileserver:8080
+      - TILESERVER_URL=http://floodmap-tileserver:8080
 
       # Performance Configuration
       - ELEVATION_CACHE_SIZE=${ELEVATION_CACHE_SIZE}
@@ -68,7 +72,9 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
     depends_on:
-      - tileserver
+      - floodmap-tileserver
+    networks:
+      - coolify
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
@@ -89,5 +95,6 @@ volumes:
     driver: local
 
 networks:
-  default:
-    name: ${COMPOSE_PROJECT_NAME}-network
+  coolify:
+    name: coolify
+    external: true
