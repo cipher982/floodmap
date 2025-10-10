@@ -162,7 +162,7 @@ class FloodMapClient {
                     },
                     'vector-tiles': {
                         type: 'vector',
-                        tiles: [window.location.origin + '/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf']
+                        tiles: [window.location.origin + '/floodmap/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf']
                     }
                 },
                 layers: [
@@ -376,7 +376,7 @@ class FloodMapClient {
                 tileInfo = `🗂️ Tile: ${zoom}/${tileCoords.x}/${tileCoords.y} (${tilePath})`;
             }
 
-            const response = await fetch('/api/risk/location', {
+            const response = await fetch('/floodmap/api/risk/location', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ latitude: lat, longitude: lng })

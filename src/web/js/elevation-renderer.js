@@ -73,7 +73,7 @@ class ElevationRenderer {
         // Start loading (with cache-busting in development)
         const cacheBuster = window.location.hostname === 'localhost' ? `?t=${Date.now()}` : '';
         const precompressedParam = cacheBuster ? `&method=precompressed` : `?method=precompressed`;
-        const loadPromise = fetch(`/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16${cacheBuster}${precompressedParam}`)
+        const loadPromise = fetch(`/floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16${cacheBuster}${precompressedParam}`)
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Failed to load elevation tile ${key}: ${response.status}`);
@@ -108,7 +108,7 @@ class ElevationRenderer {
             })
             .catch(error => {
                 console.error(`❌ Error loading elevation tile ${key}:`, error);
-                console.error(`   URL was: /api/v1/tiles/elevation-data/${z}/${x}/${y}.u16`);
+                console.error(`   URL was: /floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16`);
                 this.loadingTiles.delete(key);
                 // Return NODATA tile on error
                 return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);
