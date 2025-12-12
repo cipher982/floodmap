@@ -229,7 +229,6 @@ async def test_max_zoom_matches_precompressed_tiles(map_page: MapPage):
     await map_page.goto_homepage()
     await map_page.wait_for_map_load()
 
-    # Get the map's maxZoom setting
     max_zoom = await map_page.page.evaluate("""
         () => {
             if (window.floodMap && window.floodMap.map) {
@@ -243,4 +242,22 @@ async def test_max_zoom_matches_precompressed_tiles(map_page: MapPage):
     assert max_zoom <= 11, (
         f"Map maxZoom ({max_zoom}) exceeds precompressed tile limit (11). "
         "This will cause tiles to appear as water/NODATA at high zoom levels."
+    )
+
+    # Regression check: user zoom interactions shouldn't exceed maxZoom.
+    # MapLibre's internal zoom is float; allow a tiny epsilon.
+    zoom_after = await map_page.page.evaluate("""
+        async () => {
+            const map = window.floodMap?.map;
+            if (!map) return null;
+
+            // Try to exceed max via API and wait for the animation frame.
+            map.setZoom(map.getMaxZoom() + 2);
+            await new Promise(r => requestAnimationFrame(() => r()));
+            return map.getZoom();
+        }
+    """)
+    assert zoom_after is not None, "Could not read map zoom after setZoom"
+    assert zoom_after <= (max_zoom + 0.001), (
+        f"Map allowed zoom {zoom_after} beyond maxZoom {max_zoom}"
     )

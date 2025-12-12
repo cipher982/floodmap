@@ -80,6 +80,19 @@ def validate_critical_data():
                 print(f"  ⚠️  {warning}")
         print("\n💡 Check your host bind mounts and data presence.")
         print("   Elevation: /app/data/elevation | Maps: /app/data/maps")
+
+        # In development/tests, allow booting with partial data so CI/local can run.
+        # Endpoints that require real data will still fail explicitly.
+        if os.getenv("ALLOW_MISSING_DATA", "false").lower() in ("1", "true", "yes"):
+            print(
+                "⚠️  ALLOW_MISSING_DATA enabled; continuing startup despite missing data."
+            )
+        else:
+            # In production, missing critical data should fail fast.
+            if os.getenv("ENVIRONMENT", "production").lower() in ("production", "prod"):
+                raise RuntimeError(
+                    "Critical data missing; refusing to start in production."
+                )
     elif warnings:
         print("⚠️  STARTUP WARNINGS:")
         for warning in warnings:

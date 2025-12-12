@@ -11,7 +11,7 @@ from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 # Application configuration
 APP_HOST = "localhost"
-APP_PORT = 8000  # Use same port as main app
+APP_PORT = 8001  # Avoid collisions with a running dev server
 BASE_URL = f"http://{APP_HOST}:{APP_PORT}"
 
 
@@ -23,6 +23,8 @@ def app_server():
     # Set environment for test server
     env = os.environ.copy()
     env["API_PORT"] = str(APP_PORT)
+    env["ALLOW_MISSING_DATA"] = "true"
+    env["ENVIRONMENT"] = "development"
 
     # Start the server process
     process = subprocess.Popen(
@@ -36,6 +38,8 @@ def app_server():
 
     # Wait for server to be ready
     max_retries = 30
+    startup_stdout = []
+    startup_stderr = []
     for i in range(max_retries):
         try:
             response = requests.get(f"{BASE_URL}/api/health", timeout=2)
@@ -43,6 +47,19 @@ def app_server():
                 break
         except requests.exceptions.RequestException:
             time.sleep(1)
+
+        # Drain any available output for diagnostics without blocking.
+        try:
+            if process.stdout:
+                line = process.stdout.readline()
+                if line:
+                    startup_stdout.append(line)
+            if process.stderr:
+                line = process.stderr.readline()
+                if line:
+                    startup_stderr.append(line)
+        except Exception:
+            pass
 
         # Check if process died
         if process.poll() is not None:
@@ -52,6 +69,8 @@ def app_server():
         stdout, stderr = process.communicate()
         process.terminate()
         process.wait()
+        stdout = "".join(startup_stdout) + stdout
+        stderr = "".join(startup_stderr) + stderr
         raise RuntimeError(
             f"Failed to start application server after {max_retries} tries: stdout={stdout}, stderr={stderr}"
         )
@@ -112,18 +131,18 @@ class MapPage:
         await self.page.wait_for_load_state("networkidle")
 
     async def wait_for_map_load(self):
-        """Wait for the Google Maps to load."""
-        # Wait for the map div to be present
-        await self.page.wait_for_selector("#map", timeout=10000)
+        """Wait for the map to load (MapLibre in this app)."""
+        # Map container should exist
+        await self.page.wait_for_selector("#map", state="attached", timeout=10000)
 
-        # Wait for Google Maps API to initialize
+        # FloodMap client should initialize and expose `window.floodMap.map`
         await self.page.wait_for_function(
-            "typeof google !== 'undefined' && typeof google.maps !== 'undefined'",
+            "() => Boolean(window.floodMap && window.floodMap.map)",
             timeout=15000,
         )
 
-        # Additional wait for map tiles to load
-        await self.page.wait_for_timeout(2000)
+        # Give MapLibre a moment to render first frame/tiles
+        await self.page.wait_for_timeout(500)
 
     async def get_location_info(self):
         """Extract location information from the page."""

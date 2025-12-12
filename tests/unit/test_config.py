@@ -48,22 +48,22 @@ class TestContainerPaths:
     """Test that container paths are correctly defined."""
 
     def test_elevation_source_dir(self):
-        """Elevation source directory should be /app/data/elevation-source."""
-        from config import ELEVATION_SOURCE_DIR
+        """Elevation source directory should be under the configured data root."""
+        from config import DATA_ROOT, ELEVATION_SOURCE_DIR
 
-        assert Path("/app/data/elevation-source") == ELEVATION_SOURCE_DIR
+        assert ELEVATION_SOURCE_DIR == DATA_ROOT / "elevation-source"
 
     def test_elevation_tiles_dir(self):
-        """Elevation tiles directory should be /app/data/elevation-tiles."""
-        from config import ELEVATION_TILES_DIR
+        """Elevation tiles directory should be under the configured data root."""
+        from config import DATA_ROOT, ELEVATION_TILES_DIR
 
-        assert Path("/app/data/elevation-tiles") == ELEVATION_TILES_DIR
+        assert ELEVATION_TILES_DIR == DATA_ROOT / "elevation-tiles"
 
     def test_base_maps_dir(self):
-        """Base maps directory should be /app/data/base-maps."""
-        from config import BASE_MAPS_DIR
+        """Base maps directory should be under the configured data root."""
+        from config import BASE_MAPS_DIR, DATA_ROOT
 
-        assert Path("/app/data/base-maps") == BASE_MAPS_DIR
+        assert BASE_MAPS_DIR == DATA_ROOT / "base-maps"
 
     def test_legacy_aliases(self):
         """Legacy path aliases should point to correct directories."""

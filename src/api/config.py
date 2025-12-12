@@ -11,11 +11,27 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Container paths (fixed internal structure)
-# These paths are ALWAYS the same inside containers - never configurable
-ELEVATION_SOURCE_DIR = Path("/app/data/elevation-source")  # Raw SRTM files (.zst)
-ELEVATION_TILES_DIR = Path("/app/data/elevation-tiles")  # Precompressed tiles (.u16.br)
-BASE_MAPS_DIR = Path("/app/data/base-maps")  # Background maps (.mbtiles)
+
+def _default_data_root() -> Path:
+    """Return the filesystem root containing app data.
+
+    In containers, data is mounted under `/app/data`. In local development and
+    tests, the repository `data/` directory is used by default.
+    """
+    container_root = Path("/app/data")
+    if container_root.exists():
+        return container_root
+
+    # Local development fallback: repo-relative `data/`
+    repo_root = Path(__file__).resolve().parents[2]
+    return repo_root / "data"
+
+
+# Data paths
+DATA_ROOT = _default_data_root()
+ELEVATION_SOURCE_DIR = DATA_ROOT / "elevation-source"  # Raw SRTM files (.zst)
+ELEVATION_TILES_DIR = DATA_ROOT / "elevation-tiles"  # Precompressed tiles (.u16.br)
+BASE_MAPS_DIR = DATA_ROOT / "base-maps"  # Background maps (.mbtiles)
 
 # Legacy compatibility - remove after updating dependent code
 ELEVATION_DATA_DIR = ELEVATION_SOURCE_DIR
@@ -23,7 +39,9 @@ MAP_DATA_DIR = BASE_MAPS_DIR
 PRECOMPRESSED_TILES_DIR = ELEVATION_TILES_DIR
 
 # Legacy compatibility - remove these after updating dependent code
-PROJECT_ROOT = Path("/app")  # Fixed container root
+PROJECT_ROOT = (
+    Path("/app") if Path("/app").exists() else Path(__file__).resolve().parents[2]
+)
 COMPRESSED_DATA_DIR = ELEVATION_DATA_DIR  # Same as elevation data
 
 """Centralized runtime and security config with safe defaults.
