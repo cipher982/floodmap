@@ -459,8 +459,22 @@ class FloodMapClient {
         // This avoids "one extra zoom" blank/empty tiles if MapLibre defaults or
         // style source metadata ever overrides config.
         this.map.setMaxZoom(config.maxZoom);
+        this.map.on('zoomend', () => {
+            const maxZ = this.map.getMaxZoom();
+            if (this.map.getZoom() > maxZ) {
+                this.map.setZoom(maxZ);
+            }
+        });
 
         this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+        const zoomDebug = document.getElementById('zoom-debug');
+        const updateZoomDebug = () => {
+            if (!zoomDebug) return;
+            zoomDebug.textContent = `Zoom: ${this.map.getZoom().toFixed(3)} (max ${this.map.getMaxZoom()})`;
+        };
+        updateZoomDebug();
+        this.map.on('zoom', updateZoomDebug);
 
         this.map.on('click', (e) => {
             this.assessLocationRisk(e.lngLat.lat, e.lngLat.lng, e.lngLat);
