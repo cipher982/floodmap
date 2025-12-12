@@ -121,22 +121,22 @@ def performance_thresholds():
 
 @pytest.fixture
 def sample_tile_coords():
-    """Sample tile coordinates for testing."""
+    """Sample tile coordinates for testing (max zoom 11 due to precompressed tile limits)."""
     return {
         "tampa": {
+            "zoom_8": (8, 69, 107),
             "zoom_10": (10, 277, 429),
             "zoom_11": (11, 555, 858),
-            "zoom_12": (12, 1110, 1716),
         },
         "nyc": {
+            "zoom_8": (8, 75, 96),
             "zoom_10": (10, 301, 384),
             "zoom_11": (11, 603, 770),
-            "zoom_12": (12, 1206, 1540),
         },
         "miami": {
+            "zoom_8": (8, 69, 111),
             "zoom_10": (10, 279, 447),
             "zoom_11": (11, 559, 895),
-            "zoom_12": (12, 1119, 1791),
         },
     }
 

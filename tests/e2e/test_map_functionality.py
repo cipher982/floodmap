@@ -78,9 +78,9 @@ async def test_elevation_tiles_loading(map_page: MapPage):
         parts = tile_url.split("/tiles/")[-1].split("/")
         assert len(parts) == 3, f"Invalid tile URL format: {tile_url}"
 
-        # Verify zoom level is in allowed range
+        # Verify zoom level is in allowed range (max 11 due to precompressed tile limits)
         zoom = int(parts[0])
-        assert zoom in [10, 11, 12], f"Zoom level {zoom} not in allowed range"
+        assert zoom <= 11, f"Zoom level {zoom} exceeds max allowed (11)"
 
 
 @pytest.mark.asyncio
@@ -216,4 +216,31 @@ async def test_performance_metrics(map_page: MapPage):
     assert (
         "request_processing_seconds" in metrics_text
         or "Prometheus metrics" in metrics_text
+    )
+
+
+@pytest.mark.asyncio
+async def test_max_zoom_matches_precompressed_tiles(map_page: MapPage):
+    """Test that map maxZoom is capped to match precompressed tile availability.
+
+    This prevents the bug where zoom levels beyond precompressed tiles
+    return NODATA tiles (all water/blue).
+    """
+    await map_page.goto_homepage()
+    await map_page.wait_for_map_load()
+
+    # Get the map's maxZoom setting
+    max_zoom = await map_page.page.evaluate("""
+        () => {
+            if (window.floodMap && window.floodMap.map) {
+                return window.floodMap.map.getMaxZoom();
+            }
+            return null;
+        }
+    """)
+
+    assert max_zoom is not None, "Could not get map maxZoom"
+    assert max_zoom <= 11, (
+        f"Map maxZoom ({max_zoom}) exceeds precompressed tile limit (11). "
+        "This will cause tiles to appear as water/NODATA at high zoom levels."
     )
