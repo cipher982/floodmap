@@ -9,6 +9,7 @@ class FloodMapClient {
         this.currentWaterLevel = 1.0;
         this.viewMode = 'elevation';
         this.elevationRenderer = new ElevationRenderer();
+        this.modelNoteState = { nearWater: false, coastal: false };
 
         // Initialize WebWorker for rendering if available
         this.initWorker();
@@ -33,7 +34,7 @@ class FloodMapClient {
         if (typeof Worker !== 'undefined') {
             try {
                 // Cache-bust worker URL alongside other static assets
-                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212j');
+                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212k');
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -459,6 +460,7 @@ class FloodMapClient {
             radio.addEventListener('change', (e) => {
                 this.viewMode = e.target.value;
                 this.updateViewMode();
+                this.updateModelNote(this.modelNoteState);
             });
         });
 
@@ -542,6 +544,8 @@ class FloodMapClient {
         const waterLevelControls = document.getElementById('water-level-controls');
         const floodLegend = document.getElementById('flood-legend');
         const elevationLegend = document.getElementById('elevation-legend');
+
+        this.updateModelNote(this.modelNoteState);
 
         if (this.viewMode === 'elevation') {
             waterLevelControls.style.opacity = '0';
@@ -671,10 +675,11 @@ class FloodMapClient {
                 tileInfo = `🗂️ Tile: ${zoom}/${tileCoords.x}/${tileCoords.y} (${tilePath})`;
             }
 
-            // Water detection via rendered vector tiles (simple + fast).
+            // Water/coastal context detection via rendered vector tiles (simple + fast).
             // If we're clicking on a lake/ocean polygon, show "Water" rather than
             // a misleading land-based risk from DEM artefacts.
             let isWater = false;
+            let isCoastal = false;
             if (this.map) {
                 const point = this.map.project([lng, lat]);
                 const pad = 2; // small tolerance for edge clicks / antialiasing
@@ -683,8 +688,21 @@ class FloodMapClient {
                     [point.x + pad, point.y + pad]
                 ];
                 const waterFeatures = this.map.queryRenderedFeatures(bbox, { layers: ['water'] });
-                isWater = Array.isArray(waterFeatures) && waterFeatures.length > 0;
+                const waterwayFeatures = this.map.queryRenderedFeatures(bbox, { layers: ['waterway'] });
+
+                isWater = (Array.isArray(waterFeatures) && waterFeatures.length > 0) ||
+                    (Array.isArray(waterwayFeatures) && waterwayFeatures.length > 0);
+
+                // Heuristic: classify as "coastal" when the feature hints ocean/sea.
+                const candidates = []
+                    .concat(Array.isArray(waterFeatures) ? waterFeatures : [])
+                    .concat(Array.isArray(waterwayFeatures) ? waterwayFeatures : [])
+                    .map(f => String(f?.properties?.class ?? f?.properties?.kind ?? f?.properties?.type ?? '').toLowerCase())
+                    .filter(Boolean);
+                isCoastal = candidates.some(v => v.includes('ocean') || v.includes('sea'));
             }
+
+            this.updateModelNote({ nearWater: isWater, coastal: isCoastal });
 
             if (isWater) {
                 const data = {
@@ -724,6 +742,44 @@ class FloodMapClient {
         } catch (error) {
             console.error('Risk assessment error:', error);
         }
+    }
+
+    updateModelNote({ nearWater = false, coastal = false } = {}) {
+        this.modelNoteState = { nearWater: !!nearWater, coastal: !!coastal };
+        const el = document.getElementById('model-note');
+        if (!el) return;
+
+        // Only show in Flood Risk mode (it explains the slider’s meaning).
+        if (this.viewMode !== 'flood') {
+            el.style.display = 'none';
+            return;
+        }
+
+        el.style.display = 'block';
+
+        if (coastal) {
+            el.className = 'model-note model-note--ok';
+            el.innerHTML = `
+                <strong>Coastal surge mode</strong><br>
+                Slider approximates sea level + storm surge (m above mean sea level).
+            `;
+            return;
+        }
+
+        if (nearWater) {
+            el.className = 'model-note model-note--warning';
+            el.innerHTML = `
+                <strong>Inland water nearby</strong><br>
+                Slider is sea level/storm surge (absolute). River flooding (stage/flow/levees) isn’t modeled.
+            `;
+            return;
+        }
+
+        el.className = 'model-note';
+        el.innerHTML = `
+            <strong>Storm surge model</strong><br>
+            Slider is an absolute sea level / surge height (m above mean sea level).
+        `;
     }
 
     updateLocationInfo(data) {
