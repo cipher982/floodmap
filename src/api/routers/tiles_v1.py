@@ -4,6 +4,7 @@ Implements the route redesign PRD with proper error handling and caching.
 """
 
 import asyncio
+import contextlib
 import gzip
 import io
 import logging
@@ -64,10 +65,9 @@ _NODATA_TILE_BYTES = np.full((TILE_SIZE, TILE_SIZE), 65535, dtype=np.uint16).tob
 _NODATA_TILE_GZIP = gzip.compress(_NODATA_TILE_BYTES, compresslevel=1)
 _NODATA_TILE_BROTLI = None
 if brotli is not None:
-    try:
+    # Fallback to gzip if brotli compression fails
+    with contextlib.suppress(Exception):
         _NODATA_TILE_BROTLI = brotli.compress(_NODATA_TILE_BYTES, quality=1)
-    except Exception:
-        pass  # Fallback to gzip if brotli fails
 
 
 def _negotiate_compression(accept_encoding: str) -> str | None:
