@@ -55,6 +55,19 @@ CPU_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tile-cpu-v1
 SUPPORTED_ZOOM_RANGE = (MIN_ZOOM, MAX_ZOOM)
 SUPPORTED_WATER_LEVEL_RANGE = (MIN_WATER_LEVEL, MAX_WATER_LEVEL)
 
+# Pre-generate constant NODATA tile for precompressed misses
+# This is a 256x256 uint16 array with all values set to 65535 (NODATA)
+_NODATA_TILE_BYTES = np.full((TILE_SIZE, TILE_SIZE), 65535, dtype=np.uint16).tobytes()
+
+# Pre-compress the NODATA tile at module load time for efficient serving
+_NODATA_TILE_GZIP = gzip.compress(_NODATA_TILE_BYTES, compresslevel=1)
+_NODATA_TILE_BROTLI = None
+if brotli is not None:
+    try:
+        _NODATA_TILE_BROTLI = brotli.compress(_NODATA_TILE_BYTES, quality=1)
+    except Exception:
+        pass  # Fallback to gzip if brotli fails
+
 
 def _negotiate_compression(accept_encoding: str) -> str | None:
     """Return preferred encoding ('br' or 'gzip') based on Accept-Encoding.
@@ -619,35 +632,40 @@ async def serve_precompressed_elevation_tile(
                 headers=headers,
             )
 
-        # If no pre-compressed files exist, fall back to runtime generation
-        logger.warning(
-            f"No precompressed tile found for {z}/{x}/{y}, falling back to runtime"
-        )
-        # Generate runtime tile data
-        loop = asyncio.get_event_loop()
-        elevation_data = await loop.run_in_executor(
-            CPU_EXECUTOR, generate_elevation_data_sync, z, x, y
+        # If no pre-compressed files exist, return constant NODATA tile immediately
+        # This avoids expensive runtime generation for ocean/missing tiles
+        logger.info(
+            f"No precompressed tile found for {z}/{x}/{y}, returning NODATA tile"
         )
 
-        # Return with runtime compression
-        accept_enc = request.headers.get("accept-encoding", "") if request else ""
-        payload, cenc = _maybe_compress(elevation_data, accept_enc, min_size=512)
+        # Select appropriate pre-compressed NODATA tile based on client support
+        if encoding == "br" and _NODATA_TILE_BROTLI is not None:
+            payload = _NODATA_TILE_BROTLI
+            content_encoding = "br"
+        elif encoding == "gzip":
+            payload = _NODATA_TILE_GZIP
+            content_encoding = "gzip"
+        else:
+            payload = _NODATA_TILE_BYTES
+            content_encoding = None
 
         latency_ms = (time.time() - start_time) * 1000
-        compression_info = f"{cenc}" if cenc else "uncompressed"
+        compression_info = content_encoding if content_encoding else "uncompressed"
         logger.info(
-            f"TILE {z}/{x}/{y}: fallback-runtime-{compression_info}, {latency_ms:.1f}ms, {len(payload):,}b"
+            f"TILE {z}/{x}/{y}: nodata-{compression_info}, {latency_ms:.1f}ms, {len(payload):,}b"
         )
+
         headers = {
-            "Cache-Control": TILE_CACHE_CONTROL,
+            "Cache-Control": "public, max-age=31536000, immutable",
             "Access-Control-Allow-Origin": "*",
-            "X-Tile-Source": "precompressed-fallback",
+            "X-Tile-Source": "nodata",
             "X-Method": "precompressed",
+            "X-Precompressed-Miss": "1",
             "X-Latency-Ms": str(round(latency_ms, 2)),
+            "Vary": "Accept-Encoding",
         }
-        if cenc:
-            headers["Content-Encoding"] = cenc
-            headers["Vary"] = "Accept-Encoding"
+        if content_encoding:
+            headers["Content-Encoding"] = content_encoding
 
         return Response(
             content=payload, media_type="application/octet-stream", headers=headers
@@ -679,8 +697,10 @@ async def get_elevation_data_tile(
     - Cached forever (immutable elevation data)
 
     Method parameter:
-    - runtime: Generate tiles with runtime compression (default)
-    - precompressed: Serve pre-compressed files directly via sendfile
+    - runtime: Generate tiles with runtime compression (default, may fallback to runtime generation)
+    - precompressed: Disk-only mode - serves precompressed files if they exist,
+                     otherwise returns a constant NODATA tile immediately (no expensive generation).
+                     Includes X-Precompressed-Miss header for debugging when NODATA fallback is used.
     """
     validate_tile_coordinates(z, x, y)
 
