@@ -565,7 +565,7 @@ async def serve_precompressed_elevation_tile(
             if compressed_path.exists():
                 latency_ms = (time.time() - start_time) * 1000
                 file_size = compressed_path.stat().st_size
-                logger.info(
+                logger.debug(
                     f"TILE {z}/{x}/{y}: precompressed-br, {latency_ms:.1f}ms, {file_size:,}b"
                 )
                 headers = {
@@ -588,7 +588,7 @@ async def serve_precompressed_elevation_tile(
             if compressed_path.exists():
                 latency_ms = (time.time() - start_time) * 1000
                 file_size = compressed_path.stat().st_size
-                logger.info(
+                logger.debug(
                     f"TILE {z}/{x}/{y}: precompressed-gz, {latency_ms:.1f}ms, {file_size:,}b"
                 )
                 headers = {
@@ -611,7 +611,7 @@ async def serve_precompressed_elevation_tile(
         if raw_path.exists():
             latency_ms = (time.time() - start_time) * 1000
             file_size = raw_path.stat().st_size
-            logger.info(
+            logger.debug(
                 f"TILE {z}/{x}/{y}: precompressed-raw, {latency_ms:.1f}ms, {file_size:,}b"
             )
             headers = {
@@ -631,7 +631,7 @@ async def serve_precompressed_elevation_tile(
 
         # If no pre-compressed files exist, return constant NODATA tile immediately
         # This avoids expensive runtime generation for ocean/missing tiles
-        logger.info(
+        logger.debug(
             f"No precompressed tile found for {z}/{x}/{y}, returning NODATA tile"
         )
 
@@ -648,7 +648,7 @@ async def serve_precompressed_elevation_tile(
 
         latency_ms = (time.time() - start_time) * 1000
         compression_info = content_encoding if content_encoding else "uncompressed"
-        logger.info(
+        logger.debug(
             f"TILE {z}/{x}/{y}: nodata-{compression_info}, {latency_ms:.1f}ms, {len(payload):,}b"
         )
 
@@ -721,7 +721,7 @@ async def get_elevation_data_tile(
             accept_enc = request.headers.get("accept-encoding", "") if request else ""
             payload, cenc = _maybe_compress(cached_data, accept_enc, min_size=512)
             compression_info = f"{cenc}" if cenc else "uncompressed"
-            logger.info(
+            logger.debug(
                 f"TILE {z}/{x}/{y}: runtime-cached-{compression_info}, <1ms, {len(payload):,}b"
             )
             headers = {
@@ -754,7 +754,7 @@ async def get_elevation_data_tile(
 
         latency_ms = (time.time() - start_time) * 1000
         compression_info = f"{cenc}" if cenc else "uncompressed"
-        logger.info(
+        logger.debug(
             f"TILE {z}/{x}/{y}: runtime-zst-{compression_info}, {latency_ms:.1f}ms, {len(payload):,}b"
         )
         headers = {
