@@ -13,6 +13,14 @@ class FloodMapClient {
         // Initialize WebWorker for rendering if available
         this.initWorker();
 
+        // Debug / telemetry counters (gated by DEBUG_TILES)
+        this.tileDebug = {
+            abortedProtocol: 0,
+            abortedFetches: 0,
+            abortedWorkerJobs: 0,
+            workerLutRebuilds: 0
+        };
+
         // Always use client-side rendering for flood tiles
         this.setupCustomProtocol();
         console.log('🚀 Client-side rendering initialized');
@@ -31,7 +39,7 @@ class FloodMapClient {
                 this.workerJobId = 0;
 
                 this.renderWorker.onmessage = (e) => {
-                    const { type, imageData, error, jobId } = e.data;
+                    const { type, imageData, error, jobId, pngBuffer, lutRebuilds } = e.data;
 
                     if (type === 'ready') {
                         this.workerReady = true;
@@ -40,15 +48,28 @@ class FloodMapClient {
                         console.warn('WebWorker rendering unsupported:', error || 'unknown');
                         this.workerReady = false;
                         try { this.renderWorker.terminate(); } catch {}
+                    } else if (type === 'stats') {
+                        if (typeof lutRebuilds === 'number') this.tileDebug.workerLutRebuilds = lutRebuilds;
                     } else if (type === 'complete' && jobId !== undefined) {
                         const job = this.pendingWorkerJobs.get(jobId);
                         if (job) {
-                            job.resolve(imageData);
+                            if (job.signal?.aborted) {
+                                if (window.DEBUG_TILES) this.tileDebug.abortedWorkerJobs++;
+                                // Best-effort cancellation: drop result and avoid cache poisoning
+                                this.pendingWorkerJobs.delete(jobId);
+                                return;
+                            }
+                            job.resolve(pngBuffer ? { pngBuffer } : imageData);
                             this.pendingWorkerJobs.delete(jobId);
                         }
                     } else if (type === 'error' && jobId !== undefined) {
                         const job = this.pendingWorkerJobs.get(jobId);
                         if (job) {
+                            if (job.signal?.aborted) {
+                                if (window.DEBUG_TILES) this.tileDebug.abortedWorkerJobs++;
+                                this.pendingWorkerJobs.delete(jobId);
+                                return;
+                            }
                             job.reject(new Error(error));
                             this.pendingWorkerJobs.delete(jobId);
                         }
@@ -84,6 +105,8 @@ class FloodMapClient {
         // Register a custom protocol with MapLibre (4.7.1+ Promise-based API)
         maplibregl.addProtocol('client', async (params, abortController) => {
             try {
+                const signal = abortController?.signal;
+
                 // Parse the request URL
                 // Format: client://flood/{z}/{x}/{y}
                 const url = params.url.replace('client://', '');
@@ -98,7 +121,7 @@ class FloodMapClient {
                     // Generate tile (logging in production can be removed)
 
                     // Generate tile based on mode
-                    const blob = await self.generateTile(z, x, y, mode, self.currentWaterLevel);
+                    const blob = await self.generateTile(z, x, y, mode, self.currentWaterLevel, signal);
 
                     const arrayBuffer = await blob.arrayBuffer();
                     return { data: arrayBuffer };
@@ -106,6 +129,10 @@ class FloodMapClient {
                     throw new Error(`Invalid client protocol URL: ${params.url}`);
                 }
             } catch (error) {
+                if (error?.name === 'AbortError') {
+                    if (window.DEBUG_TILES) self.tileDebug.abortedProtocol++;
+                    throw error;
+                }
                 console.error(`Failed to generate tile from ${params.url}:`, error);
                 throw error;
             }
@@ -114,9 +141,19 @@ class FloodMapClient {
         console.log('✅ Client protocol registered successfully');
     }
 
-    async generateTile(z, x, y, mode, waterLevel = null) {
+    async generateTile(z, x, y, mode, waterLevel = null, signal = null) {
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
         // Load elevation data
-        const elevationData = await this.elevationRenderer.loadElevationTile(z, x, y);
+        let elevationData;
+        try {
+            elevationData = await this.elevationRenderer.loadElevationTile(z, x, y, signal);
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                if (window.DEBUG_TILES) this.tileDebug.abortedFetches++;
+            }
+            throw error;
+        }
 
         // Debug logging (development mode only)
         if (window.DEBUG_TILES && Math.random() < 0.05) { // 5% of tiles when debugging enabled
@@ -131,24 +168,35 @@ class FloodMapClient {
         // Try WebWorker rendering if available
         if (this.workerReady) {
             try {
-                const imageDataBuffer = await this.renderTileInWorker(elevationData, mode, waterLevel);
-                return this.imageDataToBlob(imageDataBuffer, 256, 256);
+                const result = await this.renderTileInWorker(elevationData, mode, waterLevel, signal);
+                if (result?.pngBuffer) {
+                    return new Blob([result.pngBuffer], { type: 'image/png' });
+                }
+                return this.imageDataToBlob(result, 256, 256);
             } catch (error) {
+                if (error?.name === 'AbortError') throw error;
                 console.warn('Worker rendering failed, falling back to main thread:', error);
                 // Fall through to main thread rendering
             }
         }
 
         // Main thread rendering (fallback or when worker not available)
-        return this.renderTileMainThread(z, x, y, elevationData, mode, waterLevel);
+        return this.renderTileMainThread(z, x, y, elevationData, mode, waterLevel, signal);
     }
 
-    async renderTileInWorker(elevationData, mode, waterLevel) {
+    async renderTileInWorker(elevationData, mode, waterLevel, signal = null) {
         return new Promise((resolve, reject) => {
             const jobId = this.workerJobId++;
 
             // Store the job callbacks
-            this.pendingWorkerJobs.set(jobId, { resolve, reject });
+            this.pendingWorkerJobs.set(jobId, { resolve, reject, signal });
+
+            if (signal?.aborted) {
+                if (window.DEBUG_TILES) this.tileDebug.abortedWorkerJobs++;
+                this.pendingWorkerJobs.delete(jobId);
+                reject(new DOMException('Aborted', 'AbortError'));
+                return;
+            }
 
             // Copy only the relevant region (handles non-zero byteOffset safely).
             // Note: We cannot transfer the original cached buffer because it would
@@ -171,7 +219,9 @@ class FloodMapClient {
         });
     }
 
-    async renderTileMainThread(z, x, y, elevationData, mode, waterLevel) {
+    async renderTileMainThread(z, x, y, elevationData, mode, waterLevel, signal = null) {
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
         // Create canvas
         const canvas = document.createElement('canvas');
         canvas.width = 256;
@@ -190,7 +240,15 @@ class FloodMapClient {
             this.elevationRenderer.fillImageData(imageData, fillColor);
             ctx.putImageData(imageData, 0, 0);
             return new Promise((resolve, reject) => {
+                if (signal?.aborted) {
+                    reject(new DOMException('Aborted', 'AbortError'));
+                    return;
+                }
                 canvas.toBlob(blob => {
+                    if (signal?.aborted) {
+                        reject(new DOMException('Aborted', 'AbortError'));
+                        return;
+                    }
                     blob ? resolve(blob) : reject(new Error(`Failed to create ${mode} tile`));
                 }, 'image/png');
             });
@@ -230,7 +288,15 @@ class FloodMapClient {
 
         // Convert to blob
         return new Promise((resolve, reject) => {
+            if (signal?.aborted) {
+                reject(new DOMException('Aborted', 'AbortError'));
+                return;
+            }
             canvas.toBlob(blob => {
+                if (signal?.aborted) {
+                    reject(new DOMException('Aborted', 'AbortError'));
+                    return;
+                }
                 blob ? resolve(blob) : reject(new Error(`Failed to create ${mode} tile`));
             }, 'image/png');
         });

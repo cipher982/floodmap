@@ -5,8 +5,9 @@
 
 class ElevationRenderer {
     constructor() {
-        // Elevation data cache - permanent storage
+        // Elevation data cache (bounded LRU)
         this.elevationCache = new Map();
+        this.elevationCacheMaxTiles = 512;
 
         // Rendered tile cache - temporary, cleared on water level change
         this.renderedCache = new Map();
@@ -54,15 +55,20 @@ class ElevationRenderer {
      * @param {number} z - Zoom level
      * @param {number} x - Tile X coordinate
      * @param {number} y - Tile Y coordinate
+     * @param {AbortSignal|null} signal - Optional abort signal
      * @returns {Promise<Uint16Array>} Raw elevation data
      */
-    async loadElevationTile(z, x, y) {
+    async loadElevationTile(z, x, y, signal = null) {
         const key = `${z}/${x}/${y}`;
 
         // Check cache first
         if (this.elevationCache.has(key)) {
             this.stats.cacheHits++;
-            return this.elevationCache.get(key);
+            const cached = this.elevationCache.get(key);
+            // Refresh LRU position
+            this.elevationCache.delete(key);
+            this.elevationCache.set(key, cached);
+            return cached;
         }
 
         // Check if already loading
@@ -73,7 +79,7 @@ class ElevationRenderer {
         // Start loading (with cache-busting in development)
         const cacheBuster = window.location.hostname === 'localhost' ? `?t=${Date.now()}` : '';
         const precompressedParam = cacheBuster ? `&method=precompressed` : `?method=precompressed`;
-        const loadPromise = fetch(`/floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16${cacheBuster}${precompressedParam}`)
+        const loadPromise = fetch(`/floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16${cacheBuster}${precompressedParam}`, { signal })
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Failed to load elevation tile ${key}: ${response.status}`);
@@ -101,12 +107,21 @@ class ElevationRenderer {
 
                 // Cache the data
                 this.elevationCache.set(key, elevationData);
+                while (this.elevationCache.size > this.elevationCacheMaxTiles) {
+                    const oldestKey = this.elevationCache.keys().next().value;
+                    this.elevationCache.delete(oldestKey);
+                }
                 this.loadingTiles.delete(key);
                 this.stats.tilesLoaded++;
 
                 return elevationData;
             })
             .catch(error => {
+                if (error?.name === 'AbortError') {
+                    // Abort is expected during rapid pan/zoom; do not log or cache.
+                    this.loadingTiles.delete(key);
+                    throw error;
+                }
                 console.error(`❌ Error loading elevation tile ${key}:`, error);
                 console.error(`   URL was: /floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16`);
                 this.loadingTiles.delete(key);
@@ -262,6 +277,35 @@ class ElevationRenderer {
         this.renderedCache.clear();
         this.loadingTiles.clear();
         // All caches cleared
+    }
+
+    /**
+     * Configure max number of cached elevation tiles (LRU).
+     * @param {number} maxTiles
+     */
+    setElevationCacheMaxTiles(maxTiles) {
+        const n = Number(maxTiles);
+        if (!Number.isFinite(n) || n <= 0) return;
+        this.elevationCacheMaxTiles = Math.floor(n);
+        while (this.elevationCache.size > this.elevationCacheMaxTiles) {
+            const oldestKey = this.elevationCache.keys().next().value;
+            this.elevationCache.delete(oldestKey);
+        }
+    }
+
+    /**
+     * Best-effort abort of an in-flight tile load (does not poison caches).
+     * @param {number} z
+     * @param {number} x
+     * @param {number} y
+     */
+    abortElevationTileLoad(z, x, y) {
+        const key = `${z}/${x}/${y}`;
+        if (this.loadingTiles.has(key)) {
+            // We don't own the AbortController here (MapLibre does); just drop dedupe entry.
+            // This ensures new requests can proceed cleanly.
+            this.loadingTiles.delete(key);
+        }
     }
 
     /**

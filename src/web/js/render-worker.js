@@ -32,6 +32,12 @@ class WorkerElevationRenderer {
 
         // Precomputed ocean color for elevation mode (steel blue)
         this.OCEAN_RGBA = [70, 130, 180, 255];
+
+        // LUT state
+        this._elevationLut = null;
+        this._floodLut = null;
+        this._floodLutWlKey = null;
+        this._lutRebuilds = 0;
     }
 
     /**
@@ -142,10 +148,67 @@ class WorkerElevationRenderer {
             pixelData[i + 3] = a;
         }
     }
+
+    _packRgbaToU32(r, g, b, a) {
+        // Little-endian pack for Uint32Array view on Uint8ClampedArray buffer:
+        // bytes [r,g,b,a] => u32 = a<<24 | b<<16 | g<<8 | r
+        return ((a & 255) << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+    }
+
+    buildElevationLut() {
+        const lut = new Uint32Array(65536);
+        for (let u = 0; u < 65536; u++) {
+            const elevation = this.decodeElevation(u);
+            const [r, g, b, a] = this.calculateElevationColor(elevation);
+            lut[u] = this._packRgbaToU32(r, g, b, a);
+        }
+        this._lutRebuilds++;
+        return lut;
+    }
+
+    buildFloodLut(waterLevel) {
+        const lut = new Uint32Array(65536);
+        for (let u = 0; u < 65536; u++) {
+            const elevation = this.decodeElevation(u);
+            const [r, g, b, a] = this.calculateFloodColor(elevation, waterLevel);
+            lut[u] = this._packRgbaToU32(r, g, b, a);
+        }
+        this._lutRebuilds++;
+        return lut;
+    }
+
+    getElevationLut() {
+        if (!this._elevationLut) this._elevationLut = this.buildElevationLut();
+        return this._elevationLut;
+    }
+
+    getFloodLut(waterLevel) {
+        const wlKey = Math.round(waterLevel * 10) / 10; // 0.1m steps to match wl=
+        if (!this._floodLut || this._floodLutWlKey !== wlKey) {
+            this._floodLut = this.buildFloodLut(wlKey);
+            this._floodLutWlKey = wlKey;
+        }
+        return this._floodLut;
+    }
 }
 
 // Worker instance
 const renderer = new WorkerElevationRenderer();
+
+function supportsOffscreenPng() {
+    return typeof OffscreenCanvas !== 'undefined' &&
+        typeof OffscreenCanvas.prototype.getContext === 'function';
+}
+
+async function encodePngOffscreen(pixelBuffer, width, height) {
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d', { alpha: true });
+    if (!ctx) throw new Error('OffscreenCanvas 2D context unavailable');
+    const imageData = new ImageData(new Uint8ClampedArray(pixelBuffer), width, height);
+    ctx.putImageData(imageData, 0, 0);
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return await blob.arrayBuffer();
+}
 
 // Message handler
 self.onmessage = function(e) {
@@ -160,6 +223,7 @@ self.onmessage = function(e) {
 
             // Allocate pixel buffer (avoid ImageData dependency in worker context)
             const pixelData = new Uint8ClampedArray(width * height * 4);
+            const pixelU32 = new Uint32Array(pixelData.buffer);
 
             // Fast-path: check if entire tile is NODATA
             if (renderer.isAllNoData(elevationArray)) {
@@ -167,37 +231,51 @@ self.onmessage = function(e) {
                     ? renderer.colors.FLOODED
                     : renderer.OCEAN_RGBA;
 
-                renderer.fillPixelBuffer(pixelData, fillColor);
+                const packed = renderer._packRgbaToU32(fillColor[0], fillColor[1], fillColor[2], fillColor[3]);
+                pixelU32.fill(packed);
 
                 // Send back the pixel buffer
-                self.postMessage({
-                    type: 'complete',
-                    jobId,
-                    imageData: pixelData.buffer
-                }, [pixelData.buffer]);
+                if (supportsOffscreenPng()) {
+                    encodePngOffscreen(pixelData.buffer, width, height)
+                        .then(pngBuffer => {
+                            self.postMessage({ type: 'complete', jobId, pngBuffer }, [pngBuffer]);
+                        })
+                        .catch(() => {
+                            self.postMessage({ type: 'complete', jobId, imageData: pixelData.buffer }, [pixelData.buffer]);
+                        });
+                    return;
+                }
+                self.postMessage({ type: 'complete', jobId, imageData: pixelData.buffer }, [pixelData.buffer]);
                 return;
             }
 
-            // Process each pixel
-            for (let i = 0; i < elevationArray.length; i++) {
-                const elevation = renderer.decodeElevation(elevationArray[i]);
-                const color = mode === 'elevation'
-                    ? renderer.calculateElevationColor(elevation)
-                    : renderer.calculateFloodColor(elevation, waterLevel);
+            const lut = (mode === 'elevation')
+                ? renderer.getElevationLut()
+                : renderer.getFloodLut(waterLevel);
 
-                const offset = i * 4;
-                pixelData[offset] = color[0];
-                pixelData[offset + 1] = color[1];
-                pixelData[offset + 2] = color[2];
-                pixelData[offset + 3] = color[3];
+            // Process each pixel: rgba32 = lut[u16]
+            for (let i = 0; i < elevationArray.length; i++) {
+                pixelU32[i] = lut[elevationArray[i]];
+            }
+
+            if (supportsOffscreenPng()) {
+                encodePngOffscreen(pixelData.buffer, width, height)
+                    .then(pngBuffer => {
+                        self.postMessage({ type: 'complete', jobId, pngBuffer }, [pngBuffer]);
+                    })
+                    .catch(() => {
+                        self.postMessage({ type: 'complete', jobId, imageData: pixelData.buffer }, [pixelData.buffer]);
+                    });
+                return;
             }
 
             // Send back the pixel buffer (transfer ownership for performance)
-            self.postMessage({
-                type: 'complete',
-                jobId,
-                imageData: pixelData.buffer
-            }, [pixelData.buffer]);
+            self.postMessage({ type: 'complete', jobId, imageData: pixelData.buffer }, [pixelData.buffer]);
+
+            // Occasionally report LUT rebuild count (debug only)
+            if (self.DEBUG_TILES) {
+                self.postMessage({ type: 'stats', lutRebuilds: renderer._lutRebuilds });
+            }
 
         } catch (error) {
             self.postMessage({
