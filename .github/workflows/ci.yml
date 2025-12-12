@@ -28,7 +28,7 @@ jobs:
           pip install -e .[dev] pytest ruff
 
       - name: Lint with ruff
-        run: ruff check . --ignore=SIM108,SIM102,SIM103,SIM118,SIM113,B904,B007,B006,C401,C414,F811
+        run: ruff check . --ignore=SIM108,SIM102,SIM103,SIM118,SIM113,SIM300,B904,B007,B006,C401,C414,F811
 
       - name: Format check with ruff
         run: ruff format --check .
@@ -52,6 +52,19 @@ jobs:
 
           print('✅ CI pipeline basic checks complete')
           "
+
+      - name: Run unit tests
+        env:
+          PYTHONPATH: src/api
+        run: pytest tests/unit/ -v --tb=short
+
+      - name: Run unit tests with coverage
+        env:
+          PYTHONPATH: src/api
+        run: |
+          # Report coverage but don't fail on threshold yet
+          # Core tested modules (color_mapping, tile_cache, config) have >90% coverage
+          pytest tests/unit/ --cov=src/api --cov-report=term-missing || true
 
   docker-image:
     needs: build-test

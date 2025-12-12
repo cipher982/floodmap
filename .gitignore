@@ -215,9 +215,9 @@ test_screenshot.png
 .app.pid
 .tileserver.pid
 temp/
-# Temporary files and downloads
-test_*.py
-debug_*.py
+# Temporary files and downloads (root level only, not tests/)
+/test_*.py
+/debug_*.py
 debug_*.png
 planetiler.jar
 ARCHIVED_DATA
