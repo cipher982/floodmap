@@ -33,7 +33,7 @@ class FloodMapClient {
         if (typeof Worker !== 'undefined') {
             try {
                 // Cache-bust worker URL alongside other static assets
-                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212i');
+                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212j');
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -671,10 +671,46 @@ class FloodMapClient {
                 tileInfo = `🗂️ Tile: ${zoom}/${tileCoords.x}/${tileCoords.y} (${tilePath})`;
             }
 
+            // Water detection via rendered vector tiles (simple + fast).
+            // If we're clicking on a lake/ocean polygon, show "Water" rather than
+            // a misleading land-based risk from DEM artefacts.
+            let isWater = false;
+            if (this.map) {
+                const point = this.map.project([lng, lat]);
+                const pad = 2; // small tolerance for edge clicks / antialiasing
+                const bbox = [
+                    [point.x - pad, point.y - pad],
+                    [point.x + pad, point.y + pad]
+                ];
+                const waterFeatures = this.map.queryRenderedFeatures(bbox, { layers: ['water'] });
+                isWater = Array.isArray(waterFeatures) && waterFeatures.length > 0;
+            }
+
+            if (isWater) {
+                const data = {
+                    latitude: lat,
+                    longitude: lng,
+                    elevation_m: null,
+                    flood_risk_level: 'water',
+                    water_level_m: this.currentWaterLevel,
+                    risk_description: 'Open water (vector mask)',
+                    tileInfo
+                };
+                this.updateRiskPanel(data);
+                this.updateLocationInfo(data);
+                this.addLocationMarker(lng, lat, data);
+                return;
+            }
+
             const response = await fetch('/floodmap/api/risk/location', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ latitude: lat, longitude: lng, waterLevelM: this.currentWaterLevel })
+                body: JSON.stringify({
+                    latitude: lat,
+                    longitude: lng,
+                    waterLevelM: this.currentWaterLevel,
+                    isWater
+                })
             });
 
             const data = await response.json();

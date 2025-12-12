@@ -94,3 +94,25 @@ async def test_risk_location_all_nodata_returns_water(monkeypatch):
 
     assert resp.flood_risk_level == "water"
     assert resp.elevation_m is None
+
+
+async def test_risk_location_respects_client_is_water(monkeypatch):
+    from routers import risk
+
+    def boom(*args, **kwargs):
+        raise AssertionError("elevation_loader should not be called when isWater=true")
+
+    monkeypatch.setattr(risk.elevation_loader, "get_elevation_for_tile", boom)
+
+    req = risk.LocationRequest.model_validate(
+        {
+            "latitude": 47.5381,
+            "longitude": -86.5769,
+            "waterLevelM": 1.6,
+            "isWater": True,
+        }
+    )
+    resp = await risk.assess_flood_risk(req)
+
+    assert resp.flood_risk_level == "water"
+    assert resp.elevation_m is None

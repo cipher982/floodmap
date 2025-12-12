@@ -18,6 +18,7 @@ class LocationRequest(BaseModel):
     latitude: float
     longitude: float
     water_level_m: float = Field(1.0, alias="waterLevelM")
+    is_water: bool | None = Field(None, alias="isWater")
 
 
 class RiskResponse(BaseModel):
@@ -33,6 +34,16 @@ class RiskResponse(BaseModel):
 async def assess_flood_risk(location: LocationRequest):
     """Assess flood risk for a specific location."""
     try:
+        if location.is_water is True:
+            return RiskResponse(
+                latitude=location.latitude,
+                longitude=location.longitude,
+                elevation_m=None,
+                flood_risk_level="water",
+                water_level_m=float(location.water_level_m),
+                risk_description="Open water (client vector mask)",
+            )
+
         # IMPORTANT: frontend tile availability is capped at z=11 to match precompressed coverage.
         # Keep risk sampling within that range so we don't depend on runtime generation.
         zoom = 11
