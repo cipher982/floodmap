@@ -41,6 +41,7 @@ from config import (
 )
 from elevation_loader import elevation_loader  # Uses preprocessed aligned data
 from error_handling import log_performance, safe_tile_generation
+from http_client import get_http_client
 from persistent_elevation_cache import persistent_elevation_cache
 from predictive_preloader import predictive_preloader
 from tile_cache import tile_cache
@@ -206,46 +207,42 @@ async def get_vector_tile(
             status_code=400, detail=f"Unsupported vector source: {source}"
         )
 
-    # Use simple httpx with correct port configuration
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            # Request identity encoding from upstream; compress for client below
-            response = await client.get(
-                f"{TILESERVER_URL}/data/{tileserver_source}/{z}/{x}/{y}.pbf",
-                headers={"Accept-Encoding": "identity"},
-            )
+    # Use shared pooled HTTP client for efficient connection reuse
+    client = await get_http_client()
+    try:
+        # Request identity encoding from upstream; compress for client below
+        response = await client.get(
+            f"{TILESERVER_URL}/data/{tileserver_source}/{z}/{x}/{y}.pbf",
+            headers={"Accept-Encoding": "identity"},
+        )
 
-            if response.status_code == 200:
-                content = response.content
-                # Compress for client if supported
-                accept_enc = (
-                    request.headers.get("accept-encoding", "") if request else ""
-                )
-                payload, cenc = _maybe_compress(
-                    content, accept_enc, min_size=VECTOR_TILE_MIN_SIZE
-                )
-                resp = create_tile_response(
-                    content=payload,
-                    content_type="application/x-protobuf",
-                    tile_source="vector",
-                )
-                if cenc:
-                    resp.headers["Content-Encoding"] = cenc
-                    resp.headers["Vary"] = "Accept-Encoding"
-                return resp
-            elif response.status_code == 204:
-                return create_tile_response(
-                    content=b"",
-                    content_type="application/x-protobuf",
-                    tile_source="vector",
-                )
-            else:
-                raise HTTPException(status_code=404, detail="Vector tile not found")
-        except httpx.RequestError as e:
-            logger.error(f"Tileserver connection error: {e}")
-            raise HTTPException(
-                status_code=503, detail="Vector tile service unavailable"
+        if response.status_code == 200:
+            content = response.content
+            # Compress for client if supported
+            accept_enc = request.headers.get("accept-encoding", "") if request else ""
+            payload, cenc = _maybe_compress(
+                content, accept_enc, min_size=VECTOR_TILE_MIN_SIZE
             )
+            resp = create_tile_response(
+                content=payload,
+                content_type="application/x-protobuf",
+                tile_source="vector",
+            )
+            if cenc:
+                resp.headers["Content-Encoding"] = cenc
+                resp.headers["Vary"] = "Accept-Encoding"
+            return resp
+        elif response.status_code == 204:
+            return create_tile_response(
+                content=b"",
+                content_type="application/x-protobuf",
+                tile_source="vector",
+            )
+        else:
+            raise HTTPException(status_code=404, detail="Vector tile not found")
+    except httpx.RequestError as e:
+        logger.error(f"Tileserver connection error: {e}")
+        raise HTTPException(status_code=503, detail="Vector tile service unavailable")
 
 
 # ============================================================================
