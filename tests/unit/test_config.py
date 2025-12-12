@@ -4,6 +4,7 @@ Unit tests for config.py - configuration and environment variable handling.
 These tests verify configuration defaults and environment-based behavior.
 """
 
+import re
 from pathlib import Path
 
 
@@ -252,3 +253,29 @@ class TestRuntimeElevationCache:
 
         # Note: This test documents expected behavior, actual value depends on env
         assert isinstance(ENABLE_RUNTIME_ELEVATION_CACHE, bool)
+
+
+class TestFrontendBackendConsistency:
+    """Test that frontend and backend configuration stay in sync."""
+
+    # Precompressed tiles only exist for zoom 0-11
+    PRECOMPRESSED_MAX_ZOOM = 11
+
+    def test_frontend_maxzoom_matches_precompressed_tiles(self):
+        """Frontend maxZoom must not exceed precompressed tile availability.
+
+        This catches the bug where zooming beyond precompressed tiles
+        causes all tiles to appear as water/NODATA.
+        """
+        js_file = Path(__file__).parent.parent.parent / "src/web/js/map-client.js"
+        content = js_file.read_text()
+
+        # Find maxZoom in the config object
+        match = re.search(r"maxZoom:\s*(\d+)", content)
+        assert match, "Could not find maxZoom setting in map-client.js"
+
+        frontend_max_zoom = int(match.group(1))
+        assert frontend_max_zoom <= self.PRECOMPRESSED_MAX_ZOOM, (
+            f"Frontend maxZoom ({frontend_max_zoom}) exceeds precompressed tile limit "
+            f"({self.PRECOMPRESSED_MAX_ZOOM}). Users will see broken tiles at high zoom."
+        )
