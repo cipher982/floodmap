@@ -33,7 +33,7 @@ class FloodMapClient {
         if (typeof Worker !== 'undefined') {
             try {
                 // Cache-bust worker URL alongside other static assets
-                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212a');
+                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212c');
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -207,6 +207,7 @@ class FloodMapClient {
             };
 
             const job = {
+                jobId,
                 signal,
                 abortHandler: null,
                 finishResolve: (value) => finish(() => resolve(value)),
@@ -218,6 +219,10 @@ class FloodMapClient {
             if (signal) {
                 job.abortHandler = () => {
                     if (window.DEBUG_TILES) this.tileDebug.abortedWorkerJobs++;
+                    // Best-effort: tell worker to stop early (reduces wasted CPU).
+                    try {
+                        this.renderWorker.postMessage({ type: 'cancel', jobId });
+                    } catch {}
                     job.finishReject(new DOMException('Aborted', 'AbortError'));
                 };
                 try { signal.addEventListener('abort', job.abortHandler, { once: true }); } catch {}

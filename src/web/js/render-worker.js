@@ -219,9 +219,22 @@ self.onmessage = function(e) {
         return;
     }
 
+    if (type === 'cancel') {
+        // Best-effort cancellation: mark job as cancelled. Rendering loop checks periodically.
+        self._cancelledJobIds = self._cancelledJobIds || new Set();
+        self._cancelledJobIds.add(jobId);
+        return;
+    }
+
     if (type === 'render') {
         try {
             const { elevationData, mode, waterLevel, width, height } = data;
+
+            // Fast check before doing any work
+            if (self._cancelledJobIds?.has(jobId)) {
+                self._cancelledJobIds.delete(jobId);
+                return;
+            }
 
             // Convert back to Uint16Array
             const elevationArray = new Uint16Array(elevationData);
@@ -260,12 +273,26 @@ self.onmessage = function(e) {
 
             // Process each pixel: rgba32 = lut[u16]
             for (let i = 0; i < elevationArray.length; i++) {
+                // Check cancellation periodically without adding too much overhead
+                if ((i & 1023) === 0 && self._cancelledJobIds?.has(jobId)) {
+                    self._cancelledJobIds.delete(jobId);
+                    return;
+                }
                 pixelU32[i] = lut[elevationArray[i]];
+            }
+
+            if (self._cancelledJobIds?.has(jobId)) {
+                self._cancelledJobIds.delete(jobId);
+                return;
             }
 
             if (supportsOffscreenPng()) {
                 encodePngOffscreen(pixelData.buffer, width, height)
                     .then(pngBuffer => {
+                        if (self._cancelledJobIds?.has(jobId)) {
+                            self._cancelledJobIds.delete(jobId);
+                            return;
+                        }
                         self.postMessage({ type: 'complete', jobId, pngBuffer }, [pngBuffer]);
                     })
                     .catch(() => {

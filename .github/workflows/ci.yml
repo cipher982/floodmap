@@ -64,7 +64,7 @@ jobs:
         run: pytest tests/unit/ -v --tb=short
 
       - name: Run JS unit tests
-        run: node --test src/web/js/render-worker.test.js
+        run: node --test src/web/js/render-worker.test.mjs
 
       - name: Run unit tests with coverage
         env:
