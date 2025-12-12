@@ -32,6 +32,8 @@ class WorkerElevationRenderer {
 
         // Precomputed ocean color for elevation mode (steel blue)
         this.OCEAN_RGBA = [70, 130, 180, 255];
+        // In flood mode, treat NODATA as water (not "flooded land").
+        this.WATER_RGBA = [70, 130, 180, 220];
 
         // LUT state
         this._elevationLut = null;
@@ -56,7 +58,7 @@ class WorkerElevationRenderer {
     calculateFloodColor(elevation, waterLevel) {
         // Handle NODATA (ocean/missing data)
         if (elevation === -32768) {
-            return this.colors.FLOODED;
+            return this.WATER_RGBA;
         }
 
         // Calculate relative elevation
@@ -246,7 +248,7 @@ self.onmessage = function(e) {
             // Fast-path: check if entire tile is NODATA
             if (renderer.isAllNoData(elevationArray)) {
                 const fillColor = (mode === 'flood')
-                    ? renderer.colors.FLOODED
+                    ? renderer.WATER_RGBA
                     : renderer.OCEAN_RGBA;
 
                 const packed = renderer._packRgbaToU32(fillColor[0], fillColor[1], fillColor[2], fillColor[3]);

@@ -48,6 +48,9 @@ class ElevationRenderer {
 
         // Precomputed ocean color for elevation mode (steel blue)
         this.OCEAN_RGBA = [70, 130, 180, 255];
+
+        // In flood mode, treat NODATA as water (not "flooded land").
+        this.WATER_RGBA = [70, 130, 180, 220];
     }
 
     /**
@@ -82,7 +85,7 @@ class ElevationRenderer {
         const qs = new URLSearchParams();
         qs.set('method', 'precompressed');
         if (window.location.hostname === 'localhost') qs.set('t', String(Date.now()));
-        qs.set('v', '20251212e');
+        qs.set('v', '20251212f');
         const url = `/floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16?${qs.toString()}`;
 
         const loadPromise = fetch(url, { signal })
@@ -162,7 +165,7 @@ class ElevationRenderer {
     calculateFloodColor(elevation, waterLevel) {
         // Handle NODATA (ocean/missing data)
         if (elevation === -32768) {
-            return this.colors.FLOODED;
+            return this.WATER_RGBA;
         }
 
         // Calculate relative elevation
