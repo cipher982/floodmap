@@ -239,7 +239,11 @@ if IS_DEVELOPMENT or ENABLE_PERF_TEST_ROUTES:
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 
 # Serve static frontend files
+#
+# Production is hosted under a `/floodmap` subpath (reverse proxy), but local
+# dev/tests commonly run at `/`. Mount both so local E2E works.
 app.mount("/static", StaticFiles(directory="../web"), name="static")
+app.mount("/floodmap/static", StaticFiles(directory="../web"), name="static_floodmap")
 
 
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -247,6 +251,12 @@ async def serve_frontend():
     """Serve the main application frontend."""
     with open("../web/index.html") as f:
         return HTMLResponse(content=f.read())
+
+
+@app.api_route("/floodmap/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def serve_frontend_floodmap():
+    """Serve the frontend when hosted under the /floodmap subpath."""
+    return await serve_frontend()
 
 
 @app.get("/favicon.svg", include_in_schema=False)
@@ -265,10 +275,20 @@ async def favicon_svg():
         return Response(content=svg, media_type="image/svg+xml")
 
 
+@app.get("/floodmap/favicon.svg", include_in_schema=False)
+async def favicon_svg_floodmap():
+    return await favicon_svg()
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon_ico():
     """Redirect .ico requests to the SVG favicon to avoid 404s."""
     return RedirectResponse(url="/favicon.svg")
+
+
+@app.get("/floodmap/favicon.ico", include_in_schema=False)
+async def favicon_ico_floodmap():
+    return RedirectResponse(url="/floodmap/favicon.svg")
 
 
 @app.get("/site.webmanifest", include_in_schema=False)
@@ -296,6 +316,11 @@ async def site_manifest():
     return Response(
         content=json.dumps(manifest), media_type="application/manifest+json"
     )
+
+
+@app.get("/floodmap/site.webmanifest", include_in_schema=False)
+async def site_manifest_floodmap():
+    return await site_manifest()
 
 
 if __name__ == "__main__":
