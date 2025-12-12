@@ -34,7 +34,7 @@ class FloodMapClient {
         if (typeof Worker !== 'undefined') {
             try {
                 // Cache-bust worker URL alongside other static assets
-                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212l');
+                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212m');
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -408,7 +408,30 @@ class FloodMapClient {
                         type: 'fill',
                         source: 'vector-tiles',
                         'source-layer': 'water',
+                        // Avoid low-zoom coastline simplification artifacts by NOT
+                        // drawing ocean/sea polygons here; ocean is already handled
+                        // by raster NODATA. We still keep a hidden ocean hit layer
+                        // for click/UX context.
+                        filter: [
+                            'all',
+                            ['!=', ['get', 'class'], 'ocean'],
+                            ['!=', ['get', 'class'], 'sea'],
+                        ],
                         paint: { 'fill-color': 'rgba(70, 130, 180, 0.85)' }
+                    },
+                    {
+                        id: 'water-ocean-hit',
+                        type: 'fill',
+                        source: 'vector-tiles',
+                        'source-layer': 'water',
+                        filter: [
+                            'any',
+                            ['==', ['get', 'class'], 'ocean'],
+                            ['==', ['get', 'class'], 'sea'],
+                        ],
+                        // Invisible-but-queryable layer for detecting coastal context
+                        // without visually drawing simplified ocean polygons.
+                        paint: { 'fill-color': 'rgba(70, 130, 180, 0.01)' }
                     },
                     {
                         id: 'waterway',
@@ -692,7 +715,7 @@ class FloodMapClient {
                     [point.x - pad, point.y - pad],
                     [point.x + pad, point.y + pad]
                 ];
-                const waterFeatures = this.map.queryRenderedFeatures(bbox, { layers: ['water'] });
+                const waterFeatures = this.map.queryRenderedFeatures(bbox, { layers: ['water', 'water-ocean-hit'] });
                 const waterwayFeatures = this.map.queryRenderedFeatures(bbox, { layers: ['waterway'] });
 
                 isWater = (Array.isArray(waterFeatures) && waterFeatures.length > 0) ||
