@@ -24,7 +24,7 @@ class FloodMapClient {
         // Check if WebWorker is supported
         if (typeof Worker !== 'undefined') {
             try {
-                this.renderWorker = new Worker('/floodmap/js/render-worker.js');
+                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js');
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -118,6 +118,45 @@ class FloodMapClient {
             });
         }
 
+        // Try WebWorker rendering if available
+        if (this.workerReady) {
+            try {
+                const imageDataBuffer = await this.renderTileInWorker(elevationData, mode, waterLevel);
+                return this.imageDataToBlob(imageDataBuffer, 256, 256);
+            } catch (error) {
+                console.warn('Worker rendering failed, falling back to main thread:', error);
+                // Fall through to main thread rendering
+            }
+        }
+
+        // Main thread rendering (fallback or when worker not available)
+        return this.renderTileMainThread(elevationData, mode, waterLevel);
+    }
+
+    async renderTileInWorker(elevationData, mode, waterLevel) {
+        return new Promise((resolve, reject) => {
+            const jobId = this.workerJobId++;
+
+            // Store the job callbacks
+            this.pendingWorkerJobs.set(jobId, { resolve, reject });
+
+            // Send data to worker (transfer buffer for performance)
+            const buffer = elevationData.buffer.slice(0);
+            this.renderWorker.postMessage({
+                type: 'render',
+                jobId,
+                data: {
+                    elevationData: buffer,
+                    mode,
+                    waterLevel,
+                    width: 256,
+                    height: 256
+                }
+            }, [buffer]);
+        });
+    }
+
+    async renderTileMainThread(elevationData, mode, waterLevel) {
         // Create canvas
         const canvas = document.createElement('canvas');
         canvas.width = 256;
@@ -129,8 +168,6 @@ class FloodMapClient {
         const data = imageData.data;
 
         // Fast-path: if the entire tile is NODATA, fill with a consistent water/ocean color
-        // Use FLOODED blue in flood mode so offshore tiles match per-pixel NODATA handling
-        // Use OCEAN color in elevation mode
         if (this.elevationRenderer.isAllNoData(elevationData)) {
             const fillColor = (mode === 'flood')
                 ? this.elevationRenderer.colors.FLOODED
@@ -180,6 +217,23 @@ class FloodMapClient {
         return new Promise((resolve, reject) => {
             canvas.toBlob(blob => {
                 blob ? resolve(blob) : reject(new Error(`Failed to create ${mode} tile`));
+            }, 'image/png');
+        });
+    }
+
+    imageDataToBlob(imageDataBuffer, width, height) {
+        // Create canvas and put the ImageData from worker
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        const imageData = new ImageData(new Uint8ClampedArray(imageDataBuffer), width, height);
+        ctx.putImageData(imageData, 0, 0);
+
+        return new Promise((resolve, reject) => {
+            canvas.toBlob(blob => {
+                blob ? resolve(blob) : reject(new Error('Failed to create tile blob'));
             }, 'image/png');
         });
     }
@@ -351,6 +405,8 @@ class FloodMapClient {
 
     updateViewMode() {
         const waterLevelControls = document.getElementById('water-level-controls');
+        const floodLegend = document.getElementById('flood-legend');
+        const elevationLegend = document.getElementById('elevation-legend');
 
         if (this.viewMode === 'elevation') {
             waterLevelControls.style.opacity = '0';
@@ -358,12 +414,20 @@ class FloodMapClient {
             setTimeout(() => {
                 waterLevelControls.style.display = 'none';
             }, 200);
+
+            // Show elevation legend, hide flood legend
+            if (floodLegend) floodLegend.style.display = 'none';
+            if (elevationLegend) elevationLegend.style.display = 'flex';
         } else {
             waterLevelControls.style.display = 'block';
             setTimeout(() => {
                 waterLevelControls.style.opacity = '1';
                 waterLevelControls.style.transform = 'translateY(0)';
             }, 10);
+
+            // Show flood legend, hide elevation legend
+            if (elevationLegend) elevationLegend.style.display = 'none';
+            if (floodLegend) floodLegend.style.display = 'flex';
         }
 
         this.updateFloodLayer();
