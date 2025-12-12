@@ -382,11 +382,15 @@ class FloodMapClient {
                         type: 'raster',
                         tiles: [tileUrl],
                         tileSize: 256,
-                        scheme: 'xyz'
+                        scheme: 'xyz',
+                        // Critical: prevent MapLibre from requesting overscaled tiles
+                        // beyond our precompressed pyramid (tiles stop at z=11).
+                        maxzoom: config.maxZoom
                     },
                     'vector-tiles': {
                         type: 'vector',
-                        tiles: [window.location.origin + '/floodmap/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf']
+                        tiles: [window.location.origin + '/floodmap/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf'],
+                        maxzoom: config.maxZoom
                     }
                 },
                 layers: [

@@ -113,6 +113,27 @@ async def page(context: BrowserContext, app_server: str) -> Page:
     # Set base URL for convenience
     page.base_url = app_server
 
+    # Track the maximum z requested for elevation-data tiles.
+    page.max_elevation_request_z = None
+
+    def _track_request(req):
+        try:
+            url = req.url
+            marker = "/api/v1/tiles/elevation-data/"
+            if marker in url:
+                rest = url.split(marker, 1)[1]
+                z_str = rest.split("/", 1)[0]
+                z = int(z_str)
+                if (
+                    page.max_elevation_request_z is None
+                    or z > page.max_elevation_request_z
+                ):
+                    page.max_elevation_request_z = z
+        except Exception:
+            return
+
+    page.on("request", _track_request)
+
     yield page
 
     # Ensure all connections are closed

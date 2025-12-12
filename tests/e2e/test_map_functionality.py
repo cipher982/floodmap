@@ -246,3 +246,9 @@ async def test_max_zoom_matches_precompressed_tiles(map_page: MapPage):
     assert zoom_after <= (max_zoom + 0.001), (
         f"Map allowed zoom {zoom_after} beyond maxZoom {max_zoom}"
     )
+    # Stronger regression check: even when zoom is clamped, MapLibre may request
+    # overscaled tiles (z+1). We assert no elevation-data requests exceed z=11.
+    # This is validated from Playwright (network layer) in the fixture.
+    req_max = getattr(map_page.page, "max_elevation_request_z", None)
+    assert req_max is not None, "No elevation tile requests observed"
+    assert req_max <= 11, f"Requested elevation tile z={req_max} (>11)"
