@@ -34,7 +34,7 @@ class FloodMapClient {
         if (typeof Worker !== 'undefined') {
             try {
                 // Cache-bust worker URL alongside other static assets
-                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212k');
+                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212l');
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -432,6 +432,11 @@ class FloodMapClient {
             maxZoom: config.maxZoom
         });
 
+        // Defensive: ensure runtime maxZoom cannot drift beyond intended cap.
+        // This avoids "one extra zoom" blank/empty tiles if MapLibre defaults or
+        // style source metadata ever overrides config.
+        this.map.setMaxZoom(config.maxZoom);
+
         this.map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
         this.map.on('click', (e) => {
@@ -760,8 +765,8 @@ class FloodMapClient {
         if (coastal) {
             el.className = 'model-note model-note--ok';
             el.innerHTML = `
-                <strong>Coastal surge mode</strong><br>
-                Slider approximates sea level + storm surge (m above mean sea level).
+                <div class="model-note__title">Coastal surge model</div>
+                <div class="model-note__body">Slider ≈ sea level + storm surge (m above mean sea level).</div>
             `;
             return;
         }
@@ -769,16 +774,16 @@ class FloodMapClient {
         if (nearWater) {
             el.className = 'model-note model-note--warning';
             el.innerHTML = `
-                <strong>Inland water nearby</strong><br>
-                Slider is sea level/storm surge (absolute). River flooding (stage/flow/levees) isn’t modeled.
+                <div class="model-note__title">Inland water nearby</div>
+                <div class="model-note__body">Slider is absolute sea level/surge; river stage/levees aren’t modeled.</div>
             `;
             return;
         }
 
         el.className = 'model-note';
         el.innerHTML = `
-            <strong>Storm surge model</strong><br>
-            Slider is an absolute sea level / surge height (m above mean sea level).
+            <div class="model-note__title">Storm surge model</div>
+            <div class="model-note__body">Slider is absolute sea level/surge (m above mean sea level).</div>
         `;
     }
 

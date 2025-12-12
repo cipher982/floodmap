@@ -170,13 +170,22 @@ header h1 {
 
 .model-note {
     margin-top: 10px;
-    padding: 10px 12px;
+    padding: 8px 10px;
     border-radius: 8px;
     border: 1px solid #cbd5e1;
     background: #f1f5f9;
     color: #334155;
-    font-size: 0.8rem;
-    line-height: 1.35;
+    font-size: 0.72rem;
+    line-height: 1.25;
+}
+
+.model-note__title {
+    font-weight: 650;
+    margin-bottom: 2px;
+}
+
+.model-note__body {
+    opacity: 0.9;
 }
 
 .model-note--warning {
