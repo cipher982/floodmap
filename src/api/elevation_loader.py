@@ -4,6 +4,7 @@ Reads compressed elevation data and provides tile-based access.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import math
@@ -189,25 +190,27 @@ class ElevationDataLoader:
         )
 
         if not overlapping_files:
+            # Best-effort heuristic logging:
+            # - If we can cheaply check for vector features, missing DEM is suspicious (data gap).
+            # - Avoid asyncio.run_until_complete inside an active event loop (FastAPI),
+            #   which can raise and leak an un-awaited coroutine.
+            has_vector_data = None
             try:
-                # Check if vector tile exists (indicates geographic features)
-                loop = asyncio.get_event_loop()
-                has_vector_data = loop.run_until_complete(
-                    self._check_vector_tile(xtile, ytile, zoom)
+                asyncio.get_running_loop()
+            except RuntimeError:
+                # No running loop; safe to do a blocking vector check for logging.
+                with contextlib.suppress(Exception):
+                    has_vector_data = asyncio.run(
+                        self._check_vector_tile(xtile, ytile, zoom)
+                    )
+
+            if has_vector_data is True:
+                logger.warning(
+                    f"Missing elevation data for tile {xtile}/{ytile}/{zoom} with vector features (bounds: {lat_bottom:.3f}-{lat_top:.3f}N, {lon_left:.3f}-{lon_right:.3f}W) - potential data gap"
                 )
-
-                if has_vector_data:
-                    logger.warning(
-                        f"Missing elevation data for tile {xtile}/{ytile}/{zoom} with vector features (bounds: {lat_bottom:.3f}-{lat_top:.3f}N, {lon_left:.3f}-{lon_right:.3f}W) - potential data gap"
-                    )
-                else:
-                    logger.debug(
-                        f"No elevation files for tile {xtile}/{ytile}/{zoom} (likely ocean area)"
-                    )
-
-            except Exception as e:
-                logger.info(
-                    f"No elevation files found for tile {xtile}/{ytile}/{zoom} (bounds: {lat_bottom:.3f}-{lat_top:.3f}N, {lon_left:.3f}-{lon_right:.3f}W)"
+            else:
+                logger.debug(
+                    f"No elevation files for tile {xtile}/{ytile}/{zoom} (bounds: {lat_bottom:.3f}-{lat_top:.3f}N, {lon_left:.3f}-{lon_right:.3f}W)"
                 )
 
             return None
@@ -231,7 +234,7 @@ class ElevationDataLoader:
             if len(self.cache) >= self.max_cache_size:
                 # Remove oldest tile cache entry
                 oldest_key = next(
-                    (k for k in self.cache.keys() if k.startswith("tile_")), None
+                    (k for k in self.cache if k.startswith("tile_")), None
                 )
                 if oldest_key:
                     del self.cache[oldest_key]

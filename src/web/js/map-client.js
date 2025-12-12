@@ -33,7 +33,7 @@ class FloodMapClient {
         if (typeof Worker !== 'undefined') {
             try {
                 // Cache-bust worker URL alongside other static assets
-                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212c');
+                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212d');
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -658,7 +658,7 @@ class FloodMapClient {
             const response = await fetch('/floodmap/api/risk/location', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ latitude: lat, longitude: lng })
+                body: JSON.stringify({ latitude: lat, longitude: lng, waterLevelM: this.currentWaterLevel })
             });
 
             const data = await response.json();

@@ -76,10 +76,16 @@ class ElevationRenderer {
             return this.loadingTiles.get(key);
         }
 
-        // Start loading (with cache-busting in development)
-        const cacheBuster = window.location.hostname === 'localhost' ? `?t=${Date.now()}` : '';
-        const precompressedParam = cacheBuster ? `&method=precompressed` : `?method=precompressed`;
-        const loadPromise = fetch(`/floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16${cacheBuster}${precompressedParam}`, { signal })
+        // Start loading
+        // NOTE: We include a stable `v=` in production to avoid getting pinned to
+        // cached precompressed-miss (NODATA) responses after data repairs.
+        const qs = new URLSearchParams();
+        qs.set('method', 'precompressed');
+        if (window.location.hostname === 'localhost') qs.set('t', String(Date.now()));
+        qs.set('v', '20251212d');
+        const url = `/floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16?${qs.toString()}`;
+
+        const loadPromise = fetch(url, { signal })
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Failed to load elevation tile ${key}: ${response.status}`);
@@ -123,7 +129,7 @@ class ElevationRenderer {
                     throw error;
                 }
                 console.error(`❌ Error loading elevation tile ${key}:`, error);
-                console.error(`   URL was: /floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16`);
+                console.error(`   URL was: ${url}`);
                 this.loadingTiles.delete(key);
                 // Return NODATA tile on error
                 return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);

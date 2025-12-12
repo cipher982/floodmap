@@ -16,7 +16,6 @@ import httpx
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
-from fastapi.responses import Response
 
 try:
     import brotli  # type: ignore
@@ -28,6 +27,7 @@ load_dotenv()
 
 from color_mapping import color_mapper
 from config import (
+    IS_DEVELOPMENT,
     MAX_WATER_LEVEL,
     MAX_ZOOM,
     MIN_WATER_LEVEL,
@@ -242,7 +242,9 @@ async def get_vector_tile(
             raise HTTPException(status_code=404, detail="Vector tile not found")
     except httpx.RequestError as e:
         logger.error(f"Tileserver connection error: {e}")
-        raise HTTPException(status_code=503, detail="Vector tile service unavailable")
+        raise HTTPException(
+            status_code=503, detail="Vector tile service unavailable"
+        ) from e
 
 
 # ============================================================================
@@ -355,7 +357,9 @@ async def get_elevation_tile(
 
     except Exception as e:
         logger.error(f"Error serving elevation tile {z}/{x}/{y}: {e}")
-        raise HTTPException(status_code=500, detail="Elevation tile generation failed")
+        raise HTTPException(
+            status_code=500, detail="Elevation tile generation failed"
+        ) from e
 
 
 # ============================================================================
@@ -484,7 +488,9 @@ async def get_flood_tile(
 
     except Exception as e:
         logger.error(f"Error serving flood tile {water_level}m/{z}/{x}/{y}: {e}")
-        raise HTTPException(status_code=500, detail="Flood tile generation failed")
+        raise HTTPException(
+            status_code=500, detail="Flood tile generation failed"
+        ) from e
 
 
 # ============================================================================
@@ -653,7 +659,15 @@ async def serve_precompressed_elevation_tile(
         )
 
         headers = {
-            "Cache-Control": "public, max-age=31536000, immutable",
+            # Important: a precompressed miss is not necessarily "immutable".
+            # If upstream DEM data is repaired or precompressed tiles are later
+            # generated, we want caches (especially Cloudflare) to refresh
+            # reasonably quickly instead of pinning a land tile to NODATA for a year.
+            "Cache-Control": (
+                "no-cache, no-store, must-revalidate"
+                if IS_DEVELOPMENT
+                else "public, max-age=3600"
+            ),
             "Access-Control-Allow-Origin": "*",
             "X-Tile-Source": "nodata",
             "X-Method": "precompressed",
@@ -670,7 +684,9 @@ async def serve_precompressed_elevation_tile(
 
     except Exception as e:
         logger.error(f"Precompressed tile error for {z}/{x}/{y}: {e}")
-        raise HTTPException(status_code=500, detail="Precompressed tile serving failed")
+        raise HTTPException(
+            status_code=500, detail="Precompressed tile serving failed"
+        ) from e
 
 
 @router.get("/elevation-data/{z}/{x}/{y}.u16")
@@ -774,7 +790,9 @@ async def get_elevation_data_tile(
 
     except Exception as e:
         logger.error(f"Error serving elevation data {z}/{x}/{y}: {e}")
-        raise HTTPException(status_code=500, detail="Elevation data generation failed")
+        raise HTTPException(
+            status_code=500, detail="Elevation data generation failed"
+        ) from e
 
 
 # ============================================================================
