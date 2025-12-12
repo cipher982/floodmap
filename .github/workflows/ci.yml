@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[dev] pytest ruff
+          pip install -e .[dev,test] ruff
 
       - name: Lint with ruff
         run: ruff check . --ignore=SIM108,SIM102,SIM103,SIM118,SIM113,SIM300,B904,B007,B006,C401,C414,F811

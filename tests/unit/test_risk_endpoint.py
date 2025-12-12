@@ -73,6 +73,7 @@ async def test_risk_location_water_point_returns_water(monkeypatch):
     assert resp.elevation_m is None
 
 
+@pytest.mark.asyncio
 async def test_risk_location_all_nodata_returns_water(monkeypatch):
     from routers import risk
 
