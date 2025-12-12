@@ -61,13 +61,38 @@ async def assess_flood_risk(location: LocationRequest):
             elevation = None
 
         if elevation is None:
-            logger.warning(
-                f"No elevation data found for {location.latitude}, {location.longitude}"
+            # Distinguish "water/no land elevation" vs "missing dataset".
+            # If the surrounding tile has *any* valid land elevations, but the sampled
+            # point is NODATA, it's very likely a lake/ocean point.
+            if elevation_array is not None and (elevation_array != -32768).any():
+                return RiskResponse(
+                    latitude=location.latitude,
+                    longitude=location.longitude,
+                    elevation_m=None,
+                    flood_risk_level="water",
+                    water_level_m=float(location.water_level_m),
+                    risk_description=f"Open water / no land elevation at this point (z{zoom} sample)",
+                )
+
+            logger.info(
+                "No elevation data available for risk assessment",
+                extra={
+                    "lat": location.latitude,
+                    "lon": location.longitude,
+                    "z": zoom,
+                    "x": x_tile,
+                    "y": y_tile,
+                },
             )
-            raise HTTPException(
-                status_code=404,
-                detail=f"No elevation data available for coordinates {location.latitude}, {location.longitude}",
+            return RiskResponse(
+                latitude=location.latitude,
+                longitude=location.longitude,
+                elevation_m=None,
+                flood_risk_level="unknown",
+                water_level_m=float(location.water_level_m),
+                risk_description=f"No elevation data available (z{zoom} sample)",
             )
+
         else:
             # Calculate flood risk based on elevation relative to water level.
             relative = elevation - float(location.water_level_m)
@@ -99,6 +124,8 @@ async def assess_flood_risk(location: LocationRequest):
             risk_description=f"{risk_description} (z{zoom} sample)",
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error assessing flood risk: {e}")
         # Fallback to mock data on error
