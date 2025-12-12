@@ -383,6 +383,8 @@ button:hover {
     min-width: 200px;
     z-index: 1000;
     transition: opacity 0.3s ease;
+    /* Never block map pan/zoom gestures */
+    pointer-events: none;
 }
 
 .legend h4 {

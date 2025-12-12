@@ -131,16 +131,15 @@ class WorkerElevationRenderer {
     }
 
     /**
-     * Fill ImageData with solid color
+     * Fill a pixel buffer with solid RGBA
      */
-    fillImageData(imageData, rgba) {
-        const data = imageData.data;
+    fillPixelBuffer(pixelData, rgba) {
         const [r, g, b, a] = rgba;
-        for (let i = 0; i < data.length; i += 4) {
-            data[i] = r;
-            data[i + 1] = g;
-            data[i + 2] = b;
-            data[i + 3] = a;
+        for (let i = 0; i < pixelData.length; i += 4) {
+            pixelData[i] = r;
+            pixelData[i + 1] = g;
+            pixelData[i + 2] = b;
+            pixelData[i + 3] = a;
         }
     }
 }
@@ -159,28 +158,25 @@ self.onmessage = function(e) {
             // Convert back to Uint16Array
             const elevationArray = new Uint16Array(elevationData);
 
+            // Allocate pixel buffer (avoid ImageData dependency in worker context)
+            const pixelData = new Uint8ClampedArray(width * height * 4);
+
             // Fast-path: check if entire tile is NODATA
             if (renderer.isAllNoData(elevationArray)) {
                 const fillColor = (mode === 'flood')
                     ? renderer.colors.FLOODED
                     : renderer.OCEAN_RGBA;
 
-                // Create filled ImageData
-                const imageData = new ImageData(width, height);
-                renderer.fillImageData(imageData, fillColor);
+                renderer.fillPixelBuffer(pixelData, fillColor);
 
-                // Send back the ImageData buffer
+                // Send back the pixel buffer
                 self.postMessage({
                     type: 'complete',
                     jobId,
-                    imageData: imageData.data.buffer
-                }, [imageData.data.buffer]);
+                    imageData: pixelData.buffer
+                }, [pixelData.buffer]);
                 return;
             }
-
-            // Create ImageData for processing
-            const imageData = new ImageData(width, height);
-            const pixelData = imageData.data;
 
             // Process each pixel
             for (let i = 0; i < elevationArray.length; i++) {
@@ -196,12 +192,12 @@ self.onmessage = function(e) {
                 pixelData[offset + 3] = color[3];
             }
 
-            // Send back the ImageData buffer (transfer ownership for performance)
+            // Send back the pixel buffer (transfer ownership for performance)
             self.postMessage({
                 type: 'complete',
                 jobId,
-                imageData: imageData.data.buffer
-            }, [imageData.data.buffer]);
+                imageData: pixelData.buffer
+            }, [pixelData.buffer]);
 
         } catch (error) {
             self.postMessage({
@@ -213,5 +209,9 @@ self.onmessage = function(e) {
     }
 };
 
-// Signal that worker is ready
-self.postMessage({ type: 'ready' });
+// Signal that worker is ready (or unsupported if core APIs are missing)
+if (typeof Uint8ClampedArray === 'undefined' || typeof Uint16Array === 'undefined') {
+    self.postMessage({ type: 'unsupported', error: 'Typed arrays not available' });
+} else {
+    self.postMessage({ type: 'ready' });
+}

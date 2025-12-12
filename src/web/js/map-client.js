@@ -24,7 +24,8 @@ class FloodMapClient {
         // Check if WebWorker is supported
         if (typeof Worker !== 'undefined') {
             try {
-                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js');
+                // Cache-bust worker URL alongside other static assets
+                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212a');
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -35,6 +36,10 @@ class FloodMapClient {
                     if (type === 'ready') {
                         this.workerReady = true;
                         console.log('✅ WebWorker ready for tile rendering');
+                    } else if (type === 'unsupported') {
+                        console.warn('WebWorker rendering unsupported:', error || 'unknown');
+                        this.workerReady = false;
+                        try { this.renderWorker.terminate(); } catch {}
                     } else if (type === 'complete' && jobId !== undefined) {
                         const job = this.pendingWorkerJobs.get(jobId);
                         if (job) {
@@ -53,6 +58,11 @@ class FloodMapClient {
                 this.renderWorker.onerror = (error) => {
                     console.error('WebWorker error:', error);
                     this.workerReady = false;
+                    // Reject all pending jobs to avoid leaks/hangs
+                    for (const [jobId, job] of this.pendingWorkerJobs.entries()) {
+                        job.reject(new Error('WebWorker error'));
+                        this.pendingWorkerJobs.delete(jobId);
+                    }
                 };
 
             } catch (error) {
@@ -130,7 +140,7 @@ class FloodMapClient {
         }
 
         // Main thread rendering (fallback or when worker not available)
-        return this.renderTileMainThread(elevationData, mode, waterLevel);
+        return this.renderTileMainThread(z, x, y, elevationData, mode, waterLevel);
     }
 
     async renderTileInWorker(elevationData, mode, waterLevel) {
@@ -140,8 +150,13 @@ class FloodMapClient {
             // Store the job callbacks
             this.pendingWorkerJobs.set(jobId, { resolve, reject });
 
-            // Send data to worker (transfer buffer for performance)
-            const buffer = elevationData.buffer.slice(0);
+            // Copy only the relevant region (handles non-zero byteOffset safely).
+            // Note: We cannot transfer the original cached buffer because it would
+            // detach and corrupt the elevationCache entry.
+            const buffer = elevationData.buffer.slice(
+                elevationData.byteOffset,
+                elevationData.byteOffset + elevationData.byteLength
+            );
             this.renderWorker.postMessage({
                 type: 'render',
                 jobId,
@@ -156,7 +171,7 @@ class FloodMapClient {
         });
     }
 
-    async renderTileMainThread(elevationData, mode, waterLevel) {
+    async renderTileMainThread(z, x, y, elevationData, mode, waterLevel) {
         // Create canvas
         const canvas = document.createElement('canvas');
         canvas.width = 256;
