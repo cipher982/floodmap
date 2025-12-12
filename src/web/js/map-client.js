@@ -207,7 +207,9 @@ class FloodMapClient {
             return 'client://elevation/{z}/{x}/{y}';
         } else {
             // Client-side flood rendering
-            return 'client://flood/{z}/{x}/{y}';
+            // Include clustered water level in URL to bust MapLibre's tile cache on level change
+            const clusteredWL = Math.round(this.currentWaterLevel * 10) / 10;
+            return `client://flood/{z}/{x}/{y}?wl=${clusteredWL}`;
         }
     }
 
@@ -297,9 +299,10 @@ class FloodMapClient {
                 this.elevationRenderer.clearRenderedCache();
             }
 
-            source.setTiles(['client://flood/{z}/{x}/{y}']);
+            // Use getTileUrl() to include water level in URL, busting MapLibre's cache
+            source.setTiles([this.getTileUrl()]);
         } else {
-            source.setTiles(['client://elevation/{z}/{x}/{y}']);
+            source.setTiles([this.getTileUrl()]);
         }
     }
 
