@@ -33,7 +33,7 @@ class FloodMapClient {
         if (typeof Worker !== 'undefined') {
             try {
                 // Cache-bust worker URL alongside other static assets
-                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212g');
+                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251212h');
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -399,6 +399,22 @@ class FloodMapClient {
                         type: 'raster',
                         source: 'elevation-tiles',
                         paint: { 'raster-opacity': 1.0 }
+                    },
+                    // Water mask: render water polygons above the raster to avoid
+                    // discontinuities where DEM has NODATA/artefacts over lakes/ocean.
+                    {
+                        id: 'water',
+                        type: 'fill',
+                        source: 'vector-tiles',
+                        'source-layer': 'water',
+                        paint: { 'fill-color': 'rgba(70, 130, 180, 0.85)' }
+                    },
+                    {
+                        id: 'waterway',
+                        type: 'line',
+                        source: 'vector-tiles',
+                        'source-layer': 'waterway',
+                        paint: { 'line-color': 'rgba(70, 130, 180, 0.85)', 'line-width': 1 }
                     },
                     {
                         id: 'roads',

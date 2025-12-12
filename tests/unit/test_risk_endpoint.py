@@ -71,3 +71,25 @@ async def test_risk_location_water_point_returns_water(monkeypatch):
 
     assert resp.flood_risk_level == "water"
     assert resp.elevation_m is None
+
+
+async def test_risk_location_all_nodata_returns_water(monkeypatch):
+    from routers import risk
+
+    lat = 47.5047
+    lon = -86.5294
+
+    arr = np.full((256, 256), -32768, dtype=np.int16)
+
+    def fake_get_elevation_for_tile(x, y, z, tile_size=256):
+        return arr
+
+    monkeypatch.setattr(
+        risk.elevation_loader, "get_elevation_for_tile", fake_get_elevation_for_tile
+    )
+
+    req = risk.LocationRequest.model_validate({"latitude": lat, "longitude": lon})
+    resp = await risk.assess_flood_risk(req)
+
+    assert resp.flood_risk_level == "water"
+    assert resp.elevation_m is None

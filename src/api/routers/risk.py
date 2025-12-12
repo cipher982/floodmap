@@ -62,16 +62,18 @@ async def assess_flood_risk(location: LocationRequest):
 
         if elevation is None:
             # Distinguish "water/no land elevation" vs "missing dataset".
-            # If the surrounding tile has *any* valid land elevations, but the sampled
-            # point is NODATA, it's very likely a lake/ocean point.
-            if elevation_array is not None and (elevation_array != -32768).any():
+            # For UX, treat NODATA at the point as "water" (lakes/ocean), even if the
+            # entire tile is NODATA. Data gaps are handled separately via audits/alerts.
+            if elevation_array is not None:
                 return RiskResponse(
                     latitude=location.latitude,
                     longitude=location.longitude,
                     elevation_m=None,
                     flood_risk_level="water",
                     water_level_m=float(location.water_level_m),
-                    risk_description=f"Open water / no land elevation at this point (z{zoom} sample)",
+                    risk_description=(
+                        f"Open water / no land elevation at this point (z{zoom} sample)"
+                    ),
                 )
 
             logger.info(
