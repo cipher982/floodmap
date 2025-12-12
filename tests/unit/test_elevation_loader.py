@@ -268,6 +268,94 @@ class TestFindElevationFilesForTile:
         assert files == []
 
 
+class TestElevationLoaderNoDataHandling:
+    def test_load_elevation_data_normalizes_minus_32767(self, tmp_path):
+        """-32767 should be treated as NoData (normalized to -32768 by default)."""
+        import json
+
+        import numpy as np
+        import zstandard as zstd
+
+        loader = ElevationDataLoader(data_dir=tmp_path)
+
+        tile_id = "n00_e000_1arc_v3"
+        zst_path = tmp_path / f"{tile_id}.zst"
+        json_path = tmp_path / f"{tile_id}.json"
+
+        arr = np.array(
+            [
+                [-32767, 10, 11, 12],
+                [13, 14, 15, 16],
+                [17, 18, 19, 20],
+                [21, 22, 23, -32767],
+            ],
+            dtype=np.int16,
+        )
+
+        cctx = zstd.ZstdCompressor(level=3)
+        zst_path.write_bytes(cctx.compress(arr.tobytes()))
+        json_path.write_text(
+            json.dumps(
+                {
+                    "tile_id": tile_id,
+                    "bounds": {"left": 0.0, "bottom": 0.0, "right": 1.0, "top": 1.0},
+                    "transform": [0, 0, 0, 0, 0, 0, 0, 0, 1],
+                    "crs": "EPSG:4326",
+                    "shape": [4, 4],
+                    "dtype": "int16",
+                }
+            )
+        )
+
+        loaded = loader.load_elevation_data(zst_path)
+        assert loaded is not None
+        out, _meta = loaded
+        assert np.all(out != -32767)
+        assert int(out.min()) == -32768
+
+    def test_mosaic_returns_none_when_all_nodata(self, tmp_path):
+        """All-NoData mosaics should return None (not raise)."""
+        import json
+
+        import numpy as np
+        import zstandard as zstd
+
+        loader = ElevationDataLoader(data_dir=tmp_path)
+
+        tile_id = "n00_e000_1arc_v3"
+        zst_path = tmp_path / f"{tile_id}.zst"
+        json_path = tmp_path / f"{tile_id}.json"
+
+        arr = np.full((16, 16), -32767, dtype=np.int16)
+        cctx = zstd.ZstdCompressor(level=3)
+        zst_path.write_bytes(cctx.compress(arr.tobytes()))
+        json_path.write_text(
+            json.dumps(
+                {
+                    "tile_id": tile_id,
+                    "bounds": {"left": 0.0, "bottom": 0.0, "right": 1.0, "top": 1.0},
+                    "transform": [0, 0, 0, 0, 0, 0, 0, 0, 1],
+                    "crs": "EPSG:4326",
+                    "shape": [16, 16],
+                    "dtype": "int16",
+                }
+            )
+        )
+
+        out = loader._mosaic_elevation_files(
+            files=[zst_path],
+            lat_top=0.75,
+            lat_bottom=0.25,
+            lon_left=0.25,
+            lon_right=0.75,
+            tile_size=32,
+            xtile=0,
+            ytile=0,
+            zoom=0,
+        )
+        assert out is None
+
+
 class TestCoordinateMath:
     """Test mathematical properties of coordinate conversions."""
 

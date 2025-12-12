@@ -62,7 +62,25 @@ async def assess_flood_risk(location: LocationRequest):
         px = min(255, max(0, px))
         py = min(255, max(0, py))
 
-        elevation_array = elevation_loader.get_elevation_for_tile(x_tile, y_tile, zoom)
+        try:
+            elevation_array = elevation_loader.get_elevation_for_tile(
+                x_tile, y_tile, zoom
+            )
+        except Exception as e:
+            # Treat loader/mosaic failures as "no data" rather than throwing the
+            # whole request into the generic error fallback.
+            logger.warning(
+                "Elevation loader failed for risk sample; treating as no-data",
+                extra={
+                    "lat": location.latitude,
+                    "lon": location.longitude,
+                    "z": zoom,
+                    "x": x_tile,
+                    "y": y_tile,
+                    "err": repr(e),
+                },
+            )
+            elevation_array = None
 
         if elevation_array is not None:
             elevation = float(elevation_array[py, px])

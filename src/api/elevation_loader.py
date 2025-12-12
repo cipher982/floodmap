@@ -151,6 +151,16 @@ class ElevationDataLoader:
                 height, width
             )
 
+            # Normalize legacy/alternate NoData sentinels.
+            # Some upstream sources (or historical preprocessing) use -32767 for
+            # ocean/void; treat it as NoData consistently to avoid mosaicking
+            # and risk-sampling errors.
+            if NODATA_VALUE == -32768:
+                with np.errstate(invalid="ignore"):
+                    if np.any(elevation_array == -32767):
+                        elevation_array = elevation_array.copy()
+                        elevation_array[elevation_array == -32767] = NODATA_VALUE
+
             # Note: previously attempted automatic cropping of zero-padding has
             # been removed – see persistent_elevation_cache.py for reasoning.
 
@@ -425,8 +435,11 @@ class ElevationDataLoader:
             canvas[y_top_dst:y_bottom_dst, x_left_dst:x_right_dst] = target_slice
 
         # Final sanity check ---------------------------------------------------
+        # Returning None lets callers treat "no elevation" as a normal case (e.g.
+        # open water or out-of-coverage) instead of throwing, which previously
+        # caused the risk endpoint to fall back to a generic error message.
         if np.all(canvas == NODATA_VALUE):
-            raise ValueError("Mosaic result is entirely NoData for tile – DEM missing?")
+            return None
 
         return canvas
 
