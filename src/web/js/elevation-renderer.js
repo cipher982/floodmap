@@ -82,7 +82,7 @@ class ElevationRenderer {
         const qs = new URLSearchParams();
         qs.set('method', 'precompressed');
         if (window.location.hostname === 'localhost') qs.set('t', String(Date.now()));
-        qs.set('v', '20251212d');
+        qs.set('v', '20251212e');
         const url = `/floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16?${qs.toString()}`;
 
         const loadPromise = fetch(url, { signal })
