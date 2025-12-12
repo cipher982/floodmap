@@ -160,6 +160,47 @@ header h1 {
     75% { transform: translateX(2px); }
 }
 
+/* Water Level Presets */
+#water-level-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.preset-chip {
+    padding: 6px 12px;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 16px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.75rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.preset-chip:hover {
+    background: #e0e7ff;
+    border-color: #818cf8;
+    color: #4f46e5;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.preset-chip:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.preset-chip.active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: white;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
+}
+
 button {
     padding: 10px 14px;
     background: #2563eb;
@@ -326,5 +367,74 @@ button:hover {
 @media (min-width: 1600px) {
     #app {
         grid-template-columns: 1fr minmax(320px, 400px);
+    }
+}
+
+/* Legend overlay */
+.legend {
+    position: absolute;
+    bottom: 24px;
+    left: 24px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-width: 200px;
+    z-index: 1000;
+    transition: opacity 0.3s ease;
+}
+
+.legend h4 {
+    margin: 0 0 12px 0;
+    font-size: 0.9rem;
+    color: #374151;
+    font-weight: 600;
+}
+
+.legend-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    color: #4b5563;
+}
+
+.legend-color {
+    width: 32px;
+    height: 16px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+/* Mobile adjustments for legend */
+@media (max-width: 768px) {
+    .legend {
+        bottom: 12px;
+        left: 12px;
+        right: 12px;
+        min-width: auto;
+        padding: 12px;
+    }
+
+    .legend h4 {
+        font-size: 0.85rem;
+        margin-bottom: 8px;
+    }
+
+    .legend-item {
+        font-size: 0.75rem;
+        gap: 8px;
+    }
+
+    .legend-color {
+        width: 24px;
+        height: 14px;
     }
 }

@@ -36,6 +36,59 @@
 
         <div id="map"></div>
 
+        <!-- Legend overlay -->
+        <div id="legend" class="legend">
+            <!-- Flood mode legend -->
+            <div id="flood-legend" class="legend-content">
+                <h4>Flood Risk</h4>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgba(76, 175, 80, 0.5);"></span>
+                    <span>Safe (5m+ above water)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgba(255, 193, 7, 0.6);"></span>
+                    <span>Caution (2-5m)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgba(244, 67, 54, 0.8);"></span>
+                    <span>Danger (0.5-2m)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgba(33, 150, 243, 0.86);"></span>
+                    <span>Flooded</span>
+                </div>
+            </div>
+
+            <!-- Elevation mode legend -->
+            <div id="elevation-legend" class="legend-content" style="display: none;">
+                <h4>Elevation</h4>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: linear-gradient(to right, rgb(34, 139, 34), rgb(154, 205, 50));"></span>
+                    <span>0-50m</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: linear-gradient(to right, rgb(154, 205, 50), rgb(160, 82, 45));"></span>
+                    <span>50-200m</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: linear-gradient(to right, rgb(160, 82, 45), rgb(105, 105, 105));"></span>
+                    <span>200-500m</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: linear-gradient(to right, rgb(105, 105, 105), rgb(169, 169, 169));"></span>
+                    <span>500-1000m</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgb(255, 255, 255); border: 1px solid #ccc;"></span>
+                    <span>1000m+</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgb(70, 130, 180);"></span>
+                    <span>Ocean/Water</span>
+                </div>
+            </div>
+        </div>
+
         <div class="sidebar">
             <div id="controls">
                 <div class="control-group">
@@ -53,6 +106,13 @@
                     <div id="water-level-display-container">
                         <span id="water-level-display">1.0m</span>
                         <span id="water-level-vibe"></span>
+                    </div>
+                    <div id="water-level-presets">
+                        <button class="preset-chip" data-level="1.0">High Tide (1m)</button>
+                        <button class="preset-chip" data-level="3.0">Storm Surge (3m)</button>
+                        <button class="preset-chip" data-level="6.0">Category 5 (6m)</button>
+                        <button class="preset-chip" data-level="15.0">Extreme (15m)</button>
+                        <button class="preset-chip" data-level="1.0" data-baseline="true">2100 Baseline (+1m)</button>
                     </div>
                 </div>
                 <button id="find-location">📍 Find My Location</button>

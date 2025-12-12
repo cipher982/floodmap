@@ -10,11 +10,61 @@ class FloodMapClient {
         this.viewMode = 'elevation';
         this.elevationRenderer = new ElevationRenderer();
 
+        // Initialize WebWorker for rendering if available
+        this.initWorker();
+
         // Always use client-side rendering for flood tiles
         this.setupCustomProtocol();
         console.log('🚀 Client-side rendering initialized');
 
         this.init();
+    }
+
+    initWorker() {
+        // Check if WebWorker is supported
+        if (typeof Worker !== 'undefined') {
+            try {
+                this.renderWorker = new Worker('/floodmap/js/render-worker.js');
+                this.workerReady = false;
+                this.pendingWorkerJobs = new Map();
+                this.workerJobId = 0;
+
+                this.renderWorker.onmessage = (e) => {
+                    const { type, imageData, error, jobId } = e.data;
+
+                    if (type === 'ready') {
+                        this.workerReady = true;
+                        console.log('✅ WebWorker ready for tile rendering');
+                    } else if (type === 'complete' && jobId !== undefined) {
+                        const job = this.pendingWorkerJobs.get(jobId);
+                        if (job) {
+                            job.resolve(imageData);
+                            this.pendingWorkerJobs.delete(jobId);
+                        }
+                    } else if (type === 'error' && jobId !== undefined) {
+                        const job = this.pendingWorkerJobs.get(jobId);
+                        if (job) {
+                            job.reject(new Error(error));
+                            this.pendingWorkerJobs.delete(jobId);
+                        }
+                    }
+                };
+
+                this.renderWorker.onerror = (error) => {
+                    console.error('WebWorker error:', error);
+                    this.workerReady = false;
+                };
+
+            } catch (error) {
+                console.warn('Failed to initialize WebWorker, falling back to main thread:', error);
+                this.renderWorker = null;
+                this.workerReady = false;
+            }
+        } else {
+            console.log('WebWorker not supported, using main thread rendering');
+            this.renderWorker = null;
+            this.workerReady = false;
+        }
     }
 
 
@@ -236,6 +286,11 @@ class FloodMapClient {
             waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
             this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
 
+            // Clear active state from preset chips when manually sliding
+            document.querySelectorAll('.preset-chip').forEach(chip => {
+                chip.classList.remove('active');
+            });
+
             // Only update if water level actually changed
             if (oldWaterLevel !== this.currentWaterLevel) {
                 this.updateFloodLayer();
@@ -246,6 +301,35 @@ class FloodMapClient {
         this.currentWaterLevel = this.sliderToWaterLevel(30);
         waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
         this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
+
+        // Water level preset chips
+        const presetChips = document.querySelectorAll('.preset-chip');
+        presetChips.forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                const targetLevel = parseFloat(e.target.dataset.level);
+
+                // Update slider position
+                const sliderValue = this.waterLevelToSlider(targetLevel);
+                waterLevelSlider.value = sliderValue;
+
+                // Update water level
+                const oldWaterLevel = this.currentWaterLevel;
+                this.currentWaterLevel = targetLevel;
+
+                // Update display
+                waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
+                this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
+
+                // Update active state on chips
+                presetChips.forEach(c => c.classList.remove('active'));
+                e.target.classList.add('active');
+
+                // Trigger flood layer update if level changed
+                if (oldWaterLevel !== this.currentWaterLevel) {
+                    this.updateFloodLayer();
+                }
+            });
+        });
 
         // Find location button
         document.getElementById('find-location').addEventListener('click', () => {
@@ -309,6 +393,15 @@ class FloodMapClient {
     sliderToWaterLevel(sliderValue) {
         const waterLevel = 0.1 * Math.pow(10, sliderValue / 25);
         return Math.round(waterLevel * 10) / 10;
+    }
+
+    waterLevelToSlider(waterLevel) {
+        // Inverse of sliderToWaterLevel
+        // waterLevel = 0.1 * 10^(slider/25)
+        // waterLevel / 0.1 = 10^(slider/25)
+        // log10(waterLevel / 0.1) = slider/25
+        // slider = 25 * log10(waterLevel / 0.1)
+        return 25 * Math.log10(waterLevel / 0.1);
     }
 
     getTileCoordinates(lat, lng, zoom) {
