@@ -3,8 +3,10 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 
 
+@pytest.mark.asyncio
 async def test_risk_location_samples_point_pixel(monkeypatch):
     from routers import risk
 
@@ -46,6 +48,7 @@ async def test_risk_location_samples_point_pixel(monkeypatch):
     assert resp.flood_risk_level == "low"
 
 
+@pytest.mark.asyncio
 async def test_risk_location_water_point_returns_water(monkeypatch):
     from routers import risk
 
