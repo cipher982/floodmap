@@ -49,6 +49,13 @@ IS_PRODUCTION = ENVIRONMENT.lower() in ["production", "prod"]
 ELEVATION_CACHE_SIZE = int(os.getenv("ELEVATION_CACHE_SIZE", "100"))
 TILE_CACHE_SIZE = int(os.getenv("TILE_CACHE_SIZE", "5000"))
 
+# Runtime elevation cache (persistent_elevation_cache) - lazy initialization
+# Only needed for runtime DEM mosaicking. Most requests use precompressed tiles
+# and never need this 4GB cache. Set to "true" to enable preloading on startup.
+ENABLE_RUNTIME_ELEVATION_CACHE = os.getenv(
+    "ENABLE_RUNTIME_ELEVATION_CACHE", "false"
+).lower() in ("1", "true", "yes")
+
 # HTTP Cache settings - NO CACHING in development!
 if IS_DEVELOPMENT:
     TILE_CACHE_MAX_AGE = 0  # No browser caching in development

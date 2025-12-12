@@ -1,6 +1,9 @@
 """
 Persistent Elevation Cache - Eliminate zstd decompression bottleneck
 Keeps decompressed elevation arrays in memory across requests.
+
+This cache is ONLY needed for runtime DEM mosaicking. The primary serving path
+(precompressed tiles + client rendering) doesn't use this cache.
 """
 
 import json
@@ -437,5 +440,103 @@ class PersistentElevationCache:
         logger.info("🛑 Persistent elevation cache shutdown")
 
 
-# Global cache instance - uses up to 4GB RAM
-persistent_elevation_cache = PersistentElevationCache(max_memory_gb=4.0)
+# ============================================================================
+# Lazy Initialization - Only initialize when actually needed
+# ============================================================================
+
+
+class LazyPersistentElevationCache:
+    """
+    Lazy wrapper for PersistentElevationCache.
+    Only initializes the cache on first use to avoid unnecessary resource allocation.
+
+    The cache is ONLY needed for runtime DEM mosaicking. Most requests use
+    precompressed tiles and never trigger initialization.
+    """
+
+    def __init__(self):
+        self._cache = None
+        self._lock = threading.Lock()
+        self._enabled = os.getenv(
+            "ENABLE_RUNTIME_ELEVATION_CACHE", "false"
+        ).lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+
+    def _ensure_initialized(self):
+        """Initialize the cache on first use (thread-safe)."""
+        if self._cache is None:
+            with self._lock:
+                # Double-check after acquiring lock
+                if self._cache is None:
+                    if not self._enabled:
+                        logger.warning(
+                            "⚠️ Runtime elevation cache requested but ENABLE_RUNTIME_ELEVATION_CACHE=false. "
+                            "Initializing anyway for backward compatibility. "
+                            "Set ENABLE_RUNTIME_ELEVATION_CACHE=true to suppress this warning."
+                        )
+
+                    logger.info("🔄 Lazy-initializing persistent elevation cache...")
+                    self._cache = PersistentElevationCache(max_memory_gb=4.0)
+
+    def get_elevation_array(self, file_path: Path) -> tuple[np.ndarray, dict] | None:
+        """Get elevation array - lazy-initializes cache on first call."""
+        self._ensure_initialized()
+        return self._cache.get_elevation_array(file_path)
+
+    def extract_tile_from_cached_array(
+        self,
+        file_path: Path,
+        lat_top: float,
+        lat_bottom: float,
+        lon_left: float,
+        lon_right: float,
+        tile_size: int = 256,
+    ) -> np.ndarray | None:
+        """Extract tile from cached array - lazy-initializes cache on first call."""
+        self._ensure_initialized()
+        return self._cache.extract_tile_from_cached_array(
+            file_path, lat_top, lat_bottom, lon_left, lon_right, tile_size
+        )
+
+    def preload_area(
+        self, lat_center: float, lon_center: float, radius_degrees: float = 1.0
+    ):
+        """Preload area - lazy-initializes cache on first call."""
+        self._ensure_initialized()
+        return self._cache.preload_area(lat_center, lon_center, radius_degrees)
+
+    def get_stats(self) -> dict:
+        """Get cache statistics - returns empty stats if not initialized."""
+        if self._cache is None:
+            return {
+                "cache_size": 0,
+                "memory_usage_mb": 0,
+                "memory_limit_mb": 0,
+                "hit_rate": 0,
+                "total_requests": 0,
+                "decompression_cores": 0,
+                "hits": 0,
+                "misses": 0,
+                "decompressions": 0,
+                "evictions": 0,
+                "preloads": 0,
+                "initialized": False,
+            }
+        return {**self._cache.get_stats(), "initialized": True}
+
+    def clear_cache(self):
+        """Clear cache - only if initialized."""
+        if self._cache is not None:
+            self._cache.clear_cache()
+
+    def shutdown(self):
+        """Shutdown cache - only if initialized."""
+        if self._cache is not None:
+            self._cache.shutdown()
+
+
+# Global cache instance - lazy initialization, no resources allocated at import time
+persistent_elevation_cache = LazyPersistentElevationCache()
