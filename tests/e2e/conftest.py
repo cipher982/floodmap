@@ -128,17 +128,24 @@ class MapPage:
     async def goto_homepage(self):
         """Navigate to the application homepage."""
         await self.page.goto(self.page.base_url + "/")
-        await self.page.wait_for_load_state("networkidle")
+        # External CDN scripts (e.g., maplibre css/js) can keep the network busy;
+        # the app is still usable once DOM is loaded.
+        await self.page.wait_for_load_state("domcontentloaded")
 
     async def wait_for_map_load(self):
         """Wait for the map to load (MapLibre in this app)."""
         # Map container should exist
         await self.page.wait_for_selector("#map", state="attached", timeout=10000)
 
-        # FloodMap client should initialize and expose `window.floodMap.map`
+        # FloodMap client should initialize and expose `window.floodMap.map`.
+        # (First wait for the object, then the map instance.)
+        await self.page.wait_for_function(
+            "() => Boolean(window.floodMap)",
+            timeout=15000,
+        )
         await self.page.wait_for_function(
             "() => Boolean(window.floodMap && window.floodMap.map)",
-            timeout=15000,
+            timeout=30000,
         )
 
         # Give MapLibre a moment to render first frame/tiles
