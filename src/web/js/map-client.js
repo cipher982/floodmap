@@ -262,7 +262,7 @@ class FloodMapClient {
         const config = {
             zoom: 8,
             minZoom: 0,
-            maxZoom: 18
+            maxZoom: 11  // Capped to match precompressed tile availability
         };
 
         // Determine tile URL based on mode
