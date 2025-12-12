@@ -214,6 +214,11 @@ async function encodePngOffscreen(pixelBuffer, width, height) {
 self.onmessage = function(e) {
     const { type, jobId, data } = e.data;
 
+    if (type === 'set-debug') {
+        self.DEBUG_TILES = !!data?.debug;
+        return;
+    }
+
     if (type === 'render') {
         try {
             const { elevationData, mode, waterLevel, width, height } = data;

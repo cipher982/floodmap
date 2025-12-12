@@ -44,6 +44,13 @@ class FloodMapClient {
                     if (type === 'ready') {
                         this.workerReady = true;
                         console.log('✅ WebWorker ready for tile rendering');
+                        try {
+                            // Sync debug flag into worker (used for stats messages).
+                            this.renderWorker.postMessage({
+                                type: 'set-debug',
+                                data: { debug: !!window.DEBUG_TILES }
+                            });
+                        } catch {}
                     } else if (type === 'unsupported') {
                         console.warn('WebWorker rendering unsupported:', error || 'unknown');
                         this.workerReady = false;
@@ -55,23 +62,21 @@ class FloodMapClient {
                         if (job) {
                             if (job.signal?.aborted) {
                                 if (window.DEBUG_TILES) this.tileDebug.abortedWorkerJobs++;
-                                // Best-effort cancellation: drop result and avoid cache poisoning
-                                this.pendingWorkerJobs.delete(jobId);
+                                // Best-effort cancellation: reject with AbortError (no hangs)
+                                job.finishReject(new DOMException('Aborted', 'AbortError'));
                                 return;
                             }
-                            job.resolve(pngBuffer ? { pngBuffer } : imageData);
-                            this.pendingWorkerJobs.delete(jobId);
+                            job.finishResolve(pngBuffer ? { pngBuffer } : imageData);
                         }
                     } else if (type === 'error' && jobId !== undefined) {
                         const job = this.pendingWorkerJobs.get(jobId);
                         if (job) {
                             if (job.signal?.aborted) {
                                 if (window.DEBUG_TILES) this.tileDebug.abortedWorkerJobs++;
-                                this.pendingWorkerJobs.delete(jobId);
+                                job.finishReject(new DOMException('Aborted', 'AbortError'));
                                 return;
                             }
-                            job.reject(new Error(error));
-                            this.pendingWorkerJobs.delete(jobId);
+                            job.finishReject(new Error(error));
                         }
                     }
                 };
@@ -80,9 +85,8 @@ class FloodMapClient {
                     console.error('WebWorker error:', error);
                     this.workerReady = false;
                     // Reject all pending jobs to avoid leaks/hangs
-                    for (const [jobId, job] of this.pendingWorkerJobs.entries()) {
-                        job.reject(new Error('WebWorker error'));
-                        this.pendingWorkerJobs.delete(jobId);
+                    for (const [, job] of Array.from(this.pendingWorkerJobs.entries())) {
+                        job.finishReject(new Error('WebWorker error'));
                     }
                 };
 
@@ -155,6 +159,8 @@ class FloodMapClient {
             throw error;
         }
 
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
         // Debug logging (development mode only)
         if (window.DEBUG_TILES && Math.random() < 0.05) { // 5% of tiles when debugging enabled
             console.log(`🔍 Debug tile ${z}/${x}/${y}:`, {
@@ -188,13 +194,40 @@ class FloodMapClient {
         return new Promise((resolve, reject) => {
             const jobId = this.workerJobId++;
 
-            // Store the job callbacks
-            this.pendingWorkerJobs.set(jobId, { resolve, reject, signal });
+            let settled = false;
+            const finish = (fn) => {
+                if (settled) return;
+                settled = true;
+                const job = this.pendingWorkerJobs.get(jobId);
+                if (job?.abortHandler && job?.signal) {
+                    try { job.signal.removeEventListener('abort', job.abortHandler); } catch {}
+                }
+                this.pendingWorkerJobs.delete(jobId);
+                fn();
+            };
+
+            const job = {
+                signal,
+                abortHandler: null,
+                finishResolve: (value) => finish(() => resolve(value)),
+                finishReject: (err) => finish(() => reject(err)),
+            };
+
+            // Allow the promise to reject immediately on abort, otherwise MapLibre
+            // can hang waiting on a tile promise that will never settle.
+            if (signal) {
+                job.abortHandler = () => {
+                    if (window.DEBUG_TILES) this.tileDebug.abortedWorkerJobs++;
+                    job.finishReject(new DOMException('Aborted', 'AbortError'));
+                };
+                try { signal.addEventListener('abort', job.abortHandler, { once: true }); } catch {}
+            }
+
+            this.pendingWorkerJobs.set(jobId, job);
 
             if (signal?.aborted) {
-                if (window.DEBUG_TILES) this.tileDebug.abortedWorkerJobs++;
-                this.pendingWorkerJobs.delete(jobId);
-                reject(new DOMException('Aborted', 'AbortError'));
+                if (job.abortHandler) job.abortHandler();
+                else job.finishReject(new DOMException('Aborted', 'AbortError'));
                 return;
             }
 
