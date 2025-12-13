@@ -51,6 +51,42 @@ class ElevationRenderer {
 
         // In flood mode, treat NODATA as water (not "flooded land").
         this.WATER_RGBA = [70, 130, 180, 220];
+
+        // Elevation visualization mapping:
+        // Use a stable global nonlinear mapping so lowlands retain contrast while
+        // high mountains don't saturate to white.
+        this.ELEV_VIZ_MAX_M = 6500; // covers Denali (~6190m) with headroom
+        this.ELEV_VIZ_ASINH_SCALE_M = 120; // 80–150 is a good range for lowland contrast
+
+        // Hypsometric tint stops (in meters, land only; ocean is handled separately).
+        // These are interpolated smoothly after nonlinear compression.
+        this.ELEV_VIZ_STOPS_M = [
+            { m: 0, color: [34, 139, 34, 255] },     // green
+            { m: 5, color: [76, 175, 80, 255] },     // brighter green
+            { m: 15, color: [154, 205, 50, 255] },   // yellow-green
+            { m: 30, color: [189, 214, 102, 255] },  // light yellow-green
+            { m: 60, color: [210, 201, 128, 255] },  // tan
+            { m: 100, color: [201, 186, 130, 255] }, // tan
+            { m: 150, color: [184, 154, 108, 255] }, // light brown
+            { m: 250, color: [160, 120, 80, 255] },  // brown
+            { m: 400, color: [135, 105, 80, 255] },  // dark brown
+            { m: 700, color: [120, 120, 120, 255] }, // gray
+            { m: 1200, color: [150, 150, 150, 255] },// light gray
+            { m: 2000, color: [185, 185, 185, 255] },// lighter gray
+            { m: 3000, color: [225, 225, 225, 255] },// near-white
+            { m: 4500, color: [245, 245, 245, 255] },// snow
+            { m: 6500, color: [255, 255, 255, 255] } // peak snow
+        ];
+        this._elevVizStopTs = this.ELEV_VIZ_STOPS_M.map(s => ({
+            t: this._elevVizTFromMeters(s.m),
+            color: s.color
+        }));
+    }
+
+    _elevVizTFromMeters(elevationM) {
+        const e = Math.max(0, Math.min(this.ELEV_VIZ_MAX_M, elevationM));
+        const s = this.ELEV_VIZ_ASINH_SCALE_M;
+        return Math.asinh(e / s) / Math.asinh(this.ELEV_VIZ_MAX_M / s);
     }
 
     /**
@@ -85,7 +121,7 @@ class ElevationRenderer {
         const qs = new URLSearchParams();
         qs.set('method', 'precompressed');
         if (window.location.hostname === 'localhost') qs.set('t', String(Date.now()));
-        qs.set('v', '20251213b');
+        qs.set('v', '20251213c');
         const url = `/floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16?${qs.toString()}`;
 
         const loadPromise = fetch(url, { signal })
@@ -207,27 +243,19 @@ class ElevationRenderer {
             return this.OCEAN_RGBA; // Consistent ocean color
         }
 
-        // Topographical color scheme based on elevation
-        if (elevation < 50) {
-            // Low coastal areas - green to yellow-green
-            const t = elevation / 50;
-            return this.interpolateColors([34, 139, 34, 255], [154, 205, 50, 255], t); // Forest green to yellow-green
-        } else if (elevation < 200) {
-            // Hills - yellow-green to brown
-            const t = (elevation - 50) / 150;
-            return this.interpolateColors([154, 205, 50, 255], [160, 82, 45, 255], t); // Yellow-green to saddle brown
-        } else if (elevation < 500) {
-            // Mountains - brown to gray
-            const t = (elevation - 200) / 300;
-            return this.interpolateColors([160, 82, 45, 255], [105, 105, 105, 255], t); // Saddle brown to dim gray
-        } else if (elevation < 1000) {
-            // High mountains - gray to light gray
-            const t = (elevation - 500) / 500;
-            return this.interpolateColors([105, 105, 105, 255], [169, 169, 169, 255], t); // Dim gray to dark gray
-        } else {
-            // Very high elevations - white
-            return [255, 255, 255, 255]; // White
+        const t = this._elevVizTFromMeters(elevation);
+
+        // Find enclosing stop interval (small table; linear scan is fine).
+        const stops = this._elevVizStopTs;
+        for (let i = 0; i < stops.length - 1; i++) {
+            const a = stops[i];
+            const b = stops[i + 1];
+            if (t <= b.t) {
+                const tt = (t - a.t) / Math.max(1e-12, (b.t - a.t));
+                return this.interpolateColors(a.color, b.color, tt);
+            }
         }
+        return stops[stops.length - 1].color;
     }
 
     /**
