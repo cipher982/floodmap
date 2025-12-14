@@ -34,7 +34,10 @@ class FloodMapClient {
         if (typeof Worker !== 'undefined') {
             try {
                 // Cache-bust worker URL alongside other static assets
-                this.renderWorker = new Worker('/floodmap/static/js/render-worker.js?v=20251213c');
+                const workerUrl = new URL('/floodmap/static/js/render-worker.js', window.location.origin);
+                const assetVersion = window.FLOODMAP_ASSET_VERSION;
+                if (assetVersion) workerUrl.searchParams.set('v', assetVersion);
+                this.renderWorker = new Worker(workerUrl.toString());
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -870,7 +873,20 @@ class FloodMapClient {
     }
 }
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
+function floodmapInit() {
+    if (typeof window === 'undefined') return;
+    if (window.floodMap) return;
     window.floodMap = new FloodMapClient();
-});
+}
+
+// Initialize robustly whether scripts are parser-inserted or injected after DOMContentLoaded.
+if (typeof window !== 'undefined') {
+    window.floodmapInit = floodmapInit;
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', floodmapInit, { once: true });
+        } else {
+            floodmapInit();
+        }
+    }
+}

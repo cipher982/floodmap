@@ -6,7 +6,30 @@
     <title>FloodMap USA — Elevation & Flood Risk</title>
     <meta name="description" content="Explore US elevation and visualize flood risk at different water levels. Overlay roads and assess risk at any location.">
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-    <link rel="stylesheet" href="/floodmap/static/css/style.css?v=20251213c">
+    <script>
+        // Unified cache-busting version (edit this value only)
+        window.FLOODMAP_ASSET_VERSION = "20251214a";
+
+        // Optional: allow tiles to be busted independently via ?tile_v=... (defaults to ASSET_VERSION)
+        const tileV = new URLSearchParams(window.location.search).get('tile_v');
+        window.FLOODMAP_TILE_VERSION = tileV || window.FLOODMAP_ASSET_VERSION;
+
+        // Helper for generating cache-busted URLs for Floodmap-owned static assets
+        window.floodmapAssetUrl = function floodmapAssetUrl(path) {
+            const u = new URL(path, window.location.origin);
+            const v = window.FLOODMAP_ASSET_VERSION;
+            if (v) u.searchParams.set('v', v);
+            return u.toString();
+        };
+
+        // Inject stylesheet with unified cache-busting
+        (function injectFloodmapCss() {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = window.floodmapAssetUrl('/floodmap/static/css/style.css');
+            document.head.appendChild(link);
+        })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/floodmap/favicon.svg">
     <link rel="alternate icon" href="/floodmap/favicon.ico">
     <link rel="mask-icon" href="/floodmap/favicon.svg" color="#0d47a1">
@@ -24,7 +47,27 @@
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="FloodMap USA — Elevation & Flood Risk">
     <meta name="twitter:description" content="Explore elevation and flood risk levels across the US.">
-    <script defer src="https://analytics.drose.io/script.js" data-website-id="33e9b5a0-5fbf-474c-9d60-9bee34d577bd"></script>
+    <script>
+        // Analytics (Umami): production-only by default.
+        (function injectUmami() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('no_analytics') === '1') return;
+
+            const hostname = window.location.hostname;
+            const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+            if (isLocalhost && params.get('analytics') !== '1') return;
+
+            const scriptUrl = 'https://analytics.drose.io/script.js';
+            const websiteId = '33e9b5a0-5fbf-474c-9d60-9bee34d577bd';
+            if (!scriptUrl || !websiteId) return;
+
+            const s = document.createElement('script');
+            s.defer = true;
+            s.src = scriptUrl;
+            s.dataset.websiteId = websiteId;
+            document.head.appendChild(s);
+        })();
+    </script>
 
 </head>
 <body>
@@ -139,9 +182,34 @@
         }
     </script>
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-    <!-- Cache-busting version for static assets -->
-    <script src="/floodmap/static/js/elevation-renderer.js?v=20251213c"></script>
-    <script src="/floodmap/static/js/map-client.js?v=20251213c"></script>
+    <script>
+        // Load Floodmap scripts with deterministic order and unified cache-busting.
+        // This avoids relying on DOMContentLoaded if scripts are injected after load.
+        (function loadFloodmapScripts() {
+            function loadScript(url) {
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = url;
+                    script.async = false; // preserve execution order
+                    script.onload = () => resolve();
+                    script.onerror = () => reject(new Error(`Failed to load script: ${url}`));
+                    document.body.appendChild(script);
+                });
+            }
+
+            const er = window.floodmapAssetUrl('/floodmap/static/js/elevation-renderer.js');
+            const mc = window.floodmapAssetUrl('/floodmap/static/js/map-client.js');
+
+            loadScript(er)
+                .then(() => loadScript(mc))
+                .then(() => {
+                    if (typeof window.floodmapInit === 'function') window.floodmapInit();
+                })
+                .catch((err) => {
+                    console.error('❌ Failed to load Floodmap client scripts:', err);
+                });
+        })();
+    </script>
     <!-- Fallback: map-simple.js or original map.js -->
 </body>
 </html>
