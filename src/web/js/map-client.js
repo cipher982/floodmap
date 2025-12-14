@@ -487,7 +487,15 @@ class FloodMapClient {
             this.assessLocationRisk(e.lngLat.lat, e.lngLat.lng, e.lngLat);
         });
 
-        // Optional: Add tile loading listeners for debugging
+        // Track viewport when user stops panning/zooming
+        this.map.on('moveend', () => {
+            this.trackViewportView();
+        });
+
+        // Track initial viewport on load
+        this.map.on('load', () => {
+            this.trackViewportView();
+        });
     }
 
     getTileUrl() {
@@ -714,6 +722,9 @@ class FloodMapClient {
     }
 
     async assessLocationRisk(lat, lng, lngLat = null) {
+        // Track location view in Umami (raw lat/lon as requested)
+        this.trackLocationView(lat, lng);
+
         try {
             // Calculate tile coordinates for current zoom level if lngLat provided
             let tileInfo = '';
@@ -854,6 +865,49 @@ class FloodMapClient {
             <p><strong>Assessment:</strong> ${data.risk_description}</p>
             ${data.tileInfo ? `<p><strong>Debug:</strong> ${data.tileInfo}</p>` : ''}
         `;
+    }
+
+    /**
+     * Track location click event in Umami analytics.
+     * Fires when user clicks map or uses "Find My Location".
+     */
+    trackLocationView(lat, lng) {
+        if (typeof umami !== 'undefined' && typeof umami.track === 'function') {
+            try {
+                umami.track('location_click', {
+                    lat: lat.toFixed(6),
+                    lng: lng.toFixed(6)
+                });
+            } catch (e) {
+                // Silently ignore tracking errors
+            }
+        }
+    }
+
+    /**
+     * Track viewport view event in Umami analytics.
+     * Fires on initial load and when user stops panning/zooming.
+     */
+    trackViewportView() {
+        if (!this.map) return;
+        if (typeof umami !== 'undefined' && typeof umami.track === 'function') {
+            try {
+                const center = this.map.getCenter();
+                const zoom = this.map.getZoom();
+                const bounds = this.map.getBounds();
+                umami.track('viewport_view', {
+                    lat: center.lat.toFixed(4),
+                    lng: center.lng.toFixed(4),
+                    zoom: zoom.toFixed(1),
+                    ne_lat: bounds.getNorth().toFixed(4),
+                    ne_lng: bounds.getEast().toFixed(4),
+                    sw_lat: bounds.getSouth().toFixed(4),
+                    sw_lng: bounds.getWest().toFixed(4)
+                });
+            } catch (e) {
+                // Silently ignore tracking errors
+            }
+        }
     }
 
     addLocationMarker(lng, lat, data) {
