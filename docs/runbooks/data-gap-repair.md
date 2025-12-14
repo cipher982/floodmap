@@ -15,6 +15,13 @@ Symptoms:
 ## Repair approach (point-of-origin)
 Replace the 1° source DEM with a clean Skadi tile, then regenerate affected precompressed tiles.
 
+## One-command repair (preferred)
+Run inside the webapp container as root (so it can write backups + tiles):
+
+- Find the container (do not filter): `ssh clifford` then `docker ps`
+- Run:
+  - `docker exec -u 0 -it <webapp-container> /app/.venv/bin/python /app/tools/repair_dem_from_skadi.py --tile-id n33_w080_1arc_v3 --regen --zoom-min 5 --zoom-max 11 --overwrite --yes`
+
 Skadi URL pattern:
 - `https://s3.amazonaws.com/elevation-tiles-prod/skadi/N33/N33W080.hgt.gz`
 

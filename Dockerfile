@@ -25,6 +25,7 @@ RUN uv sync --frozen --no-dev
 
 # Copy application source code
 COPY src/ ./src/
+COPY tools/ ./tools/
 
 # ----------------------------------------------------------------------
 # Application environment variables for serving
