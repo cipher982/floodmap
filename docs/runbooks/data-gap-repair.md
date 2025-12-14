@@ -32,4 +32,5 @@ Safety:
 After repair:
 - Regenerate a small neighborhood of precompressed tiles around the affected `z/x/y` (don’t try to regen the world).
 - Restart the webapp container if needed to flush in-process DEM caches.
-- Bump the client `v=` cache key so users don’t stay pinned to old immutable tiles.
+- Bust tile caches so users don’t stay pinned to old immutable tiles:
+  - Prefer tiles-only busting via `?tile_v=...` (see `docs/runbooks/cache-busting.md`), or bump `FLOODMAP_ASSET_VERSION` for a full reset.

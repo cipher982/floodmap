@@ -6,3 +6,4 @@ Use these when investigating recurring issues. Keep the root `AGENTS.md` short; 
 - DEM data gaps / “blue polygons”: `docs/runbooks/data-gap-repair.md`
 - Cache-busting (Cloudflare + MapLibre): `docs/runbooks/cache-busting.md`
 - Rendering pipeline (worker/LUT/palette): `docs/runbooks/rendering-pipeline.md`
+- Analytics (Umami): `docs/runbooks/analytics.md`
