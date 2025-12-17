@@ -48,7 +48,7 @@
     <meta name="twitter:title" content="FloodMap USA — Elevation & Flood Risk">
     <meta name="twitter:description" content="Explore elevation and flood risk levels across the US.">
     <script>
-        // Analytics (Umami): production-only by default.
+        // Analytics (Umami): dual tracking - project dashboard + aggregate domain tracking
         (function injectUmami() {
             const params = new URLSearchParams(window.location.search);
             if (params.get('no_analytics') === '1') return;
@@ -58,15 +58,28 @@
             if (isLocalhost && params.get('analytics') !== '1') return;
 
             const scriptUrl = 'https://analytics.drose.io/script.js';
-            const websiteId = '15b5b3f8-7de9-439e-ac52-abb3f770a354';
-            if (!scriptUrl || !websiteId) return;
 
-            const s = document.createElement('script');
-            s.defer = true;
-            s.src = scriptUrl;
-            s.dataset.websiteId = websiteId;
-            s.dataset.domains = 'drose.io';
-            document.head.appendChild(s);
+            // Project-specific dashboard
+            const projectId = '15b5b3f8-7de9-439e-ac52-abb3f770a354';
+            if (projectId) {
+                const s1 = document.createElement('script');
+                s1.defer = true;
+                s1.src = scriptUrl;
+                s1.dataset.websiteId = projectId;
+                s1.dataset.domains = 'drose.io';
+                document.head.appendChild(s1);
+            }
+
+            // Aggregate domain dashboard
+            const aggregateId = '33e9b5a0-5fbf-474c-9d60-9bee34d577bd';
+            if (aggregateId) {
+                const s2 = document.createElement('script');
+                s2.defer = true;
+                s2.src = scriptUrl;
+                s2.dataset.websiteId = aggregateId;
+                s2.dataset.domains = 'drose.io';
+                document.head.appendChild(s2);
+            }
         })();
     </script>
 
