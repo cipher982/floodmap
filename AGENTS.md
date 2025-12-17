@@ -13,3 +13,11 @@ This repo powers `https://drose.io/floodmap` (MapLibre + client-side elevation/f
 
 ## Where To Look Next
 - Agent docs index: `docs/AGENTS.md`
+
+## Custom Event Tracking
+
+**CRITICAL - DO NOT MODIFY:** `src/web/js/map-client.js` (lines 874-911) contains sophisticated custom event tracking:
+- `location_click` - Geographic coordinates when user clicks map
+- `viewport_view` - Viewport bounds, center, zoom level
+
+These events are working in production. Any changes to base Umami script must preserve this custom event code.
