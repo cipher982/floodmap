@@ -1,7 +1,10 @@
 """
-Pytest configuration for E2E tests using Playwright.
+Pytest configuration for Playwright-backed end-to-end tests.
 """
 
+from __future__ import annotations
+
+import os
 import subprocess
 import time
 
@@ -9,26 +12,32 @@ import pytest
 import requests
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
-# Application configuration
-APP_HOST = "localhost"
-APP_PORT = 8001  # Avoid collisions with a running dev server
+APP_HOST = "127.0.0.1"
+APP_PORT = 8001
 BASE_URL = f"http://{APP_HOST}:{APP_PORT}"
 
 
 @pytest.fixture(scope="function")
 def app_server():
-    """Start the application server for testing."""
-    import os
-
-    # Set environment for test server
+    """Start the local API/web server for browser tests."""
     env = os.environ.copy()
     env["API_PORT"] = str(APP_PORT)
     env["ALLOW_MISSING_DATA"] = "true"
     env["ENVIRONMENT"] = "development"
 
-    # Start the server process
     process = subprocess.Popen(
-        ["uv", "run", "python", "main.py"],
+        [
+            "uv",
+            "run",
+            "uvicorn",
+            "main:app",
+            "--host",
+            APP_HOST,
+            "--port",
+            str(APP_PORT),
+            "--log-level",
+            "warning",
+        ],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -36,11 +45,8 @@ def app_server():
         env=env,
     )
 
-    # Wait for server to be ready
     max_retries = 30
-    startup_stdout = []
-    startup_stderr = []
-    for i in range(max_retries):
+    for _ in range(max_retries):
         try:
             response = requests.get(f"{BASE_URL}/api/health", timeout=2)
             if response.status_code == 200:
@@ -48,46 +54,30 @@ def app_server():
         except requests.exceptions.RequestException:
             time.sleep(1)
 
-        # Drain any available output for diagnostics without blocking.
-        try:
-            if process.stdout:
-                line = process.stdout.readline()
-                if line:
-                    startup_stdout.append(line)
-            if process.stderr:
-                line = process.stderr.readline()
-                if line:
-                    startup_stderr.append(line)
-        except Exception:
-            pass
-
-        # Check if process died
         if process.poll() is not None:
             stdout, stderr = process.communicate()
-            raise RuntimeError(f"Server process died: stdout={stdout}, stderr={stderr}")
+            raise RuntimeError(
+                f"Server process died before becoming healthy: stdout={stdout}, stderr={stderr}"
+            )
     else:
-        stdout, stderr = process.communicate()
+        stdout, stderr = process.communicate(timeout=5)
         process.terminate()
         process.wait()
-        stdout = "".join(startup_stdout) + stdout
-        stderr = "".join(startup_stderr) + stderr
         raise RuntimeError(
-            f"Failed to start application server after {max_retries} tries: stdout={stdout}, stderr={stderr}"
+            f"Failed to start server after {max_retries} retries: stdout={stdout}, stderr={stderr}"
         )
 
     yield BASE_URL
 
-    # Cleanup
     process.terminate()
     process.wait()
 
 
 @pytest.fixture(scope="function")
 async def browser():
-    """Launch browser for testing."""
     playwright = await async_playwright().start()
     browser = await playwright.chromium.launch(
-        headless=True,  # Set to False for debugging
+        headless=True,
         args=["--no-sandbox", "--disable-setuid-sandbox"],
     )
     yield browser
@@ -97,9 +87,9 @@ async def browser():
 
 @pytest.fixture
 async def context(browser: Browser) -> BrowserContext:
-    """Create a new browser context for each test."""
     context = await browser.new_context(
-        viewport={"width": 1280, "height": 720}, ignore_https_errors=True
+        viewport={"width": 1280, "height": 720},
+        ignore_https_errors=True,
     )
     yield context
     await context.close()
@@ -107,143 +97,85 @@ async def context(browser: Browser) -> BrowserContext:
 
 @pytest.fixture
 async def page(context: BrowserContext, app_server: str) -> Page:
-    """Create a new page for each test."""
     page = await context.new_page()
-
-    # Set base URL for convenience
     page.base_url = app_server
-
-    # Track the maximum z requested for elevation-data tiles.
     page.max_elevation_request_z = None
 
-    def _track_request(req):
+    def track_request(req):
         try:
-            url = req.url
             marker = "/api/v1/tiles/elevation-data/"
-            if marker in url:
-                rest = url.split(marker, 1)[1]
-                z_str = rest.split("/", 1)[0]
-                z = int(z_str)
-                if (
-                    page.max_elevation_request_z is None
-                    or z > page.max_elevation_request_z
-                ):
-                    page.max_elevation_request_z = z
+            if marker not in req.url:
+                return
+            rest = req.url.split(marker, 1)[1]
+            z = int(rest.split("/", 1)[0])
+            if page.max_elevation_request_z is None or z > page.max_elevation_request_z:
+                page.max_elevation_request_z = z
         except Exception:
             return
 
-    page.on("request", _track_request)
+    page.on("request", track_request)
 
     yield page
 
-    # Ensure all connections are closed
     await page.close()
 
 
 class MapPage:
-    """Page Object Model for the map page."""
-
     def __init__(self, page: Page):
         self.page = page
 
-    async def goto_homepage(self):
-        """Navigate to the application homepage."""
-        await self.page.goto(self.page.base_url + "/")
-        # External CDN scripts (e.g., maplibre css/js) can keep the network busy;
-        # the app is still usable once DOM is loaded.
-        await self.page.wait_for_load_state("domcontentloaded")
-
-    async def wait_for_map_load(self):
-        """Wait for the map to load (MapLibre in this app)."""
-        # Map container should exist
-        await self.page.wait_for_selector("#map", state="attached", timeout=10000)
-
-        # FloodMap client should initialize and expose `window.floodMap.map`.
-        # (First wait for the object, then the map instance.)
-        await self.page.wait_for_function(
-            "() => Boolean(window.floodMap)",
-            timeout=15000,
+    async def goto_homepage(self, path: str = "/"):
+        await self.page.goto(
+            f"{self.page.base_url}{path}", wait_until="domcontentloaded"
         )
+
+    async def wait_for_app_ready(self):
+        await self.page.wait_for_selector("#map", state="attached", timeout=10000)
         await self.page.wait_for_function(
             "() => Boolean(window.floodMap && window.floodMap.map)",
             timeout=30000,
         )
+        await self.page.wait_for_function(
+            "() => window.floodMap.map.loaded()",
+            timeout=30000,
+        )
+        await self.page.wait_for_timeout(400)
 
-        # Give MapLibre a moment to render first frame/tiles
-        await self.page.wait_for_timeout(500)
-
-    async def get_location_info(self):
-        """Extract location information from the page."""
-        location_info = {}
-
-        # Wait for location info to be displayed
-        await self.page.wait_for_selector("text=IP Address:", timeout=5000)
-
-        # Extract text content
-        content = await self.page.text_content("body")
-
-        # Parse location information
-        lines = content.split("\\n")
-        for line in lines:
-            if "IP Address:" in line:
-                location_info["ip"] = line.split(":")[-1].strip()
-            elif "City:" in line:
-                location_info["city"] = line.split(":")[-1].strip()
-            elif "Latitude:" in line:
-                location_info["latitude"] = line.split(":")[-1].strip().replace("°", "")
-            elif "Longitude:" in line:
-                location_info["longitude"] = (
-                    line.split(":")[-1].strip().replace("°", "")
-                )
-            elif "Elevation:" in line:
-                location_info["elevation"] = (
-                    line.split(":")[-1].strip().replace(" m", "")
-                )
-
-        return location_info
-
-    async def check_map_display(self):
-        """Check if the map is properly displayed."""
-        # Check if map iframe is present and has content
-        map_iframe = await self.page.locator("#map").first
-        is_visible = await map_iframe.is_visible()
-
-        # Check for any error messages
-        error_elements = await self.page.locator("text=error").count()
-
-        return {"map_visible": is_visible, "has_errors": error_elements > 0}
-
-    async def test_elevation_tiles(self):
-        """Test if elevation tiles are loading."""
-        # Check for tile requests in network
-        tile_requests = []
-
-        def handle_request(request):
-            if "/tiles/" in request.url:
-                tile_requests.append(request.url)
-
-        self.page.on("request", handle_request)
-
-        # Reload page to capture tile requests
-        await self.page.reload()
-        await self.page.wait_for_load_state("networkidle")
-
-        return tile_requests
-
-    async def get_flood_risk_data(self, water_level: float = 10.0):
-        """Test flood risk endpoint."""
-        # Navigate to risk endpoint
-        response = await self.page.request.get(
-            f"{self.page.base_url}/risk/{water_level}"
+    async def get_map_state(self):
+        return await self.page.evaluate(
+            """() => {
+                const center = window.floodMap.map.getCenter();
+                return {
+                    view: window.floodMap.viewMode,
+                    water: window.floodMap.currentWaterLevel,
+                    lat: center.lat,
+                    lng: center.lng,
+                    zoom: window.floodMap.map.getZoom()
+                };
+            }"""
         )
 
-        if response.status == 200:
-            return await response.json()
-        else:
-            return {"status_code": response.status, "error": await response.text()}
+    async def set_view_mode(self, mode: str):
+        await self.page.click(f"label[for='{mode}-mode']")
+        await self.page.wait_for_timeout(250)
+
+    async def set_water_level_slider(self, slider_value: int):
+        await self.page.locator("#water-level").evaluate(
+            """(slider, value) => {
+                slider.value = String(value);
+                slider.dispatchEvent(new Event('input', { bubbles: true }));
+            }""",
+            slider_value,
+        )
+        await self.page.wait_for_timeout(150)
+
+    async def get_water_level_display(self):
+        return await self.page.text_content("#water-level-display")
+
+    async def get_current_tile_source(self):
+        return await self.page.evaluate("() => window.floodMap.getTileUrl()")
 
 
 @pytest.fixture
 async def map_page(page: Page) -> MapPage:
-    """Create a MapPage instance."""
     return MapPage(page)
