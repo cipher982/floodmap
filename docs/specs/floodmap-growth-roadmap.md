@@ -403,7 +403,27 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 10 status
-- Pending
+- Completed on 2026-04-10.
+- Shipped via commit `aa63f48`, pushed to `origin/main`, and deployed with Coolify deployment `mss8ogok4ko0s88w8cggccwo`.
+- Added XML sitemap support in `src/api/sitemaps.py` and route wiring in `src/api/main.py`:
+  - `https://drose.io/floodmap/sitemap.xml` now serves a sitemap index
+  - `https://drose.io/floodmap/sitemaps/pages.xml` lists the homepage URL
+  - `https://drose.io/floodmap/sitemaps/cities.xml` lists the curated city slug URLs
+- Added normal internal city links in the rendered HTML:
+  - homepage now exposes a `Popular city flood maps` section with direct `<a href>` links to city pages
+  - city pages now expose `Related city flood maps` links based on the curated city relationships in `src/api/location_catalog.py`
+- Added regression coverage in `tests/unit/test_sitemaps.py` for sitemap XML and internal-link HTML, plus a browser assertion in `tests/e2e/test_city_pages.py` for the related-links section.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e -q`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap/sitemap.xml` serves a sitemap index with `pages.xml` and `cities.xml`
+  - `https://drose.io/floodmap/sitemaps/cities.xml` lists city URLs including Tampa, New York, and Seattle
+  - `https://drose.io/floodmap` serves asset version `20260410h` and visible city links such as `/floodmap/fl/tampa`
+  - `https://drose.io/floodmap/fl/tampa` serves visible related city links for Miami, Savannah, and New Orleans
+  - live browser smoke confirms the Tampa slug page still loads in flood mode at water `3.0`, centered on Tampa
+- Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 11 status
 - Pending
