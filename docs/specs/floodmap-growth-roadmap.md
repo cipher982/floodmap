@@ -300,7 +300,19 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 5 status
-- Ready to start.
+- Completed on 2026-04-10.
+- Shipped via commit `823a6e5`, pushed to `origin/main`, and deployed with Coolify deployment `uck404cgowwo4g04ocosk848`.
+- Upgraded the homepage acquisition surface with stronger title/description copy, a visible explanatory sidebar section, and a real JPEG social preview wired into Open Graph/Twitter metadata.
+- Added regression coverage in `tests/unit/test_homepage_content.py` for the new SEO/social metadata and image serving, and updated the browser smoke expectation in `tests/e2e/test_map_functionality.py` for the new `FloodMap USA` heading.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e -q`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap` serves asset version `20260410d`, `summary_large_image` metadata, and the new `Flood map for any U.S. city or ZIP` explanatory section
+  - `https://drose.io/floodmap/static/images/social-card.jpg?v=20260410d` returns `image/jpeg` and valid JPEG bytes
+  - `https://drose.io/floodmap/api/places/search?q=Tampa` still returns results
+- Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 6 status
 - Pending
