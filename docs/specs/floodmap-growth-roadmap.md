@@ -487,5 +487,20 @@ Acceptance criteria:
   - `https://drose.io/floodmap/zip/33602` returns `200` with `X-Robots-Tag: noindex, follow`
   - live HTML for `https://drose.io/floodmap/zip/33602` serves asset version `20260410i`, the ZIP-specific title/copy, and `<meta name="robots" content="noindex,follow">`
   - live browser smoke confirms `/floodmap/zip/33602` loads in flood mode at water `3.0`, centered on Tampa ZIP `33602`, with zoom `11.0`
-  - `https://drose.io/floodmap/sitemap.xml` still omits ZIP URLs and no ZIP sitemap is published
+- `https://drose.io/floodmap/sitemap.xml` still omits ZIP URLs and no ZIP sitemap is published
 - Claude Haiku cursory review: `APPROVE`.
+
+### Phase 12 status
+- Completed on 2026-04-10.
+- Shipped via commits `eb585bd` and `b0b7291`, pushed to `origin/main`, and deployed with Coolify deployment `b4oo4k44s80kggsg0k0cgk0g`.
+- Added debounced typeahead search in `src/web/js/map-client.js` so the existing places endpoint now powers live city/ZIP suggestions while the user types, without removing the existing `Go`/Enter submit path.
+- Updated the search hint copy in `src/web/index.html` to reflect the new suggestion-first flow and added browser coverage in `tests/e2e/test_search_functionality.py` for live suggestions before submit plus selection from the suggestion list.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e -q`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap` serves asset version `20260410j` and the updated search hint text
+  - live browser smoke confirms typing `tampa` without pressing `Go` shows multiple suggestions and a status message before submit
+  - clicking the first live suggestion sets the input to `Tampa`, shows the `Showing Tampa...` status, and moves the live map to Tampa
+- Claude Haiku cursory review: `APPROVE` with no obvious regressions called out.
