@@ -215,3 +215,12 @@ def get_city_page(state_slug: str, city_slug: str) -> CityPage | None:
 
 def list_city_pages() -> tuple[CityPage, ...]:
     return _CITY_PAGES
+
+
+def list_related_city_pages(city_page: CityPage) -> tuple[CityPage, ...]:
+    related_pages = []
+    for state_slug, city_slug in city_page.related_city_keys:
+        related_city = get_city_page(state_slug, city_slug)
+        if related_city is not None:
+            related_pages.append(related_city)
+    return tuple(related_pages)

@@ -559,6 +559,38 @@ button:disabled {
     margin-bottom: 8px;
 }
 
+.location-link-section {
+    margin-top: 18px;
+}
+
+.location-link-intro {
+    margin-top: 8px;
+    color: #64748b;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.location-link-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px 14px;
+    margin-top: 12px;
+    padding-left: 18px;
+}
+
+.location-link-list li {
+    line-height: 1.4;
+}
+
+.location-link-list a {
+    color: #1d4ed8;
+    text-decoration: none;
+}
+
+.location-link-list a:hover {
+    text-decoration: underline;
+}
+
 .model-summary {
     padding: 12px 14px;
     border-radius: 10px;

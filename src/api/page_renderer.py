@@ -7,13 +7,18 @@ from html import escape
 from pathlib import Path
 from typing import Final
 
-from location_catalog import HOME_DEFAULT_VIEW_STATE, CityPage
+from location_catalog import (
+    HOME_DEFAULT_VIEW_STATE,
+    CityPage,
+    list_city_pages,
+    list_related_city_pages,
+)
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260410g"
+ASSET_VERSION: Final[str] = "20260410h"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )
@@ -154,6 +159,32 @@ def _build_city_structured_data(
     return _render_json_ld(payload)
 
 
+def _build_location_link_section(
+    *,
+    title: str,
+    intro: str,
+    city_pages: tuple[CityPage, ...],
+) -> str:
+    if not city_pages:
+        return ""
+
+    links_html = "\n".join(
+        "                    "
+        f'<li><a href="{escape(city_page.canonical_path, quote=True)}">'
+        f"{escape(city_page.full_name)}</a></li>"
+        for city_page in city_pages
+    )
+    return (
+        '                <section class="location-link-section">\n'
+        f"                    <h3>{escape(title)}</h3>\n"
+        f'                    <p class="location-link-intro">{escape(intro)}</p>\n'
+        '                    <ul class="location-link-list">\n'
+        f"{links_html}\n"
+        "                    </ul>\n"
+        "                </section>"
+    )
+
+
 def _render_page(context: PageRenderContext) -> str:
     replacements = {
         "__FLOODMAP_ASSET_VERSION__": escape(ASSET_VERSION, quote=True),
@@ -225,6 +256,11 @@ def build_home_page_html() -> str:
             "FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk",
             "Interactive U.S. flood map for any city or ZIP code. Search a location, compare elevation, test storm surge or sea-level scenarios, and share the exact map view.",
         ),
+        nearby_links_html=_build_location_link_section(
+            title="Popular city flood maps",
+            intro="Start with a city landing page if you want location-specific copy, metadata, and a map already centered on a major coastal or river metro.",
+            city_pages=list_city_pages(),
+        ),
     )
     return _render_page(context)
 
@@ -278,6 +314,11 @@ def build_city_page_html(city_page: CityPage) -> str:
             title=title,
             description=description,
             about_intro=about_intro,
+        ),
+        nearby_links_html=_build_location_link_section(
+            title="Related city flood maps",
+            intro="Jump to another city page if you want a comparable coastal or river-front metro without going back to the homepage.",
+            city_pages=list_related_city_pages(city_page),
         ),
     )
     return _render_page(context)

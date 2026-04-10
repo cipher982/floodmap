@@ -16,6 +16,9 @@ async def test_city_slug_page_uses_route_defaults_without_query_params(
     title = await map_page.page.title()
     heading = await map_page.page.locator("h1").first.text_content()
     breadcrumb = await map_page.page.locator("[aria-label='Breadcrumb']").text_content()
+    related_heading = await map_page.page.locator(
+        ".location-link-section h3"
+    ).last.text_content()
     state = await map_page.get_map_state()
     parsed = urlparse(map_page.page.url)
 
@@ -23,6 +26,7 @@ async def test_city_slug_page_uses_route_defaults_without_query_params(
     assert "Flood map for Tampa, Florida" in heading
     assert "FloodMap USA" in breadcrumb
     assert "Tampa, Florida" in breadcrumb
+    assert "Related city flood maps" in related_heading
     assert parsed.path == "/fl/tampa"
     assert parsed.query == ""
     assert state["view"] == "flood"

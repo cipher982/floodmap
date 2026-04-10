@@ -168,6 +168,11 @@ from middleware.rate_limiter import RateLimitMiddleware
 from page_renderer import build_city_page_html, build_home_page_html
 from routers import diagnostics as diagnostics_router
 from routers import health, places, risk, tiles_performance_test, tiles_v1
+from sitemaps import (
+    build_city_sitemap_xml,
+    build_pages_sitemap_xml,
+    build_sitemap_index_xml,
+)
 
 # Create FastAPI app
 app = FastAPI(
@@ -381,6 +386,40 @@ async def site_manifest():
 async def site_manifest_floodmap():
     """Serve the same path-relative manifest on the /floodmap subpath."""
     return _build_site_manifest()
+
+
+def _build_xml_response(content: str) -> Response:
+    return Response(content=content, media_type="application/xml")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_index():
+    return _build_xml_response(build_sitemap_index_xml())
+
+
+@app.get("/floodmap/sitemap.xml", include_in_schema=False)
+async def sitemap_index_floodmap():
+    return _build_xml_response(build_sitemap_index_xml())
+
+
+@app.get("/sitemaps/pages.xml", include_in_schema=False)
+async def pages_sitemap():
+    return _build_xml_response(build_pages_sitemap_xml())
+
+
+@app.get("/floodmap/sitemaps/pages.xml", include_in_schema=False)
+async def pages_sitemap_floodmap():
+    return _build_xml_response(build_pages_sitemap_xml())
+
+
+@app.get("/sitemaps/cities.xml", include_in_schema=False)
+async def cities_sitemap():
+    return _build_xml_response(build_city_sitemap_xml())
+
+
+@app.get("/floodmap/sitemaps/cities.xml", include_in_schema=False)
+async def cities_sitemap_floodmap():
+    return _build_xml_response(build_city_sitemap_xml())
 
 
 @app.api_route(
