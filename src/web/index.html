@@ -9,7 +9,7 @@
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
     <script>
         // Unified cache-busting version (edit this value only)
-        window.FLOODMAP_ASSET_VERSION = "20260410b";
+        window.FLOODMAP_ASSET_VERSION = "20260410c";
 
         // Public app path is either domain-root local/dev or /floodmap in production.
         window.FLOODMAP_PUBLIC_BASE_PATH = (function determineFloodmapPublicBasePath() {
@@ -215,6 +215,14 @@
                     <div id="location-search-results" class="search-results" role="list"></div>
                 </div>
                 <div class="control-group">
+                    <label for="share-view-button">Share This View:</label>
+                    <div class="share-actions">
+                        <button id="share-view-button" type="button">Copy Share Link</button>
+                        <p class="control-hint">Includes the map center, zoom, view mode, and water level.</p>
+                    </div>
+                    <div id="share-view-status" class="share-status" aria-live="polite"></div>
+                </div>
+                <div class="control-group">
                     <label>View Mode:</label>
                     <div class="segmented-control" id="view-mode">
                         <input type="radio" name="view-mode" id="elevation-mode" value="elevation" checked>
@@ -276,10 +284,12 @@
                 });
             }
 
+            const us = window.floodmapAssetUrl('/js/url-state.js');
             const er = window.floodmapAssetUrl('/js/elevation-renderer.js');
             const mc = window.floodmapAssetUrl('/js/map-client.js');
 
-            loadScript(er)
+            loadScript(us)
+                .then(() => loadScript(er))
                 .then(() => loadScript(mc))
                 .then(() => {
                     if (typeof window.floodmapInit === 'function') window.floodmapInit();

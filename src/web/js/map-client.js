@@ -3,19 +3,30 @@
  * Uses custom protocol handler to intercept tile requests
  */
 
-function requireFloodmapUrlHelper(helperName) {
-    const helper = typeof window !== 'undefined' ? window[helperName] : null;
-    if (typeof helper !== 'function') {
-        throw new Error(`${helperName} is required before loading Floodmap client scripts.`);
+function requireFloodmapGlobal(globalName, expectedType = null) {
+    const value = typeof window !== 'undefined' ? window[globalName] : null;
+    if (value == null) {
+        throw new Error(`${globalName} is required before loading Floodmap client scripts.`);
     }
-    return helper;
+    if (expectedType && typeof value !== expectedType) {
+        throw new Error(`${globalName} must be a ${expectedType}.`);
+    }
+    return value;
+}
+
+function requireFloodmapUrlHelper(helperName) {
+    return requireFloodmapGlobal(helperName, 'function');
 }
 
 class FloodMapClient {
     constructor() {
         this.map = null;
-        this.currentWaterLevel = 1.0;
-        this.viewMode = 'elevation';
+        this.shareStatusResetTimer = null;
+        this.pendingPermalinkFrame = null;
+        this.initialViewState = requireFloodmapGlobal('FloodmapUrlState')
+            .parseFloodmapUrlState(window.location.href);
+        this.currentWaterLevel = this.initialViewState.water;
+        this.viewMode = this.initialViewState.view;
         this.elevationRenderer = new ElevationRenderer();
         this.modelNoteState = { nearWater: false, coastal: false };
         this.locationSearchAbortController = null;
@@ -468,8 +479,8 @@ class FloodMapClient {
                     }
                 ]
             },
-            center: [-82.46, 27.95], // Tampa Bay
-            zoom: config.zoom,
+            center: [this.initialViewState.lng, this.initialViewState.lat],
+            zoom: this.initialViewState.zoom,
             minZoom: config.minZoom,
             maxZoom: config.maxZoom
         });
@@ -501,11 +512,15 @@ class FloodMapClient {
 
         // Track viewport when user stops panning/zooming
         this.map.on('moveend', () => {
+            this.schedulePermalinkUpdate();
             this.trackViewportView();
         });
 
         // Track initial viewport on load
         this.map.on('load', () => {
+            if (this.initialViewState.hasExplicitState) {
+                this.syncPermalinkWithMap();
+            }
             this.trackViewportView();
         });
     }
@@ -534,11 +549,13 @@ class FloodMapClient {
 
         // View mode radio buttons
         const viewModeRadios = document.querySelectorAll('input[name="view-mode"]');
+        this.syncViewModeControls();
         viewModeRadios.forEach(radio => {
             radio.addEventListener('change', (e) => {
                 this.viewMode = e.target.value;
                 this.updateViewMode();
                 this.updateModelNote(this.modelNoteState);
+                this.schedulePermalinkUpdate();
             });
         });
 
@@ -547,29 +564,24 @@ class FloodMapClient {
         const waterLevelDisplay = document.getElementById('water-level-display');
         const waterLevelVibe = document.getElementById('water-level-vibe');
 
-        waterLevelSlider.addEventListener('input', (e) => {
-            const sliderValue = parseFloat(e.target.value);
-            const oldWaterLevel = this.currentWaterLevel;
-            this.currentWaterLevel = this.sliderToWaterLevel(sliderValue);
+        if (waterLevelSlider && waterLevelDisplay && waterLevelVibe) {
+            waterLevelSlider.addEventListener('input', (e) => {
+                const sliderValue = parseFloat(e.target.value);
+                const oldWaterLevel = this.currentWaterLevel;
+                this.currentWaterLevel = this.sliderToWaterLevel(sliderValue);
 
-            waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
-            this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
+                waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
+                this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
+                this.updateActivePresetChip();
 
-            // Clear active state from preset chips when manually sliding
-            document.querySelectorAll('.preset-chip').forEach(chip => {
-                chip.classList.remove('active');
+                // Only update if water level actually changed
+                if (oldWaterLevel !== this.currentWaterLevel) {
+                    this.updateFloodLayer();
+                    this.schedulePermalinkUpdate();
+                }
             });
-
-            // Only update if water level actually changed
-            if (oldWaterLevel !== this.currentWaterLevel) {
-                this.updateFloodLayer();
-            }
-        });
-
-        // Initialize with default value
-        this.currentWaterLevel = this.sliderToWaterLevel(30);
-        waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
-        this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
+        }
+        this.syncWaterLevelControls();
 
         // Water level preset chips
         const presetChips = document.querySelectorAll('.preset-chip');
@@ -585,24 +597,30 @@ class FloodMapClient {
                 const oldWaterLevel = this.currentWaterLevel;
                 this.currentWaterLevel = targetLevel;
 
-                // Update display
-                waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
-                this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
-
-                // Update active state on chips
-                presetChips.forEach(c => c.classList.remove('active'));
-                e.target.classList.add('active');
+                this.syncWaterLevelControls();
 
                 // Trigger flood layer update if level changed
                 if (oldWaterLevel !== this.currentWaterLevel) {
                     this.updateFloodLayer();
+                    this.schedulePermalinkUpdate();
                 }
             });
         });
 
+        const shareButton = document.getElementById('share-view-button');
+        if (shareButton) {
+            shareButton.addEventListener('click', () => {
+                void this.copyShareLink();
+            });
+        }
+
         // Find location button
         document.getElementById('find-location').addEventListener('click', () => {
             this.findUserLocation();
+        });
+
+        window.addEventListener('popstate', () => {
+            this.applyPermalinkStateFromCurrentUrl();
         });
 
         // Status display can be added for debugging if needed
@@ -615,6 +633,38 @@ class FloodMapClient {
                 this.updateViewMode();
             });
         }
+    }
+
+    syncViewModeControls() {
+        document.querySelectorAll('input[name="view-mode"]').forEach((radio) => {
+            radio.checked = radio.value === this.viewMode;
+        });
+    }
+
+    syncWaterLevelControls() {
+        const waterLevelSlider = document.getElementById('water-level');
+        const waterLevelDisplay = document.getElementById('water-level-display');
+        const waterLevelVibe = document.getElementById('water-level-vibe');
+
+        if (waterLevelSlider) {
+            waterLevelSlider.value = String(this.waterLevelToSlider(this.currentWaterLevel));
+        }
+        if (waterLevelDisplay) {
+            waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
+        }
+        if (waterLevelVibe) {
+            this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
+        }
+
+        this.updateActivePresetChip();
+    }
+
+    updateActivePresetChip() {
+        document.querySelectorAll('.preset-chip').forEach((chip) => {
+            const level = Number.parseFloat(chip.dataset.level);
+            const isActive = Number.isFinite(level) && Math.abs(level - this.currentWaterLevel) < 0.05;
+            chip.classList.toggle('active', isActive);
+        });
     }
 
 
@@ -683,6 +733,127 @@ class FloodMapClient {
         // log10(waterLevel / 0.1) = slider/25
         // slider = 25 * log10(waterLevel / 0.1)
         return 25 * Math.log10(waterLevel / 0.1);
+    }
+
+    getCurrentViewState() {
+        const center = this.map ? this.map.getCenter() : {
+            lat: this.initialViewState.lat,
+            lng: this.initialViewState.lng
+        };
+        const zoom = this.map ? this.map.getZoom() : this.initialViewState.zoom;
+
+        return {
+            lat: center.lat,
+            lng: center.lng,
+            zoom,
+            view: this.viewMode,
+            water: this.currentWaterLevel
+        };
+    }
+
+    buildShareUrl({ includeDefaults = true } = {}) {
+        const urlState = requireFloodmapGlobal('FloodmapUrlState');
+        const currentViewState = this.getCurrentViewState();
+
+        if (!includeDefaults && urlState.isDefaultViewState(currentViewState)) {
+            return urlState.stripFloodmapStateParams(window.location.href);
+        }
+
+        return urlState.buildFloodmapShareUrl(window.location.href, currentViewState);
+    }
+
+    schedulePermalinkUpdate() {
+        if (this.pendingPermalinkFrame) return;
+
+        this.pendingPermalinkFrame = window.requestAnimationFrame(() => {
+            this.pendingPermalinkFrame = null;
+            this.syncPermalinkWithMap();
+        });
+    }
+
+    syncPermalinkWithMap() {
+        const nextUrl = this.buildShareUrl({ includeDefaults: false });
+        if (nextUrl === window.location.href) return;
+        window.history.replaceState(window.history.state, '', nextUrl);
+    }
+
+    applyPermalinkStateFromCurrentUrl() {
+        const urlState = requireFloodmapGlobal('FloodmapUrlState');
+        const nextState = urlState.parseFloodmapUrlState(window.location.href);
+
+        this.initialViewState = nextState;
+        this.currentWaterLevel = nextState.water;
+        this.viewMode = nextState.view;
+        this.syncViewModeControls();
+        this.syncWaterLevelControls();
+        this.updateViewMode();
+
+        if (this.map) {
+            this.map.jumpTo({
+                center: [nextState.lng, nextState.lat],
+                zoom: nextState.zoom
+            });
+        }
+    }
+
+    async copyShareLink() {
+        const shareUrl = this.buildShareUrl({ includeDefaults: true });
+
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(shareUrl);
+            } else {
+                this.copyTextFallback(shareUrl);
+            }
+            this.updateShareStatus('Share link copied.', 'success');
+        } catch (error) {
+            console.warn('Share link copy failed:', error);
+            this.updateShareStatus(
+                'Copy failed. Use the address bar URL instead.',
+                'error'
+            );
+        }
+    }
+
+    copyTextFallback(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!copied) {
+            throw new Error('document.execCommand(copy) returned false');
+        }
+    }
+
+    updateShareStatus(message = '', state = '') {
+        const status = document.getElementById('share-view-status');
+        if (!status) return;
+
+        status.textContent = message;
+        status.className = 'share-status';
+        if (state) {
+            status.classList.add(`is-${state}`);
+        }
+
+        if (this.shareStatusResetTimer) {
+            window.clearTimeout(this.shareStatusResetTimer);
+            this.shareStatusResetTimer = null;
+        }
+
+        if (message) {
+            this.shareStatusResetTimer = window.setTimeout(() => {
+                status.textContent = '';
+                status.className = 'share-status';
+                this.shareStatusResetTimer = null;
+            }, 3200);
+        }
     }
 
     getTileCoordinates(lat, lng, zoom) {
