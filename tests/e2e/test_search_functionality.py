@@ -4,6 +4,7 @@ Deterministic browser coverage for the current location-search flow.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from urllib.parse import parse_qs, urlparse
 
@@ -214,6 +215,84 @@ async def test_location_search_typeahead_does_not_shift_share_controls(
     assert abs(share_top_after - share_top_before) < 4
     assert layout_state["resultsPosition"] == "absolute"
     assert layout_state["resultsTop"] >= layout_state["shellBottom"] - 1
+
+
+@pytest.mark.asyncio
+async def test_far_location_search_uses_progressive_jump_overlay(map_page: MapPage):
+    async def handle_search(route):
+        await route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(
+                {
+                    "query": "Seattle",
+                    "results": [
+                        {
+                            "name": "Seattle",
+                            "label": "Seattle, Washington, United States",
+                            "latitude": 47.6062,
+                            "longitude": -122.3321,
+                            "type": "city",
+                            "bounds": None,
+                        }
+                    ],
+                }
+            ),
+        )
+
+    async def delay_elevation_tiles(route):
+        response = await route.fetch()
+        await asyncio.sleep(0.25)
+        await route.fulfill(response=response)
+
+    await map_page.page.route("**/api/places/search*", handle_search)
+    await map_page.page.route(
+        "**/api/v1/tiles/elevation-data/**", delay_elevation_tiles
+    )
+    await map_page.goto_homepage()
+    await map_page.wait_for_app_ready()
+
+    await map_page.page.fill("#location-search", "Seattle")
+    await map_page.page.click("#location-search-button")
+    await map_page.page.wait_for_function(
+        """() => Boolean(window.floodMap.lastProgressiveJumpPlan?.useProgressive)""",
+        timeout=10000,
+    )
+    await map_page.page.wait_for_function(
+        """() => document.getElementById('map-transition-overlay')?.dataset?.state === 'active'""",
+        timeout=10000,
+    )
+
+    overlay_state = await map_page.page.evaluate(
+        """() => {
+            const overlay = document.getElementById('map-transition-overlay');
+            const image = document.getElementById('map-transition-overlay-image');
+            return {
+                hidden: overlay?.hidden ?? true,
+                state: overlay?.dataset?.state ?? '',
+                hasImage: Boolean(image?.getAttribute('src'))
+            };
+        }"""
+    )
+    plan = await map_page.page.evaluate("() => window.floodMap.lastProgressiveJumpPlan")
+
+    assert overlay_state["hidden"] is False
+    assert overlay_state["state"] == "active"
+    assert overlay_state["hasImage"] is True
+    assert plan["stageZoom"] == 7
+    assert plan["distanceKm"] > 3000
+
+    await map_page.page.wait_for_function(
+        """() => document.getElementById('map-transition-overlay')?.dataset?.state === 'hidden'""",
+        timeout=10000,
+    )
+    await map_page.page.wait_for_timeout(1100)
+
+    state = await map_page.get_map_state()
+
+    assert abs(state["lat"] - 47.6062) < 0.02
+    assert abs(state["lng"] - (-122.3321)) < 0.02
+    assert abs(state["zoom"] - 10.5) < 0.2
 
 
 @pytest.mark.asyncio

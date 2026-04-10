@@ -164,7 +164,15 @@
             </div>
         </header>
 
-        <div id="map"></div>
+        <div id="map">
+            <div id="map-transition-overlay" class="map-transition-overlay" hidden aria-hidden="true" data-state="hidden">
+                <img id="map-transition-overlay-image" class="map-transition-overlay__image" alt="">
+                <div class="map-transition-overlay__status">
+                    <span class="map-transition-overlay__pulse"></span>
+                    <span>Loading destination terrain...</span>
+                </div>
+            </div>
+        </div>
 
         <!-- Legend overlay -->
         <div id="legend" class="legend">
@@ -326,6 +334,7 @@ __FLOODMAP_NEARBY_LINKS_SECTION__
             const ml = window.floodmapAssetUrl('/vendor/maplibre-gl-csp-4.7.1.js');
             const mlWorker = window.floodmapAssetUrl('/vendor/maplibre-gl-csp-worker-4.7.1.js');
             const us = window.floodmapAssetUrl('/js/url-state.js');
+            const jp = window.floodmapAssetUrl('/js/jump-planner.js');
             const er = window.floodmapAssetUrl('/js/elevation-renderer.js');
             const mc = window.floodmapAssetUrl('/js/map-client.js');
 
@@ -341,6 +350,7 @@ __FLOODMAP_NEARBY_LINKS_SECTION__
                     configureMapLibreWorker();
                     return loadScript(us);
                 })
+                .then(() => loadScript(jp))
                 .then(() => loadScript(er))
                 .then(() => loadScript(mc))
                 .then(() => {

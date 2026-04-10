@@ -39,6 +39,7 @@ class FloodMapClient {
             .parseFloodmapUrlState(window.location.href, this.defaultViewState);
         this.currentWaterLevel = this.initialViewState.water;
         this.viewMode = this.initialViewState.view;
+        this.jumpPlanner = requireFloodmapGlobal('FloodmapJumpPlanner');
         this.elevationRenderer = new ElevationRenderer();
         this.modelNoteState = { nearWater: false, coastal: false };
         this.locationSearchAbortController = null;
@@ -46,6 +47,10 @@ class FloodMapClient {
         this.searchResults = [];
         this.searchResultsSignature = '';
         this.activeSearchResultIndex = -1;
+        this.transitionOverlayHideTimer = null;
+        this.progressiveJumpSequence = 0;
+        this.lastProgressiveJumpPlan = null;
+        this.suppressViewportSync = false;
 
         // Initialize WebWorker for rendering if available
         this.initWorker();
@@ -525,6 +530,7 @@ class FloodMapClient {
 
         // Track viewport when user stops panning/zooming
         this.map.on('moveend', () => {
+            if (this.suppressViewportSync) return;
             this.schedulePermalinkUpdate();
             this.trackViewportView();
         });
@@ -914,6 +920,300 @@ class FloodMapClient {
         return { x, y };
     }
 
+    getMapViewportSize() {
+        const container = this.map?.getContainer?.();
+        return {
+            width: Math.max(256, container?.clientWidth || 0),
+            height: Math.max(256, container?.clientHeight || 0)
+        };
+    }
+
+    captureMapFrameDataUrl() {
+        const canvas = this.map?.getCanvas?.();
+        if (!canvas) return '';
+
+        try {
+            const dataUrl = canvas.toDataURL('image/png');
+            return typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')
+                ? dataUrl
+                : '';
+        } catch (error) {
+            console.warn('Map frame capture failed:', error);
+            return '';
+        }
+    }
+
+    showMapTransitionOverlay() {
+        const overlay = document.getElementById('map-transition-overlay');
+        const image = document.getElementById('map-transition-overlay-image');
+        if (!overlay || !image) return;
+
+        if (this.transitionOverlayHideTimer) {
+            window.clearTimeout(this.transitionOverlayHideTimer);
+            this.transitionOverlayHideTimer = null;
+        }
+
+        const snapshotUrl = this.captureMapFrameDataUrl();
+        if (snapshotUrl) {
+            image.src = snapshotUrl;
+        } else {
+            image.removeAttribute('src');
+        }
+
+        overlay.hidden = false;
+        overlay.dataset.state = 'active';
+        overlay.classList.remove('is-exiting');
+        overlay.classList.add('is-active');
+    }
+
+    hideMapTransitionOverlay({ immediate = false } = {}) {
+        const overlay = document.getElementById('map-transition-overlay');
+        const image = document.getElementById('map-transition-overlay-image');
+        if (!overlay) return;
+
+        const finalize = () => {
+            overlay.hidden = true;
+            overlay.dataset.state = 'hidden';
+            overlay.classList.remove('is-active', 'is-exiting');
+            image?.removeAttribute('src');
+            this.transitionOverlayHideTimer = null;
+        };
+
+        if (this.transitionOverlayHideTimer) {
+            window.clearTimeout(this.transitionOverlayHideTimer);
+            this.transitionOverlayHideTimer = null;
+        }
+
+        if (immediate || overlay.hidden) {
+            finalize();
+            return;
+        }
+
+        overlay.dataset.state = 'exiting';
+        overlay.classList.remove('is-active');
+        overlay.classList.add('is-exiting');
+        this.transitionOverlayHideTimer = window.setTimeout(finalize, 220);
+    }
+
+    waitForMapIdle(timeoutMs = 1800) {
+        return new Promise((resolve) => {
+            if (!this.map) {
+                resolve(false);
+                return;
+            }
+
+            let settled = false;
+            const finish = (didIdle) => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timer);
+                this.map.off('idle', onIdle);
+                resolve(didIdle);
+            };
+            const onIdle = () => finish(true);
+            const timer = window.setTimeout(() => finish(false), timeoutMs);
+
+            this.map.on('idle', onIdle);
+        });
+    }
+
+    async prefetchElevationTilesProgressively(tiles, sequence, concurrency = 4) {
+        const queue = Array.isArray(tiles)
+            ? tiles.filter((tile) => Number.isInteger(tile?.z) && Number.isInteger(tile?.x) && Number.isInteger(tile?.y))
+            : [];
+        if (!queue.length) return;
+
+        let index = 0;
+        const workerCount = Math.max(1, Math.min(concurrency, queue.length));
+        const worker = async () => {
+            while (index < queue.length) {
+                if (sequence !== this.progressiveJumpSequence) return;
+                const tile = queue[index];
+                index += 1;
+                try {
+                    await this.elevationRenderer.loadElevationTile(tile.z, tile.x, tile.y);
+                } catch (error) {
+                    if (error?.name !== 'AbortError') {
+                        console.warn('Destination tile prefetch failed:', error);
+                    }
+                }
+            }
+        };
+
+        await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    }
+
+    getSearchTargetCamera(result, bounds = null) {
+        const maxZoom = this.map?.getMaxZoom?.() ?? 11;
+        if (bounds) {
+            const fitBoundsOptions = {
+                duration: 1100,
+                padding: { top: 64, right: 64, bottom: 64, left: 64 },
+                maxZoom
+            };
+            let center = {
+                lat: (bounds.south + bounds.north) / 2,
+                lng: (bounds.west + bounds.east) / 2
+            };
+            let zoom = Math.min(maxZoom, this.map?.getZoom?.() ?? 8);
+
+            if (this.map && typeof this.map.cameraForBounds === 'function') {
+                try {
+                    const camera = this.map.cameraForBounds(
+                        [
+                            [bounds.west, bounds.south],
+                            [bounds.east, bounds.north]
+                        ],
+                        {
+                            padding: fitBoundsOptions.padding,
+                            maxZoom
+                        }
+                    );
+
+                    if (camera?.center) {
+                        if (Array.isArray(camera.center) && camera.center.length >= 2) {
+                            center = {
+                                lng: Number(camera.center[0]),
+                                lat: Number(camera.center[1])
+                            };
+                        } else if (
+                            Number.isFinite(camera.center.lng)
+                            && Number.isFinite(camera.center.lat)
+                        ) {
+                            center = {
+                                lng: camera.center.lng,
+                                lat: camera.center.lat
+                            };
+                        }
+                    }
+                    if (Number.isFinite(camera?.zoom)) {
+                        zoom = camera.zoom;
+                    }
+                } catch (error) {
+                    console.warn('cameraForBounds failed; falling back to center average:', error);
+                }
+            }
+
+            return {
+                kind: 'bounds',
+                center,
+                zoom: Math.min(maxZoom, zoom),
+                bounds,
+                fitBoundsOptions
+            };
+        }
+
+        return {
+            kind: 'point',
+            center: {
+                lng: result.longitude,
+                lat: result.latitude
+            },
+            zoom: Math.min(maxZoom, 10.5),
+            flyToOptions: {
+                essential: true,
+                duration: 1100
+            }
+        };
+    }
+
+    animateToSearchTarget(targetCamera, overrides = {}) {
+        if (!this.map || !targetCamera) return;
+
+        if (targetCamera.kind === 'bounds') {
+            this.map.fitBounds(
+                [
+                    [targetCamera.bounds.west, targetCamera.bounds.south],
+                    [targetCamera.bounds.east, targetCamera.bounds.north]
+                ],
+                {
+                    ...targetCamera.fitBoundsOptions,
+                    ...overrides
+                }
+            );
+            return;
+        }
+
+        this.map.flyTo({
+            center: [targetCamera.center.lng, targetCamera.center.lat],
+            zoom: targetCamera.zoom,
+            ...targetCamera.flyToOptions,
+            ...overrides
+        });
+    }
+
+    async transitionToSearchTarget(targetCamera) {
+        if (!targetCamera || !this.map) return;
+
+        const currentCenter = this.map.getCenter();
+        const currentZoom = this.map.getZoom();
+        const viewport = this.getMapViewportSize();
+        const plan = this.jumpPlanner.buildProgressiveJumpPlan({
+            currentCenter: {
+                lat: currentCenter.lat,
+                lng: currentCenter.lng
+            },
+            currentZoom,
+            targetCenter: targetCamera.center,
+            targetZoom: targetCamera.zoom,
+            viewportWidth: viewport.width,
+            viewportHeight: viewport.height
+        });
+
+        this.lastProgressiveJumpPlan = {
+            ...plan,
+            targetKind: targetCamera.kind,
+            targetZoom: targetCamera.zoom,
+            targetCenter: targetCamera.center
+        };
+
+        const sequence = this.progressiveJumpSequence + 1;
+        this.progressiveJumpSequence = sequence;
+
+        if (!plan.useProgressive) {
+            this.suppressViewportSync = false;
+            this.hideMapTransitionOverlay({ immediate: true });
+            this.animateToSearchTarget(targetCamera);
+            return;
+        }
+
+        this.showMapTransitionOverlay();
+        this.suppressViewportSync = true;
+
+        const prefetchPromise = this.prefetchElevationTilesProgressively(
+            plan.prefetchTiles,
+            sequence
+        );
+
+        this.map.jumpTo({
+            center: [targetCamera.center.lng, targetCamera.center.lat],
+            zoom: plan.stageZoom,
+            essential: true
+        });
+
+        await Promise.allSettled([
+            prefetchPromise,
+            this.waitForMapIdle(1800)
+        ]);
+
+        if (sequence !== this.progressiveJumpSequence) return;
+
+        this.hideMapTransitionOverlay();
+
+        if (!plan.requiresFinalRefine && targetCamera.kind !== 'bounds') {
+            this.suppressViewportSync = false;
+            this.schedulePermalinkUpdate();
+            this.trackViewportView();
+            return;
+        }
+
+        window.requestAnimationFrame(() => {
+            if (sequence !== this.progressiveJumpSequence) return;
+            this.suppressViewportSync = false;
+            this.animateToSearchTarget(targetCamera, { duration: 850 });
+        });
+    }
+
     cancelLocationTypeahead() {
         if (this.locationSearchDebounceTimer) {
             window.clearTimeout(this.locationSearchDebounceTimer);
@@ -1232,27 +1532,8 @@ class FloodMapClient {
         this.showSearchMarker(result);
 
         const bounds = this.getSearchBounds(result);
-        if (bounds) {
-            this.map.fitBounds(
-                [
-                    [bounds.west, bounds.south],
-                    [bounds.east, bounds.north]
-                ],
-                {
-                    duration: 1100,
-                    padding: { top: 64, right: 64, bottom: 64, left: 64 },
-                    maxZoom: this.map.getMaxZoom()
-                }
-            );
-            return;
-        }
-
-        this.map.flyTo({
-            center: [result.longitude, result.latitude],
-            zoom: Math.min(this.map.getMaxZoom(), 10.5),
-            essential: true,
-            duration: 1100
-        });
+        const targetCamera = this.getSearchTargetCamera(result, bounds);
+        void this.transitionToSearchTarget(targetCamera);
     }
 
     getSearchBounds(result) {
