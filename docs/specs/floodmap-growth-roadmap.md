@@ -333,7 +333,27 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 7 status
-- Pending
+- Completed on 2026-04-10.
+- Shipped via commits `583d123`, `c064da5`, and `16487dc`, pushed to `origin/main`, and deployed with Coolify deployment `q884w4wc0o404skc088kg00w`.
+- Added low-zoom vector-tile filtering in `src/api/routers/tiles_v1.py` so zooms `<= 8` keep only the layers and properties the current UI uses (`water`, `waterway`, `transportation`), plus regression coverage in `tests/unit/test_low_zoom_vector_filter.py`.
+- Fixed a production-breaking vector URL-template regression in `src/web/js/map-client.js` so MapLibre now requests numeric `/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf` URLs instead of `%7Bz%7D`-encoded placeholders, and extended `tests/e2e/test_map_functionality.py` to assert that behavior.
+- Updated the Docker build in `Dockerfile` to install the native toolchain required by the new vector-tile dependency chain.
+- Checks passed:
+  - `uv run pytest tests/unit/test_low_zoom_vector_filter.py -q`
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e/test_map_functionality.py -q`
+  - `uv run pytest tests/e2e -q`
+  - `docker build -t floodmap-phase7-test .`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap/api/v1/tiles/vector/usa/8/69/106.pbf` returns `200`, `X-Vector-Profile: low-zoom-filtered`, and a `27445` byte payload
+  - decoding that live tile yields only `transportation`, `water`, and `waterway`; `water`/`waterway` retain only the `class` property and `transportation` is property-free
+  - live Playwright smoke against `https://drose.io/floodmap?no_analytics=1` confirms the page source template is `/floodmap/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf` and the browser requests real numeric vector tile URLs such as `/api/v1/tiles/vector/usa/8/69/106.pbf`
+  - `https://drose.io/floodmap/api/places/search?q=Tampa` still returns results
+- Valid post-fix HAR artifacts are stored in `tools/map-profiling/results/20260410-165551/`.
+  - The earlier `20260410-164805` run was discarded because it was captured before the vector-template fix and therefore did not represent the final live behavior.
+  - Representative tile reduction for `z=8/x=69/y=106`: raw MBTiles payload `206873` bytes gzipped vs filtered `19670` bytes gzipped, a `90.5%` reduction for the low-zoom tile body that matters to this phase.
+- Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 8 status
 - Pending
