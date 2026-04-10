@@ -1,0 +1,220 @@
+{
+  "totals": {
+    "bytes": 877468,
+    "count": 106,
+    "byHost": {
+      "drose.io": 866475,
+      "static.cloudflareinsights.com": 10993
+    },
+    "byType": {
+      "text": 20052,
+      "json": 39704,
+      "js": 221332,
+      "binary": 596393,
+      "x-unknown": -13
+    }
+  },
+  "tiles": {
+    "elevation": {
+      "totalBytes": 596393,
+      "totalCount": 40,
+      "totalTime": 1977.899,
+      "avgTime": 49.447475,
+      "maxTime": 99.08500000000001,
+      "byZoom": {
+        "9": {
+          "bytes": 596393,
+          "count": 40,
+          "totalTime": 1977.899,
+          "avgTime": 49.447475,
+          "maxTime": 99.08500000000001
+        }
+      },
+      "encodings": [
+        "br"
+      ],
+      "caches": [
+        "public, max-age=31536000, immutable",
+        "public, max-age=3600"
+      ]
+    },
+    "vector": {
+      "totalBytes": 39259,
+      "totalCount": 54,
+      "totalTime": 7311.381000000002,
+      "avgTime": 135.3959444444445,
+      "maxTime": 464.811,
+      "byZoom": {
+        "-1": {
+          "bytes": 39259,
+          "count": 54,
+          "totalTime": 7311.381000000002,
+          "avgTime": 135.3959444444445,
+          "maxTime": 464.811
+        }
+      },
+      "encodings": [
+        "(none)"
+      ],
+      "caches": [
+        "(none)"
+      ]
+    }
+  },
+  "largest": [
+    {
+      "url": "https://drose.io/floodmap/static/vendor/maplibre-gl-csp-4.7.1.js?v=20260410e",
+      "bytes": 187208,
+      "status": 200,
+      "type": "js"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/139/212.u16?method=precompressed&v=20260410e",
+      "bytes": 47751,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/139/213.u16?method=precompressed&v=20260410e",
+      "bytes": 45843,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/140/213.u16?method=precompressed&v=20260410e",
+      "bytes": 42369,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/139/214.u16?method=precompressed&v=20260410e",
+      "bytes": 41663,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/138/212.u16?method=precompressed&v=20260410e",
+      "bytes": 40951,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/140/214.u16?method=precompressed&v=20260410e",
+      "bytes": 37572,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/139/215.u16?method=precompressed&v=20260410e",
+      "bytes": 34984,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/140/215.u16?method=precompressed&v=20260410e",
+      "bytes": 33292,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/140/212.u16?method=precompressed&v=20260410e",
+      "bytes": 32503,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/138/213.u16?method=precompressed&v=20260410e",
+      "bytes": 30663,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/138/214.u16?method=precompressed&v=20260410e",
+      "bytes": 28213,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/141/215.u16?method=precompressed&v=20260410e",
+      "bytes": 27381,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/140/216.u16?method=precompressed&v=20260410e",
+      "bytes": 26774,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/139/216.u16?method=precompressed&v=20260410e",
+      "bytes": 25946,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/141/216.u16?method=precompressed&v=20260410e",
+      "bytes": 22840,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/138/215.u16?method=precompressed&v=20260410e",
+      "bytes": 17415,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/141/214.u16?method=precompressed&v=20260410e",
+      "bytes": 16175,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/static/js/map-client.js?v=20260410e",
+      "bytes": 14089,
+      "status": 200,
+      "type": "js"
+    },
+    {
+      "url": "https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516",
+      "bytes": 10993,
+      "status": 200,
+      "type": "js"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/141/213.u16?method=precompressed&v=20260410e",
+      "bytes": 9778,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/137/212.u16?method=precompressed&v=20260410e",
+      "bytes": 9750,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap/static/vendor/maplibre-gl-4.7.1.css?v=20260410e",
+      "bytes": 9618,
+      "status": 200,
+      "type": "text"
+    },
+    {
+      "url": "https://drose.io/floodmap/api/v1/tiles/elevation-data/9/142/216.u16?method=precompressed&v=20260410e",
+      "bytes": 6856,
+      "status": 200,
+      "type": "binary"
+    },
+    {
+      "url": "https://drose.io/floodmap?no_analytics=1",
+      "bytes": 6123,
+      "status": 200,
+      "type": "text"
+    }
+  ],
+  "pageTimings": {
+    "onContentLoad": 806,
+    "onLoad": 913
+  }
+}

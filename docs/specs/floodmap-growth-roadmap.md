@@ -315,7 +315,22 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 6 status
-- Pending
+- Completed on 2026-04-10.
+- Shipped via commit `b3b8f25`, pushed to `origin/main`, and deployed with Coolify deployment `bgc08ogc0s0coo0400gcw0go`.
+- Replaced render-critical `unpkg` dependencies with same-origin vendored MapLibre assets: static CSS plus precompressed CSP JS/worker files served from FastAPI so the app boots without third-party map-library fetches.
+- Added regression coverage in `tests/unit/test_homepage_content.py` for the local vendor paths and asset serving, plus browser coverage in `tests/e2e/test_map_functionality.py` to prove the homepage loads local MapLibre assets and makes no `unpkg.com` requests.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e -q`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap` serves asset version `20260410e` and local `maplibre-gl` asset paths with no `unpkg.com` references
+  - `https://drose.io/floodmap/static/vendor/maplibre-gl-csp-4.7.1.js?v=20260410e` returns `200`
+  - `https://drose.io/floodmap/static/vendor/maplibre-gl-csp-worker-4.7.1.js?v=20260410e` returns `200`
+  - live Playwright smoke confirms the map boots with same-origin vendor asset requests and no `unpkg.com` requests
+  - `https://drose.io/floodmap/api/places/search?q=Tampa` still returns results
+- HAR summary and per-scenario metrics were recorded in `tools/map-profiling/results/20260410-163420/`; by-host totals show `drose.io` for app traffic and no `unpkg.com` host entries.
+- Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 7 status
 - Pending
