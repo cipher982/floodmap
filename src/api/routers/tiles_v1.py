@@ -10,9 +10,11 @@ import io
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from typing import Literal
 
 import httpx
+import mapbox_vector_tile
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
@@ -69,6 +71,14 @@ if brotli is not None:
     with contextlib.suppress(Exception):
         _NODATA_TILE_BROTLI = brotli.compress(_NODATA_TILE_BYTES, quality=1)
 
+LOW_ZOOM_VECTOR_FILTER_MAX_Z = 8
+LOW_ZOOM_VECTOR_LAYER_ALLOWLIST = ("water", "waterway", "transportation")
+LOW_ZOOM_VECTOR_PROPERTY_ALLOWLIST = {
+    "water": frozenset({"class"}),
+    "waterway": frozenset({"class"}),
+    "transportation": frozenset(),
+}
+
 
 def _negotiate_compression(accept_encoding: str) -> str | None:
     """Return preferred encoding ('br' or 'gzip') based on Accept-Encoding.
@@ -104,6 +114,78 @@ def _maybe_compress(
         except Exception:
             return content, None
     return content, None
+
+
+def _normalize_vector_tile_content(content: bytes) -> bytes:
+    """Return raw MVT bytes from either raw or gzip-wrapped tile payloads."""
+    if content.startswith(b"\x1f\x8b"):
+        return gzip.decompress(content)
+    return content
+
+
+@lru_cache(maxsize=512)
+def filter_low_zoom_vector_tile_content(content: bytes) -> bytes:
+    """Strip low-zoom vector tiles down to the layers and properties the UI uses."""
+    raw_tile = _normalize_vector_tile_content(content)
+    decoded = mapbox_vector_tile.decode(raw_tile)
+
+    filtered_layers = []
+    for layer_name in LOW_ZOOM_VECTOR_LAYER_ALLOWLIST:
+        layer = decoded.get(layer_name)
+        if not layer:
+            continue
+
+        allowed_props = LOW_ZOOM_VECTOR_PROPERTY_ALLOWLIST[layer_name]
+        filtered_features = []
+        for feature in layer.get("features", []):
+            geometry = feature.get("geometry")
+            if geometry is None:
+                continue
+
+            properties = feature.get("properties") or {}
+            if allowed_props:
+                properties = {
+                    key: properties[key] for key in allowed_props if key in properties
+                }
+            else:
+                properties = {}
+
+            filtered_features.append(
+                {
+                    "geometry": geometry,
+                    "properties": properties,
+                }
+            )
+
+        if filtered_features:
+            filtered_layers.append({"name": layer_name, "features": filtered_features})
+
+    if not filtered_layers:
+        return raw_tile
+
+    filtered_tile = mapbox_vector_tile.encode(filtered_layers)
+    return filtered_tile if len(filtered_tile) < len(raw_tile) else raw_tile
+
+
+def maybe_filter_low_zoom_vector_tile(z: int, content: bytes) -> tuple[bytes, bool]:
+    """Apply low-zoom vector filtering when it produces a smaller payload."""
+    if z > LOW_ZOOM_VECTOR_FILTER_MAX_Z or not content:
+        return content, False
+
+    try:
+        filtered_tile = filter_low_zoom_vector_tile_content(content)
+    except Exception as exc:
+        logger.warning(
+            "Low-zoom vector tile filtering failed; falling back to upstream tile: %s",
+            exc,
+        )
+        return content, False
+
+    raw_tile = _normalize_vector_tile_content(content)
+    if filtered_tile == raw_tile:
+        return raw_tile, False
+
+    return filtered_tile, True
 
 
 def validate_tile_coordinates(z: int, x: int, y: int) -> None:
@@ -217,7 +299,7 @@ async def get_vector_tile(
         )
 
         if response.status_code == 200:
-            content = response.content
+            content, filtered = maybe_filter_low_zoom_vector_tile(z, response.content)
             # Compress for client if supported
             accept_enc = request.headers.get("accept-encoding", "") if request else ""
             payload, cenc = _maybe_compress(
@@ -231,6 +313,8 @@ async def get_vector_tile(
             if cenc:
                 resp.headers["Content-Encoding"] = cenc
                 resp.headers["Vary"] = "Accept-Encoding"
+            if filtered:
+                resp.headers["X-Vector-Profile"] = "low-zoom-filtered"
             return resp
         elif response.status_code == 204:
             return create_tile_response(
