@@ -523,3 +523,18 @@ Acceptance criteria:
   - live browser smoke confirms ArrowDown activates the second `tampa` suggestion, Enter selects it, dismisses the list, clears `aria-activedescendant`, leaves `aria-expanded=false`, and moves the map to Kansas
   - reopening the suggestions and pressing Escape clears the list, clears `aria-activedescendant`, sets `aria-expanded=false`, and clears the status text
 - Claude Haiku cursory review: `APPROVE`, with a minor note about ArrowUp coverage that was addressed immediately in `e8e9a88`.
+
+### Phase 14 status
+- Completed on 2026-04-10.
+- Shipped via commit `ab806c8`, pushed to `origin/main`, and deployed with Coolify deployment `z0g4w40cs088o0c8k0k844wo`.
+- Updated the search input in `src/web/index.html` to stop fighting the browser:
+  - added a stable `name="location-query"`
+  - changed `autocomplete` from `off` to `on`
+- Added explicit regression coverage in `tests/unit/test_homepage_content.py` for the search-input markup contract so the browser-history decision is intentional and visible in tests.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap` now serves the search input with `name="location-query"` and `autocomplete="on"`
+  - the typeahead and keyboard-navigation flows from Phases 12-13 remain in place
+- Claude Haiku cursory review: `APPROVE`, with no regressions called out.
