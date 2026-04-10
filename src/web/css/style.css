@@ -29,16 +29,40 @@ header {
     grid-area: header;
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 18px;
     padding: 12px 16px;
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+.header-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
 header h1 {
     color: #2563eb;
     font-size: 1.4rem;
+}
+
+.header-kicker {
+    max-width: 640px;
+    color: #64748b;
+    font-size: 0.92rem;
+    line-height: 1.4;
+}
+
+.header-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    min-width: 180px;
+    text-align: right;
 }
 
 #location-info {
@@ -446,11 +470,15 @@ button:disabled {
     }
 }
 
-#risk-panel {
+#risk-panel,
+#about-panel {
     background: white;
     padding: 20px;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#risk-panel {
     flex: 1; /* Take remaining space */
     min-height: 200px; /* Ensure minimum height */
     overflow-y: auto;
@@ -466,6 +494,48 @@ button:disabled {
     color: #6b7280;
     line-height: 1.5;
     font-size: 0.9rem;
+}
+
+#about-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    color: #475569;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+
+#about-panel h2 {
+    color: #0f172a;
+    font-size: 1.12rem;
+}
+
+#about-panel h3 {
+    color: #1e3a8a;
+    font-size: 0.95rem;
+}
+
+#about-panel p {
+    color: #475569;
+}
+
+.feature-list,
+.how-to-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.feature-list li,
+.how-to-list li {
+    margin-bottom: 8px;
+}
+
+.model-summary {
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #dbeafe;
+    background: linear-gradient(135deg, #eff6ff, #f8fafc);
+    color: #334155;
 }
 
 /* Risk level indicators */
@@ -501,6 +571,12 @@ button:disabled {
     header {
         flex-direction: column;
         gap: 8px;
+        text-align: center;
+    }
+
+    .header-meta {
+        align-items: center;
+        min-width: 0;
         text-align: center;
     }
 

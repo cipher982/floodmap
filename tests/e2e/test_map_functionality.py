@@ -17,7 +17,7 @@ async def test_homepage_smoke(map_page: MapPage):
     heading = await map_page.page.locator("h1").first.text_content()
 
     assert "FloodMap" in title
-    assert "Flood Risk Map" in heading
+    assert "FloodMap USA" in heading
     assert await map_page.page.locator("#map").is_visible()
     assert await map_page.page.locator("#location-search").is_visible()
     assert await map_page.page.locator("#share-view-button").is_visible()
