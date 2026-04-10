@@ -25,7 +25,7 @@ def test_homepage_contains_social_metadata_and_explanatory_copy(monkeypatch):
     assert "FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk" in html
     assert "Interactive U.S. flood map for any city or ZIP code." in html
     assert (
-        'og:image" content="https://drose.io/floodmap/static/images/social-card.jpg?v=20260410d"'
+        'og:image" content="https://drose.io/floodmap/static/images/social-card.jpg?v='
         in html
     )
     assert 'twitter:card" content="summary_large_image"' in html
@@ -33,6 +33,20 @@ def test_homepage_contains_social_metadata_and_explanatory_copy(monkeypatch):
     assert "What you can do" in html
     assert "How to use it" in html
     assert "Model notes" in html
+
+
+def test_homepage_uses_vendored_maplibre_assets(monkeypatch):
+    main = load_main_module(monkeypatch)
+    client = TestClient(main.app)
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    html = resp.text
+    assert "unpkg.com/maplibre-gl" not in html
+    assert "/vendor/maplibre-gl-4.7.1.css" in html
+    assert "/vendor/maplibre-gl-csp-4.7.1.js" in html
+    assert "/vendor/maplibre-gl-csp-worker-4.7.1.js" in html
 
 
 def test_social_card_image_is_served_from_root_and_subpath(monkeypatch):
@@ -50,3 +64,38 @@ def test_social_card_image_is_served_from_root_and_subpath(monkeypatch):
     assert len(subpath_resp.content) > 1000
     assert root_resp.content.startswith(b"\xff\xd8\xff")
     assert subpath_resp.content.startswith(b"\xff\xd8\xff")
+
+
+def test_vendored_maplibre_assets_are_served_from_root_and_subpath(monkeypatch):
+    main = load_main_module(monkeypatch)
+    client = TestClient(main.app)
+
+    root_css = client.get("/static/vendor/maplibre-gl-4.7.1.css")
+    subpath_css = client.get("/floodmap/static/vendor/maplibre-gl-4.7.1.css")
+    root_js = client.get("/static/vendor/maplibre-gl-csp-4.7.1.js")
+    subpath_js = client.get("/floodmap/static/vendor/maplibre-gl-csp-4.7.1.js")
+    root_worker = client.get("/static/vendor/maplibre-gl-csp-worker-4.7.1.js")
+    subpath_worker = client.get(
+        "/floodmap/static/vendor/maplibre-gl-csp-worker-4.7.1.js"
+    )
+
+    assert root_css.status_code == 200
+    assert subpath_css.status_code == 200
+    assert root_js.status_code == 200
+    assert subpath_js.status_code == 200
+    assert root_worker.status_code == 200
+    assert subpath_worker.status_code == 200
+    assert "css" in root_css.headers["content-type"]
+    assert "css" in subpath_css.headers["content-type"]
+    assert "javascript" in root_js.headers["content-type"]
+    assert "javascript" in subpath_js.headers["content-type"]
+    assert root_js.headers["content-encoding"] == "gzip"
+    assert subpath_js.headers["content-encoding"] == "gzip"
+    assert root_worker.headers["content-encoding"] == "gzip"
+    assert subpath_worker.headers["content-encoding"] == "gzip"
+    assert root_css.content.startswith(b".maplibregl-map")
+    assert subpath_css.content.startswith(b".maplibregl-map")
+    assert len(root_js.content) > 100000
+    assert len(subpath_js.content) > 100000
+    assert len(root_worker.content) > 50000
+    assert len(subpath_worker.content) > 50000

@@ -10,7 +10,7 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -20,6 +20,13 @@ logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_HTML_PATH = WEB_DIR / "index.html"
 FAVICON_SVG_PATH = WEB_DIR / "favicon.svg"
+MAPLIBRE_CSP_JS_GZ_PATH = WEB_DIR / "vendor" / "maplibre-gl-csp-4.7.1.js.gz"
+MAPLIBRE_CSP_WORKER_GZ_PATH = WEB_DIR / "vendor" / "maplibre-gl-csp-worker-4.7.1.js.gz"
+PRECOMPRESSED_VENDOR_HEADERS = {
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Content-Encoding": "gzip",
+    "Vary": "Accept-Encoding",
+}
 
 # OpenTelemetry imports
 from opentelemetry import trace
@@ -242,6 +249,44 @@ if IS_DEVELOPMENT or ENABLE_PERF_TEST_ROUTES:
 
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 app.include_router(places.router, prefix="/api", tags=["places"])
+
+
+def _serve_precompressed_vendor_asset(
+    asset_path: Path, *, media_type: str
+) -> FileResponse:
+    return FileResponse(
+        asset_path,
+        media_type=media_type,
+        headers=dict(PRECOMPRESSED_VENDOR_HEADERS),
+    )
+
+
+@app.get("/static/vendor/maplibre-gl-csp-4.7.1.js", include_in_schema=False)
+async def vendored_maplibre_csp_js():
+    return _serve_precompressed_vendor_asset(
+        MAPLIBRE_CSP_JS_GZ_PATH, media_type="text/javascript"
+    )
+
+
+@app.get("/floodmap/static/vendor/maplibre-gl-csp-4.7.1.js", include_in_schema=False)
+async def vendored_maplibre_csp_js_floodmap():
+    return await vendored_maplibre_csp_js()
+
+
+@app.get("/static/vendor/maplibre-gl-csp-worker-4.7.1.js", include_in_schema=False)
+async def vendored_maplibre_csp_worker():
+    return _serve_precompressed_vendor_asset(
+        MAPLIBRE_CSP_WORKER_GZ_PATH, media_type="text/javascript"
+    )
+
+
+@app.get(
+    "/floodmap/static/vendor/maplibre-gl-csp-worker-4.7.1.js",
+    include_in_schema=False,
+)
+async def vendored_maplibre_csp_worker_floodmap():
+    return await vendored_maplibre_csp_worker()
+
 
 # Serve static frontend files
 #

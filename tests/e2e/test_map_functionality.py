@@ -38,6 +38,27 @@ async def test_health_endpoint_is_available(map_page: MapPage):
 
 
 @pytest.mark.asyncio
+async def test_homepage_uses_local_maplibre_assets(map_page: MapPage):
+    vendor_requests: list[str] = []
+    unpkg_requests: list[str] = []
+
+    def track_request(req):
+        if "maplibre-gl" in req.url:
+            vendor_requests.append(req.url)
+        if "unpkg.com" in req.url:
+            unpkg_requests.append(req.url)
+
+    map_page.page.on("request", track_request)
+
+    await map_page.goto_homepage()
+    await map_page.wait_for_app_ready()
+
+    assert any("maplibre-gl-4.7.1.css" in url for url in vendor_requests)
+    assert any("maplibre-gl-csp-4.7.1.js" in url for url in vendor_requests)
+    assert not unpkg_requests
+
+
+@pytest.mark.asyncio
 async def test_max_zoom_matches_precompressed_tile_limit(map_page: MapPage):
     await map_page.goto_homepage()
     await map_page.wait_for_app_ready()
