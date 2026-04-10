@@ -205,6 +205,18 @@ async def test_location_search_keyboard_navigation_selects_active_suggestion(
     assert active_descendant == "location-search-result-1"
     assert active_name == "Tampa, Kansas"
 
+    await map_page.page.press("#location-search", "ArrowUp")
+    active_descendant = await map_page.page.locator("#location-search").get_attribute(
+        "aria-activedescendant"
+    )
+    active_name = await map_page.page.locator(
+        ".search-result.is-active .search-result__name"
+    ).text_content()
+
+    assert active_descendant == "location-search-result-0"
+    assert active_name == "Tampa, Florida"
+
+    await map_page.page.press("#location-search", "ArrowDown")
     await map_page.page.press("#location-search", "Enter")
     await map_page.page.wait_for_function(
         """() => document
