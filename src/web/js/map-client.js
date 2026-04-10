@@ -970,6 +970,21 @@ class FloodMapClient {
         overlay.classList.add('is-active');
     }
 
+    refreshMapTransitionOverlayFrame() {
+        const overlay = document.getElementById('map-transition-overlay');
+        const image = document.getElementById('map-transition-overlay-image');
+        if (!overlay || !image || overlay.hidden) return false;
+
+        const snapshotUrl = this.captureMapFrameDataUrl();
+        if (!snapshotUrl) return false;
+
+        image.src = snapshotUrl;
+        overlay.dataset.state = 'active';
+        overlay.classList.remove('is-exiting');
+        overlay.classList.add('is-active');
+        return true;
+    }
+
     hideMapTransitionOverlay({ immediate = false } = {}) {
         const overlay = document.getElementById('map-transition-overlay');
         const image = document.getElementById('map-transition-overlay-image');
@@ -1290,20 +1305,24 @@ class FloodMapClient {
 
         if (sequence !== this.progressiveJumpSequence) return;
 
-        this.hideMapTransitionOverlay();
-
         if (!plan.requiresFinalRefine && targetCamera.kind !== 'bounds') {
+            this.hideMapTransitionOverlay();
             this.suppressViewportSync = false;
             this.schedulePermalinkUpdate();
             this.trackViewportView();
             return;
         }
 
-        window.requestAnimationFrame(() => {
-            if (sequence !== this.progressiveJumpSequence) return;
-            this.suppressViewportSync = false;
-            this.animateToSearchTarget(targetCamera, { duration: 850 });
-        });
+        this.refreshMapTransitionOverlayFrame();
+        this.animateToSearchTarget(targetCamera, { duration: 850 });
+
+        await this.waitForMapIdle(2400);
+        if (sequence !== this.progressiveJumpSequence) return;
+
+        this.hideMapTransitionOverlay();
+        this.suppressViewportSync = false;
+        this.schedulePermalinkUpdate();
+        this.trackViewportView();
     }
 
     cancelLocationTypeahead() {

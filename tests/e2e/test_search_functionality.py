@@ -308,8 +308,13 @@ async def test_far_location_search_uses_progressive_jump_overlay(map_page: MapPa
         )
 
     async def delay_elevation_tiles(route):
+        z = int(
+            route.request.url.split("/api/v1/tiles/elevation-data/", 1)[1].split(
+                "/", 1
+            )[0]
+        )
         response = await route.fetch()
-        await asyncio.sleep(0.25)
+        await asyncio.sleep(0.55 if z >= 8 else 0.08)
         await route.fulfill(response=response)
 
     await map_page.page.route("**/api/places/search*", handle_search)
@@ -348,6 +353,18 @@ async def test_far_location_search_uses_progressive_jump_overlay(map_page: MapPa
     assert overlay_state["hasImage"] is True
     assert plan["stageZoom"] == 7
     assert plan["distanceKm"] > 3000
+
+    await map_page.page.wait_for_function(
+        """(stageZoom) => {
+            const overlay = document.getElementById('map-transition-overlay');
+            return Boolean(
+                window.floodMap?.map?.getZoom() > stageZoom + 0.3
+                && overlay?.dataset?.state === 'active'
+            );
+        }""",
+        arg=plan["stageZoom"],
+        timeout=10000,
+    )
 
     await map_page.page.wait_for_function(
         """() => document.getElementById('map-transition-overlay')?.dataset?.state === 'hidden'""",
