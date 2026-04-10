@@ -38,6 +38,19 @@ def test_homepage_contains_social_metadata_and_explanatory_copy(monkeypatch):
     assert "Model notes" in html
 
 
+def test_homepage_search_input_allows_browser_history(monkeypatch):
+    main = load_main_module(monkeypatch)
+    client = TestClient(main.app)
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    html = resp.text
+    assert 'id="location-search"' in html
+    assert 'name="location-query"' in html
+    assert 'autocomplete="on"' in html
+
+
 def test_homepage_uses_vendored_maplibre_assets(monkeypatch):
     main = load_main_module(monkeypatch)
     client = TestClient(main.app)
