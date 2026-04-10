@@ -279,6 +279,22 @@ Acceptance criteria:
 - browser-level history does not conflict badly with live suggestions
 - final behavior is covered by tests or explicit rationale
 
+### Phase 15: Stabilize location-search suggestion layout
+Maps to docket: follow-up to `Add live city and ZIP typeahead suggestions`
+Cross-cutting: `Rerun HAR suite after each speed change`
+
+Goal:
+- remove the visible sidebar thrash caused by inline suggestion cards while preserving the search flow
+
+Depends on:
+- Phases 12-14
+
+Acceptance criteria:
+- live suggestions render as an overlay instead of pushing the rest of the sidebar down
+- typeahead stays quiet while typing unless there is an actual error
+- keyboard navigation, submit fallback, and selection still work
+- updated profiling artifacts are stored in `tools/map-profiling/results/...`
+
 ## Working Notes
 
 ### Phase 1 status
@@ -538,3 +554,27 @@ Acceptance criteria:
   - `https://drose.io/floodmap` now serves the search input with `name="location-query"` and `autocomplete="on"`
   - the typeahead and keyboard-navigation flows from Phases 12-13 remain in place
 - Claude Haiku cursory review: `APPROVE`, with no regressions called out.
+
+### Phase 15 status
+- Completed on 2026-04-10.
+- Shipped via commit `1f1f287`, pushed to `origin/main`, and deployed with Coolify deployment `wsokg4sko0g80w484cscgcog`.
+- Reworked the location search UI so suggestions no longer live in normal sidebar flow:
+  - moved the results/status into a dedicated `.location-search-shell` in `src/web/index.html`
+  - switched `.search-results` to an absolute overlay with fixed max height, internal scroll, and clamped metadata rows in `src/web/css/style.css`
+  - reduced search DOM churn in `src/web/js/map-client.js` by silencing typeahead status spam, skipping identical status/button rewrites, and swapping results with `replaceChildren(...)`
+- Added regression coverage in `tests/e2e/test_search_functionality.py` for layout stability so typing a 3-result query no longer pushes the `Share This View` label down.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e/test_search_functionality.py -q`
+  - `uv run pytest tests/e2e -q`
+- Live verification passed after Cloudflare global-key purge:
+  - `https://drose.io/floodmap` serves asset version `20260410l` plus the new `.location-search-shell` markup
+  - `https://drose.io/floodmap/static/css/style.css?v=20260410l` serves the absolute-positioned `.search-results` overlay with line clamping and stable scrollbar gutter
+  - `https://drose.io/floodmap/static/js/map-client.js?v=20260410l` serves the `searchResultsSignature`, `createSearchResultsSignature(...)`, and `replaceChildren(...)` updates
+  - live browser measurement on `https://drose.io/floodmap?no_analytics=1` shows the `Share This View` label stays at `280.015625` before and after typing `new`, with the 3-result overlay at `270.4375` px tall
+  - pre-change live baseline for the same interaction shifted the `Share This View` label from `306.40625` to `570.984375`, so the visible sidebar shift dropped from `264.578125` px to `0`
+  - live smoke confirms clicking the first `tampa` suggestion still shows `Showing Tampa. Click the map for a precise flood-risk sample.` and collapses the list (`aria-expanded=false`)
+- Updated HAR artifacts are stored in `tools/map-profiling/results/20260410-181450/`.
+  - Compared with the prior speed baseline in `tools/map-profiling/results/20260410-165551/`, this UI-only change produced no meaningful network regression: `warm` stayed effectively flat (`5.07 MB` -> `5.06 MB`), `cold` improved (`1.08 MB` -> `950 kB`), and the rest stayed in the same range.
+- Claude Haiku cursory review: `APPROVE` after a constrained real-file review, with only a non-blocking note that more edge-case search tests could be added later.
