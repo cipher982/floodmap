@@ -267,10 +267,25 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 3 status
-- Ready to start.
+- Completed on 2026-04-10.
+- Shipped via commit `612e2c4`, pushed to `origin/main`, and deployed with Coolify deployment `ho8so840sgs0kg8sggw8gs44`.
+- Added URL-driven state for `lat`, `lng`, `zoom`, `view`, and `water`, plus a `Copy Share Link` affordance in the sidebar.
+- Introduced `src/web/js/url-state.js` as the shared parse/build helper for permalink state and covered it with Node tests in `src/web/js/url-state.test.mjs`.
+- Added focused browser coverage in `tests/e2e/test_permalink_state.py` for permalink restoration and live URL updates.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e/test_permalink_state.py -q`
+  - installed missing Playwright Chromium runtime via `uv run playwright install chromium`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap` serves asset version `20260410c` and the `Copy Share Link` control
+  - live browser check on `https://drose.io/floodmap/?lat=40.71280&lng=-74.00600&zoom=9.50&view=flood&water=6.0` restores that state
+  - live browser check confirms the share button shows `Share link copied.`
+  - `https://drose.io/floodmap/api/places/search?q=Tampa` still returns results
+- Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 4 status
-- Pending
+- Ready to start.
 
 ### Phase 5 status
 - Pending
