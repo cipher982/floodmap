@@ -7,6 +7,7 @@ This repo powers `https://drose.io/floodmap` (MapLibre + client-side elevation/f
 - Prefer project tooling: `uv run ...` (don’t assume `python` exists).
 - Avoid `docker wait` (can hang).
 - "Shipped" means live in production. Do not describe local-only commits or unpushed changes as shipped; if it is not deployed, say so plainly.
+- Any user-visible frontend asset change must bump `ASSET_VERSION` in `src/api/page_renderer.py` before shipping so browsers pick up the new JS/CSS.
 
 ## Fast Checks
 - Python unit tests: `uv run pytest tests/unit -q`
