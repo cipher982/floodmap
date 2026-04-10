@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FloodMap USA — Elevation & Flood Risk</title>
     <meta name="description" content="Explore US elevation and visualize flood risk at different water levels. Overlay roads and assess risk at any location.">
+    <link rel="canonical" href="https://drose.io/floodmap">
     <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
     <script>
         // Unified cache-busting version (edit this value only)
@@ -41,7 +42,7 @@
     <meta property="og:site_name" content="FloodMap USA">
     <meta property="og:title" content="FloodMap USA — Elevation & Flood Risk">
     <meta property="og:description" content="Scroll the US, see elevation on roads, and toggle flood levels.">
-    <meta property="og:url" content="https://floodmap.drose.io/">
+    <meta property="og:url" content="https://drose.io/floodmap">
     <!-- Optional: add a PNG later for richer previews -->
     <!-- <meta property="og:image" content="https://floodmap.drose.io/static/images/social-card.png"> -->
     <meta name="twitter:card" content="summary">
@@ -149,6 +150,18 @@
 
         <div class="sidebar">
             <div id="controls">
+                <div class="control-group">
+                    <label for="location-search">Jump To Location:</label>
+                    <form id="location-search-form" class="location-search-form">
+                        <div class="location-search-row">
+                            <input id="location-search" type="search" inputmode="search" autocomplete="off" placeholder="ZIP code or city, state">
+                            <button id="location-search-button" type="submit">Go</button>
+                        </div>
+                        <p class="control-hint">Search US ZIP codes or cities, then click the map for a point-specific risk sample.</p>
+                    </form>
+                    <div id="location-search-status" class="search-status" aria-live="polite"></div>
+                    <div id="location-search-results" class="search-results" role="list"></div>
+                </div>
                 <div class="control-group">
                     <label>View Mode:</label>
                     <div class="segmented-control" id="view-mode">

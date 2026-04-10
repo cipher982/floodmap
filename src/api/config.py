@@ -99,6 +99,17 @@ MIN_ZOOM = 0
 MIN_WATER_LEVEL = -10.0
 MAX_WATER_LEVEL = 1000.0
 
+# Geocoding / place search (defaults are safe for public Nominatim usage)
+GEOCODER_BASE_URL = os.getenv(
+    "GEOCODER_BASE_URL", "https://nominatim.openstreetmap.org/search"
+)
+GEOCODER_COUNTRYCODES = os.getenv("GEOCODER_COUNTRYCODES", "us")
+GEOCODER_CACHE_SIZE = int(os.getenv("GEOCODER_CACHE_SIZE", "512"))
+GEOCODER_CACHE_TTL_SECONDS = int(os.getenv("GEOCODER_CACHE_TTL_SECONDS", "86400"))
+GEOCODER_USER_AGENT = os.getenv(
+    "GEOCODER_USER_AGENT", "FloodMap/0.1 (+https://drose.io/floodmap)"
+)
+
 # Specific data paths - fixed container locations
 ELEVATION_DIRS = [ELEVATION_SOURCE_DIR / "usa", ELEVATION_SOURCE_DIR / "usa_unified"]
 

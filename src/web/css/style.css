@@ -80,6 +80,108 @@ header h1 {
     gap: 8px;
 }
 
+.location-search-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.location-search-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+}
+
+#location-search {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    color: #0f172a;
+    background: #fff;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#location-search::placeholder {
+    color: #94a3b8;
+}
+
+#location-search:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.control-hint {
+    font-size: 0.77rem;
+    line-height: 1.35;
+    color: #64748b;
+}
+
+.search-status {
+    min-height: 1.15rem;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    color: #475569;
+}
+
+.search-status.is-error {
+    color: #b91c1c;
+}
+
+.search-status.is-success {
+    color: #166534;
+}
+
+.search-status.is-loading {
+    color: #1d4ed8;
+}
+
+.search-results {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.search-results:empty {
+    display: none;
+}
+
+.search-result {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #0f172a;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-result:hover {
+    border-color: #60a5fa;
+    background: #eff6ff;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
+}
+
+.search-result__name {
+    display: block;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #0f172a;
+}
+
+.search-result__meta {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    color: #64748b;
+}
+
 #water-level-controls {
     transition: opacity 0.2s ease, transform 0.2s ease;
     opacity: 1;
@@ -249,6 +351,11 @@ button:hover {
     background: #1d4ed8;
 }
 
+button:disabled {
+    cursor: wait;
+    background: #93c5fd;
+}
+
 /* Segmented Control - Jony Ive inspired */
 .segmented-control {
     display: flex;
@@ -355,7 +462,11 @@ button:hover {
 .risk-low { color: #059669; font-weight: 600; }
 .risk-moderate { color: #d97706; font-weight: 600; }
 .risk-high { color: #dc2626; font-weight: 600; }
+.risk-very_high { color: #991b1b; font-weight: 600; }
 .risk-severe { color: #991b1b; font-weight: 600; }
+.risk-water { color: #0369a1; font-weight: 600; }
+.risk-unknown { color: #475569; font-weight: 600; }
+.risk-search { color: #1d4ed8; font-weight: 600; }
 
 .risk-summary {
     padding: 10px;
@@ -392,6 +503,10 @@ button:hover {
     #controls, #risk-panel {
         flex: 1;
         min-width: 280px;
+    }
+
+    .location-search-row {
+        grid-template-columns: 1fr;
     }
 }
 

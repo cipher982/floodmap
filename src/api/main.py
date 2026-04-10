@@ -155,7 +155,7 @@ from config import (
 # Import middleware
 from middleware.rate_limiter import RateLimitMiddleware
 from routers import diagnostics as diagnostics_router
-from routers import health, risk, tiles_performance_test, tiles_v1
+from routers import health, places, risk, tiles_performance_test, tiles_v1
 
 # Create FastAPI app
 app = FastAPI(
@@ -237,6 +237,7 @@ if IS_DEVELOPMENT or ENABLE_PERF_TEST_ROUTES:
     )  # Perf test routes
 
 app.include_router(risk.router, prefix="/api", tags=["risk"])
+app.include_router(places.router, prefix="/api", tags=["places"])
 
 # Serve static frontend files
 #
@@ -291,20 +292,18 @@ async def favicon_ico_floodmap():
     return RedirectResponse(url="/floodmap/favicon.svg")
 
 
-@app.get("/site.webmanifest", include_in_schema=False)
-async def site_manifest():
-    """Serve a minimal web app manifest for installability and theming."""
+def _build_site_manifest(start_url: str, icon_src: str) -> Response:
+    """Build a minimal web app manifest for installability and theming."""
     manifest = {
         "name": "FloodMap USA",
         "short_name": "FloodMap",
-        "start_url": "/",
+        "start_url": start_url,
         "display": "standalone",
         "background_color": "#0d47a1",
         "theme_color": "#0d47a1",
-        # Use SVG so we don't require raster generation; modern browsers support this.
         "icons": [
             {
-                "src": "/favicon.svg",
+                "src": icon_src,
                 "sizes": "any",
                 "type": "image/svg+xml",
                 "purpose": "any maskable",
@@ -318,9 +317,18 @@ async def site_manifest():
     )
 
 
+@app.get("/site.webmanifest", include_in_schema=False)
+async def site_manifest():
+    """Serve a manifest when the app is hosted at the domain root."""
+    return _build_site_manifest(start_url="/", icon_src="/favicon.svg")
+
+
 @app.get("/floodmap/site.webmanifest", include_in_schema=False)
 async def site_manifest_floodmap():
-    return await site_manifest()
+    """Serve a manifest when the app is hosted under /floodmap."""
+    return _build_site_manifest(
+        start_url="/floodmap/", icon_src="/floodmap/favicon.svg"
+    )
 
 
 if __name__ == "__main__":

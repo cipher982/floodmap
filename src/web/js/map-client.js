@@ -10,6 +10,7 @@ class FloodMapClient {
         this.viewMode = 'elevation';
         this.elevationRenderer = new ElevationRenderer();
         this.modelNoteState = { nearWater: false, coastal: false };
+        this.locationSearchAbortController = null;
 
         // Initialize WebWorker for rendering if available
         this.initWorker();
@@ -511,6 +512,15 @@ class FloodMapClient {
     }
 
     setupEventListeners() {
+        const locationSearchForm = document.getElementById('location-search-form');
+        const locationSearchInput = document.getElementById('location-search');
+        if (locationSearchForm && locationSearchInput) {
+            locationSearchForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleLocationSearch(locationSearchInput.value);
+            });
+        }
+
         // View mode radio buttons
         const viewModeRadios = document.querySelectorAll('input[name="view-mode"]');
         viewModeRadios.forEach(radio => {
@@ -671,6 +681,218 @@ class FloodMapClient {
         const latRad = lat * Math.PI / 180;
         const y = Math.floor(n * (1 - (Math.log(Math.tan(latRad) + (1 / Math.cos(latRad))) / Math.PI)) / 2);
         return { x, y };
+    }
+
+    async handleLocationSearch(query) {
+        const normalizedQuery = String(query || '').trim();
+        if (!normalizedQuery) {
+            this.clearSearchResults();
+            this.updateSearchStatus('Enter a US ZIP code or city.', 'error');
+            return;
+        }
+
+        if (this.locationSearchAbortController) {
+            this.locationSearchAbortController.abort();
+        }
+
+        const controller = new AbortController();
+        this.locationSearchAbortController = controller;
+        this.setSearchLoading(true);
+        this.clearSearchResults();
+        this.updateSearchStatus(`Searching for "${normalizedQuery}"...`, 'loading');
+
+        try {
+            const response = await fetch(
+                `/floodmap/api/places/search?q=${encodeURIComponent(normalizedQuery)}`,
+                { signal: controller.signal }
+            );
+
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                throw new Error(payload?.detail || 'Location search failed');
+            }
+
+            const results = Array.isArray(payload?.results) ? payload.results : [];
+            if (!results.length) {
+                this.updateSearchStatus(`No US matches found for "${normalizedQuery}".`, 'error');
+                return;
+            }
+
+            if (results.length === 1) {
+                this.selectSearchResult(results[0]);
+                return;
+            }
+
+            this.renderSearchResults(results);
+            this.updateSearchStatus(`Choose a match for "${normalizedQuery}".`, 'success');
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                return;
+            }
+
+            console.error('Location search error:', error);
+            this.updateSearchStatus(error?.message || 'Location search failed.', 'error');
+        } finally {
+            if (this.locationSearchAbortController === controller) {
+                this.locationSearchAbortController = null;
+                this.setSearchLoading(false);
+            }
+        }
+    }
+
+    renderSearchResults(results) {
+        const container = document.getElementById('location-search-results');
+        if (!container) return;
+
+        container.innerHTML = '';
+        results.forEach((result) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'search-result';
+            button.setAttribute('role', 'listitem');
+
+            const name = document.createElement('span');
+            name.className = 'search-result__name';
+            name.textContent = result.name || result.label || 'Unknown location';
+
+            const meta = document.createElement('span');
+            meta.className = 'search-result__meta';
+            meta.textContent = result.label || 'Unnamed place';
+
+            button.appendChild(name);
+            button.appendChild(meta);
+            button.addEventListener('click', () => {
+                this.selectSearchResult(result);
+            });
+
+            container.appendChild(button);
+        });
+    }
+
+    clearSearchResults() {
+        const container = document.getElementById('location-search-results');
+        if (container) {
+            container.innerHTML = '';
+        }
+    }
+
+    updateSearchStatus(message = '', state = '') {
+        const status = document.getElementById('location-search-status');
+        if (!status) return;
+
+        status.textContent = message;
+        status.className = 'search-status';
+        if (state) {
+            status.classList.add(`is-${state}`);
+        }
+    }
+
+    setSearchLoading(isLoading) {
+        const button = document.getElementById('location-search-button');
+        if (!button) return;
+
+        button.disabled = isLoading;
+        button.textContent = isLoading ? '...' : 'Go';
+    }
+
+    selectSearchResult(result) {
+        if (!result || !this.map) return;
+
+        const searchInput = document.getElementById('location-search');
+        if (searchInput && result.name) {
+            searchInput.value = result.name;
+        }
+
+        this.clearSearchResults();
+        this.updateSearchStatus(
+            `Showing ${result.name || result.label}. Click the map for a precise flood-risk sample.`,
+            'success'
+        );
+        this.updateRiskPanelForSearch(result);
+        this.updateLocationInfoForSearch(result);
+        this.showSearchMarker(result);
+
+        const bounds = this.getSearchBounds(result);
+        if (bounds) {
+            this.map.fitBounds(
+                [
+                    [bounds.west, bounds.south],
+                    [bounds.east, bounds.north]
+                ],
+                {
+                    duration: 1100,
+                    padding: { top: 64, right: 64, bottom: 64, left: 64 },
+                    maxZoom: this.map.getMaxZoom()
+                }
+            );
+            return;
+        }
+
+        this.map.flyTo({
+            center: [result.longitude, result.latitude],
+            zoom: Math.min(this.map.getMaxZoom(), 10.5),
+            essential: true,
+            duration: 1100
+        });
+    }
+
+    getSearchBounds(result) {
+        const bounds = result?.bounds;
+        if (!bounds) return null;
+
+        const south = Number(bounds.south);
+        const north = Number(bounds.north);
+        const west = Number(bounds.west);
+        const east = Number(bounds.east);
+
+        if (![south, north, west, east].every(Number.isFinite)) {
+            return null;
+        }
+
+        return { south, north, west, east };
+    }
+
+    updateRiskPanelForSearch(result) {
+        const riskDetails = document.getElementById('risk-details');
+        if (!riskDetails) return;
+
+        const name = this.escapeHtml(result.name || result.label || 'Selected location');
+        const label = this.escapeHtml(result.label || result.name || 'Selected location');
+
+        riskDetails.innerHTML = `
+            <div class="risk-summary risk-search">
+                <strong>Showing: ${name}</strong>
+            </div>
+            <p><strong>Location:</strong> ${label}</p>
+            <p><strong>Next step:</strong> Click any point on the map to sample elevation and flood risk there.</p>
+        `;
+    }
+
+    updateLocationInfoForSearch(result) {
+        const locationInfo = document.getElementById('location-info');
+        if (!locationInfo) return;
+
+        locationInfo.textContent = `🔎 ${result.name || result.label} • ${Number(result.latitude).toFixed(4)}°, ${Number(result.longitude).toFixed(4)}°`;
+    }
+
+    showSearchMarker(result) {
+        this.clearMapMarkers();
+
+        new maplibregl.Marker({ color: '#2563eb' })
+            .setLngLat([result.longitude, result.latitude])
+            .setPopup(new maplibregl.Popup().setHTML(`
+                <div>
+                    <strong>${this.escapeHtml(result.name || result.label || 'Selected location')}</strong><br>
+                    ${this.escapeHtml(result.label || result.name || 'Selected location')}
+                </div>
+            `))
+            .addTo(this.map);
     }
 
     updateWaterLevelVibe(waterLevel, vibeElement) {
@@ -842,11 +1064,29 @@ class FloodMapClient {
         `;
     }
 
+    hasElevationValue(value) {
+        return Number.isFinite(value);
+    }
+
+    escapeHtml(value) {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    clearMapMarkers() {
+        const existingMarkers = document.querySelectorAll('.maplibregl-marker');
+        existingMarkers.forEach(marker => marker.remove());
+    }
+
     updateLocationInfo(data) {
         const locationInfo = document.getElementById('location-info');
         locationInfo.innerHTML = `
             📍 ${data.latitude.toFixed(4)}°, ${data.longitude.toFixed(4)}°
-            ${data.elevation_m ? `• ${data.elevation_m}m elevation` : ''}
+            ${this.hasElevationValue(data.elevation_m) ? `• ${data.elevation_m}m elevation` : ''}
             ${data.tileInfo ? `<br>${data.tileInfo}` : ''}
         `;
     }
@@ -860,7 +1100,7 @@ class FloodMapClient {
                 <strong>Risk Level: ${data.flood_risk_level.toUpperCase()}</strong>
             </div>
             <p><strong>Location:</strong> ${data.latitude.toFixed(4)}°, ${data.longitude.toFixed(4)}°</p>
-            ${data.elevation_m ? `<p><strong>Elevation:</strong> ${data.elevation_m}m</p>` : ''}
+            ${this.hasElevationValue(data.elevation_m) ? `<p><strong>Elevation:</strong> ${data.elevation_m}m</p>` : ''}
             <p><strong>Water Level:</strong> ${data.water_level_m}m</p>
             <p><strong>Assessment:</strong> ${data.risk_description}</p>
             ${data.tileInfo ? `<p><strong>Debug:</strong> ${data.tileInfo}</p>` : ''}
@@ -911,16 +1151,15 @@ class FloodMapClient {
     }
 
     addLocationMarker(lng, lat, data) {
-        const existingMarkers = document.querySelectorAll('.maplibregl-marker');
-        existingMarkers.forEach(marker => marker.remove());
+        this.clearMapMarkers();
 
         const marker = new maplibregl.Marker({ color: '#ef4444' })
             .setLngLat([lng, lat])
             .setPopup(new maplibregl.Popup().setHTML(`
                 <div>
-                    <strong>Flood Risk: ${data.flood_risk_level}</strong><br>
-                    Elevation: ${data.elevation_m || 'Unknown'}m<br>
-                    ${data.risk_description}
+                    <strong>Flood Risk: ${this.escapeHtml(data.flood_risk_level)}</strong><br>
+                    Elevation: ${this.hasElevationValue(data.elevation_m) ? this.escapeHtml(data.elevation_m) : 'Unknown'}m<br>
+                    ${this.escapeHtml(data.risk_description)}
                 </div>
             `))
             .addTo(this.map);
