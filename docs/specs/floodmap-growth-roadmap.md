@@ -250,11 +250,24 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE` after rerunning with a constrained prompt and explicit live checks.
 
 ### Phase 2 status
-- Ready to start.
-- Production note carried into this phase: `https://drose.io/floodmap/site.webmanifest` still resolves to root-style values (`/`, `/favicon.svg`) because the current subpath proxying strips `/floodmap` before the app sees the request.
+- Completed on 2026-04-10.
+- Shipped via commits `c092208` and `754747b`, pushed to `origin/main`, and deployed with Coolify deployment `ak8wc0s4088o4gkk40kgk88g`.
+- Changed the frontend bootstrap to compute one shared public base path, switched client asset/API/tile URLs to use that helper, and made the manifest/favicon routes path-relative so both `/` and `/floodmap` hosting work.
+- Added focused regression coverage in `tests/unit/test_public_base_paths.py` for root/subpath HTML serving, path-relative manifests, and relative favicon redirects.
+- Checks passed:
+  - `uv run pytest tests/unit/test_public_base_paths.py -q`
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs`
+  - local HTTP smoke via `ALLOW_MISSING_DATA=true ENVIRONMENT=development API_PORT=8011 uv run python main.py`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap` serves asset version `20260410b` and the `FLOODMAP_PUBLIC_BASE_PATH` bootstrap
+  - `https://drose.io/floodmap/site.webmanifest` returns `start_url: "./"` and `icon: "favicon.svg"`
+  - `https://drose.io/floodmap/favicon.ico` redirects to relative `favicon.svg`
+  - `https://drose.io/floodmap/api/places/search?q=Tampa` still returns results
+- Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 3 status
-- Pending
+- Ready to start.
 
 ### Phase 4 status
 - Pending
