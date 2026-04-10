@@ -10,6 +10,8 @@ from typing import Final
 from location_catalog import (
     HOME_DEFAULT_VIEW_STATE,
     CityPage,
+    ZipPage,
+    get_city_page,
     list_city_pages,
     list_related_city_pages,
 )
@@ -18,7 +20,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260410h"
+ASSET_VERSION: Final[str] = "20260410i"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )
@@ -157,6 +159,23 @@ def _build_city_structured_data(
         ],
     }
     return _render_json_ld(payload)
+
+
+def _build_zip_breadcrumb_html(zip_page: ZipPage) -> str:
+    full_name = escape(zip_page.full_name)
+    parent_city_path = escape(
+        f"../{zip_page.state_slug}/{zip_page.city_slug}", quote=True
+    )
+    parent_city_name = escape(f"{zip_page.city_name}, {zip_page.state_name}")
+    return (
+        '                <nav class="page-breadcrumbs" aria-label="Breadcrumb">\n'
+        '                    <ol class="breadcrumb-list">\n'
+        '                        <li><a href="..">FloodMap USA</a></li>\n'
+        f'                        <li><a href="{parent_city_path}">{parent_city_name}</a></li>\n'
+        f"                        <li><span>{full_name}</span></li>\n"
+        "                    </ol>\n"
+        "                </nav>"
+    )
 
 
 def _build_location_link_section(
@@ -319,6 +338,74 @@ def build_city_page_html(city_page: CityPage) -> str:
             title="Related city flood maps",
             intro="Jump to another city page if you want a comparable coastal or river-front metro without going back to the homepage.",
             city_pages=list_related_city_pages(city_page),
+        ),
+    )
+    return _render_page(context)
+
+
+def build_zip_page_html(zip_page: ZipPage) -> str:
+    scenario_label = f"{zip_page.default_view_state.water:.1f}m"
+    parent_city = get_city_page(zip_page.state_slug, zip_page.city_slug)
+    title = (
+        f"ZIP {zip_page.zip_code} Flood Map | {zip_page.area_label}, "
+        f"{zip_page.city_name}, {zip_page.state_name} | FloodMap USA"
+    )
+    description = (
+        f"Interactive flood map for ZIP {zip_page.zip_code} in "
+        f"{zip_page.city_name}, {zip_page.state_name}. Compare elevation and "
+        f"test a {scenario_label} water scenario from a tighter local map view."
+    )
+    about_intro = (
+        f"Use this ZIP {zip_page.zip_code} flood map to inspect "
+        f"{zip_page.focus_areas}. The page opens closer to {zip_page.area_label} "
+        f"than the broader {zip_page.city_name} city page."
+    )
+    nearby_pages = (parent_city,) if parent_city is not None else ()
+    context = PageRenderContext(
+        title=title,
+        description=description,
+        canonical_url=f"https://drose.io{zip_page.canonical_path}",
+        h1=f"Flood map for ZIP {zip_page.zip_code} in {zip_page.city_name}, {zip_page.state_name}",
+        header_kicker=(
+            f"Start from a tighter {zip_page.city_name} map view around "
+            f"{zip_page.area_label}, compare elevation with flood mode, and use "
+            f"the default {scenario_label} scenario as a quick local baseline."
+        ),
+        breadcrumb_nav_html=_build_zip_breadcrumb_html(zip_page),
+        about_title=f"ZIP {zip_page.zip_code} flood map and elevation view",
+        about_intro=about_intro,
+        feature_items=(
+            f"Open directly on {zip_page.area_label} instead of starting from the full {zip_page.city_name} metro view.",
+            f"Compare elevation and flood scenarios around {zip_page.focus_areas}.",
+            f"Start with a {scenario_label} flood setup, then adjust the slider for milder or more extreme water levels.",
+            "Click the map for a point-specific risk sample once you have narrowed the view to the exact block or shoreline you care about.",
+        ),
+        how_to_items=(
+            f"Start with the default ZIP {zip_page.zip_code} map view and pan around {zip_page.area_label}.",
+            "Use flood mode for scenario testing, or switch to elevation mode to inspect terrain and relative height differences.",
+            "Move back to the broader city page if you want metro-wide context before drilling back down to a specific waterfront or neighborhood.",
+        ),
+        model_summary=(
+            f"{zip_page.local_context} This prototype ZIP page is intentionally "
+            "kept out of search indexing for now while the location-page pattern "
+            "is being validated. FloodMap USA remains a screening tool for "
+            "exploration and comparison, not a substitute for surveys, FEMA "
+            "products, insurance decisions, or emergency instructions."
+        ),
+        route_context={
+            "pageType": "zip",
+            "canonicalPath": zip_page.canonical_path,
+            "zipCode": zip_page.zip_code,
+            "stateSlug": zip_page.state_slug,
+            "citySlug": zip_page.city_slug,
+            "locationName": zip_page.full_name,
+            "defaultViewState": zip_page.default_view_state.as_dict(),
+        },
+        robots_meta_html='    <meta name="robots" content="noindex,follow">',
+        nearby_links_html=_build_location_link_section(
+            title="Broader city flood map",
+            intro="Jump back to the city page if you want more metro context before zooming into a specific ZIP or waterfront district.",
+            city_pages=nearby_pages,
         ),
     )
     return _render_page(context)

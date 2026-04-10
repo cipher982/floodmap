@@ -26,6 +26,7 @@ PRECOMPRESSED_VENDOR_HEADERS = {
     "Content-Encoding": "gzip",
     "Vary": "Accept-Encoding",
 }
+ZIP_NOINDEX_HEADERS = {"X-Robots-Tag": "noindex, follow"}
 
 # OpenTelemetry imports
 from opentelemetry import trace
@@ -161,11 +162,15 @@ from config import (
     FORCE_HTTPS,
     IS_DEVELOPMENT,
 )
-from location_catalog import get_city_page
+from location_catalog import get_city_page, get_zip_page
 
 # Import middleware
 from middleware.rate_limiter import RateLimitMiddleware
-from page_renderer import build_city_page_html, build_home_page_html
+from page_renderer import (
+    build_city_page_html,
+    build_home_page_html,
+    build_zip_page_html,
+)
 from routers import diagnostics as diagnostics_router
 from routers import health, places, risk, tiles_performance_test, tiles_v1
 from sitemaps import (
@@ -420,6 +425,28 @@ async def cities_sitemap():
 @app.get("/floodmap/sitemaps/cities.xml", include_in_schema=False)
 async def cities_sitemap_floodmap():
     return _build_xml_response(build_city_sitemap_xml())
+
+
+@app.api_route("/zip/{zip_code}", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def serve_zip_frontend(zip_code: str):
+    """Serve conservative ZIP landing pages at the domain root for local/dev use."""
+    zip_page = get_zip_page(zip_code)
+    if zip_page is None:
+        raise HTTPException(status_code=404, detail="ZIP page not found")
+    return HTMLResponse(
+        content=build_zip_page_html(zip_page),
+        headers=dict(ZIP_NOINDEX_HEADERS),
+    )
+
+
+@app.api_route(
+    "/floodmap/zip/{zip_code}",
+    methods=["GET", "HEAD"],
+    response_class=HTMLResponse,
+)
+async def serve_zip_frontend_floodmap(zip_code: str):
+    """Serve the same ZIP landing pages when hosted under the /floodmap subpath."""
+    return await serve_zip_frontend(zip_code)
 
 
 @app.api_route(

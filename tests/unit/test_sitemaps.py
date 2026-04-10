@@ -5,7 +5,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 from fastapi.testclient import TestClient
-from location_catalog import list_city_pages
+from location_catalog import list_city_pages, list_zip_pages
 
 SITEMAP_NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 
@@ -57,6 +57,10 @@ def test_city_sitemap_lists_curated_city_pages(monkeypatch):
     assert len(locs) == len(list_city_pages())
     assert "https://drose.io/floodmap/fl/tampa" in locs
     assert "https://drose.io/floodmap/wa/seattle" in locs
+    assert all(
+        f"https://drose.io{zip_page.canonical_path}" not in locs
+        for zip_page in list_zip_pages()
+    )
 
 
 def test_homepage_and_city_pages_expose_internal_city_links(monkeypatch):
@@ -72,3 +76,14 @@ def test_homepage_and_city_pages_expose_internal_city_links(monkeypatch):
     assert "Related city flood maps" in city_html
     assert 'href="/floodmap/fl/miami"' in city_html
     assert 'href="/floodmap/ga/savannah"' in city_html
+
+
+def test_sitemap_index_does_not_publish_zip_sitemaps(monkeypatch):
+    main = load_main_module(monkeypatch)
+    client = TestClient(main.app)
+
+    resp = client.get("/sitemap.xml")
+
+    assert resp.status_code == 200
+    assert "/sitemaps/zips.xml" not in resp.text
+    assert "/floodmap/zip/" not in resp.text
