@@ -9,7 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # ----------------------------------------------------------------------
 RUN apk add --no-cache \
     curl \
-    bash && \
+    bash \
+    build-base && \
     pip install --no-cache-dir uv
 
 # ----------------------------------------------------------------------
