@@ -44,6 +44,35 @@ header {
     min-width: 0;
 }
 
+.page-breadcrumbs {
+    font-size: 0.78rem;
+    line-height: 1.3;
+    color: #64748b;
+}
+
+.breadcrumb-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    list-style: none;
+}
+
+.breadcrumb-list li + li::before {
+    content: "/";
+    margin-right: 8px;
+    color: #94a3b8;
+}
+
+.page-breadcrumbs a {
+    color: #475569;
+    text-decoration: none;
+}
+
+.page-breadcrumbs a:hover {
+    color: #2563eb;
+    text-decoration: underline;
+}
+
 header h1 {
     color: #2563eb;
     font-size: 1.4rem;

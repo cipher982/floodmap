@@ -13,7 +13,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260410f"
+ASSET_VERSION: Final[str] = "20260410g"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )
@@ -27,6 +27,7 @@ class PageRenderContext:
     canonical_url: str
     h1: str
     header_kicker: str
+    breadcrumb_nav_html: str
     about_title: str
     about_intro: str
     feature_items: tuple[str, ...]
@@ -46,6 +47,113 @@ def _render_context_script(route_context: dict[str, object]) -> str:
     return json.dumps(route_context, separators=(",", ":"))
 
 
+def _render_json_ld(payload: dict[str, object]) -> str:
+    json_ld = json.dumps(payload, separators=(",", ":"))
+    return f'    <script type="application/ld+json">{json_ld}</script>'
+
+
+def _build_website_node() -> dict[str, object]:
+    return {
+        "@type": "WebSite",
+        "@id": "https://drose.io/floodmap#website",
+        "url": "https://drose.io/floodmap",
+        "name": "FloodMap USA",
+        "description": (
+            "Interactive U.S. flood map for any city or ZIP code. Search a "
+            "location, compare elevation, test storm surge or sea-level "
+            "scenarios, and share the exact map view."
+        ),
+        "inLanguage": "en-US",
+    }
+
+
+def _build_home_structured_data(title: str, description: str) -> str:
+    payload = {
+        "@context": "https://schema.org",
+        "@graph": [
+            _build_website_node(),
+            {
+                "@type": "WebPage",
+                "@id": "https://drose.io/floodmap#webpage",
+                "url": "https://drose.io/floodmap",
+                "name": title,
+                "description": description,
+                "isPartOf": {"@id": "https://drose.io/floodmap#website"},
+                "inLanguage": "en-US",
+            },
+        ],
+    }
+    return _render_json_ld(payload)
+
+
+def _build_city_breadcrumb_html(city_page: CityPage) -> str:
+    full_name = escape(city_page.full_name)
+    return (
+        '                <nav class="page-breadcrumbs" aria-label="Breadcrumb">\n'
+        '                    <ol class="breadcrumb-list">\n'
+        '                        <li><a href="../..">FloodMap USA</a></li>\n'
+        f"                        <li><span>{full_name}</span></li>\n"
+        "                    </ol>\n"
+        "                </nav>"
+    )
+
+
+def _build_city_structured_data(
+    city_page: CityPage, *, title: str, description: str, about_intro: str
+) -> str:
+    canonical_url = f"https://drose.io{city_page.canonical_path}"
+    payload = {
+        "@context": "https://schema.org",
+        "@graph": [
+            _build_website_node(),
+            {
+                "@type": "WebPage",
+                "@id": f"{canonical_url}#webpage",
+                "url": canonical_url,
+                "name": title,
+                "description": description,
+                "isPartOf": {"@id": "https://drose.io/floodmap#website"},
+                "breadcrumb": {"@id": f"{canonical_url}#breadcrumb"},
+                "about": {"@id": f"{canonical_url}#place"},
+                "inLanguage": "en-US",
+            },
+            {
+                "@type": "Place",
+                "@id": f"{canonical_url}#place",
+                "name": city_page.full_name,
+                "description": about_intro,
+                "geo": {
+                    "@type": "GeoCoordinates",
+                    "latitude": city_page.default_view_state.lat,
+                    "longitude": city_page.default_view_state.lng,
+                },
+                "containedInPlace": {
+                    "@type": "AdministrativeArea",
+                    "name": city_page.state_name,
+                },
+            },
+            {
+                "@type": "BreadcrumbList",
+                "@id": f"{canonical_url}#breadcrumb",
+                "itemListElement": [
+                    {
+                        "@type": "ListItem",
+                        "position": 1,
+                        "name": "FloodMap USA",
+                        "item": "https://drose.io/floodmap",
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 2,
+                        "name": city_page.full_name,
+                    },
+                ],
+            },
+        ],
+    }
+    return _render_json_ld(payload)
+
+
 def _render_page(context: PageRenderContext) -> str:
     replacements = {
         "__FLOODMAP_ASSET_VERSION__": escape(ASSET_VERSION, quote=True),
@@ -63,6 +171,7 @@ def _render_page(context: PageRenderContext) -> str:
             context.route_context
         ),
         "__FLOODMAP_STRUCTURED_DATA__": context.structured_data_html,
+        "__FLOODMAP_BREADCRUMB_NAV__": context.breadcrumb_nav_html,
         "__FLOODMAP_PAGE_H1__": escape(context.h1),
         "__FLOODMAP_HEADER_KICKER__": escape(context.header_kicker),
         "__FLOODMAP_ABOUT_TITLE__": escape(context.about_title),
@@ -92,6 +201,7 @@ def build_home_page_html() -> str:
         canonical_url="https://drose.io/floodmap",
         h1="FloodMap USA",
         header_kicker="Search any U.S. city or ZIP code, compare elevation, and preview flood or sea-level scenarios in a shareable map view.",
+        breadcrumb_nav_html="",
         about_title="Flood map for any U.S. city or ZIP",
         about_intro="FloodMap USA is a fast screening tool for exploring elevation and water exposure across the United States. Search a location, inspect terrain, switch to flood mode, and share the exact scenario you are looking at.",
         feature_items=(
@@ -111,6 +221,10 @@ def build_home_page_html() -> str:
             "canonicalPath": "/floodmap",
             "defaultViewState": dict(HOME_DEFAULT_VIEW_STATE),
         },
+        structured_data_html=_build_home_structured_data(
+            "FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk",
+            "Interactive U.S. flood map for any city or ZIP code. Search a location, compare elevation, test storm surge or sea-level scenarios, and share the exact map view.",
+        ),
     )
     return _render_page(context)
 
@@ -121,6 +235,10 @@ def build_city_page_html(city_page: CityPage) -> str:
     full_name = city_page.full_name
     title = f"{city_page.city_name} Flood Map | {city_page.state_name} Elevation & Water Scenarios | FloodMap USA"
     description = f"Interactive flood map for {full_name}. Compare elevation, test a {scenario_label} water scenario, and share a city-centered view."
+    about_intro = (
+        f"Use this {full_name} flood map to inspect {focus}. "
+        f"The page opens directly on {city_page.city_name} instead of making you pan from the national view."
+    )
     context = PageRenderContext(
         title=title,
         description=description,
@@ -130,11 +248,9 @@ def build_city_page_html(city_page: CityPage) -> str:
             f"Start on a {full_name} map view, compare elevation with flood mode, "
             f"and use the default {scenario_label} scenario as a fast screening baseline."
         ),
+        breadcrumb_nav_html=_build_city_breadcrumb_html(city_page),
         about_title=f"{city_page.city_name} flood map and elevation view",
-        about_intro=(
-            f"Use this {full_name} flood map to inspect {focus}. "
-            f"The page opens directly on {city_page.city_name} instead of making you pan from the national view."
-        ),
+        about_intro=about_intro,
         feature_items=(
             f"Open a {city_page.city_name}-centered map instead of manually panning across the U.S.",
             f"Compare elevation and flood scenarios around {focus}.",
@@ -157,5 +273,11 @@ def build_city_page_html(city_page: CityPage) -> str:
             "locationName": full_name,
             "defaultViewState": city_page.default_view_state.as_dict(),
         },
+        structured_data_html=_build_city_structured_data(
+            city_page,
+            title=title,
+            description=description,
+            about_intro=about_intro,
+        ),
     )
     return _render_page(context)
