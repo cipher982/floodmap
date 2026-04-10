@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   calculateDistanceKm,
   getViewportPrefetchTiles,
+  getViewportNeighborTiles,
   buildProgressiveJumpPlan,
 } = require("./jump-planner.js");
 
@@ -68,5 +69,29 @@ test("getViewportPrefetchTiles returns center-first tiles within the viewport co
         && Number.isInteger(tile.x)
         && Number.isInteger(tile.y),
     ),
+  );
+});
+
+test("getViewportNeighborTiles returns the next ring outside the visible viewport", () => {
+  const neighbors = getViewportNeighborTiles({
+    center: { lat: 47.6062, lng: -122.3321 },
+    zoom: 10,
+    viewportWidth: 924,
+    viewportHeight: 586,
+    maxTiles: 8,
+  });
+  const visible = getViewportPrefetchTiles({
+    center: { lat: 47.6062, lng: -122.3321 },
+    zoom: 10,
+    viewportWidth: 924,
+    viewportHeight: 586,
+    maxTiles: 24,
+  });
+  const visibleKeys = new Set(visible.map((tile) => `${tile.z}/${tile.x}/${tile.y}`));
+
+  assert.equal(neighbors.length, 8);
+  assert.ok(neighbors.every((tile) => tile.z === 10));
+  assert.ok(
+    neighbors.every((tile) => !visibleKeys.has(`${tile.z}/${tile.x}/${tile.y}`)),
   );
 });

@@ -103,6 +103,39 @@ function getViewportPrefetchTiles({
     return tiles.slice(0, Math.max(1, maxTiles)).map(({ distance, ...tile }) => tile);
 }
 
+function getViewportNeighborTiles({
+    center,
+    zoom,
+    viewportWidth,
+    viewportHeight,
+    maxTiles = MAX_PREFETCH_TILES
+}) {
+    const requestedCount = Math.max(1, Number(maxTiles) || MAX_PREFETCH_TILES);
+    const visibleTiles = getViewportPrefetchTiles({
+        center,
+        zoom,
+        viewportWidth,
+        viewportHeight,
+        paddingTiles: 0,
+        maxTiles: requestedCount * 3
+    });
+    const visibleKeys = new Set(
+        visibleTiles.map((tile) => `${tile.z}/${tile.x}/${tile.y}`)
+    );
+    const paddedTiles = getViewportPrefetchTiles({
+        center,
+        zoom,
+        viewportWidth,
+        viewportHeight,
+        paddingTiles: 1,
+        maxTiles: requestedCount * 4
+    });
+
+    return paddedTiles
+        .filter((tile) => !visibleKeys.has(`${tile.z}/${tile.x}/${tile.y}`))
+        .slice(0, requestedCount);
+}
+
 function buildProgressiveJumpPlan({
     currentCenter,
     currentZoom,
@@ -146,6 +179,7 @@ function buildProgressiveJumpPlan({
 const FloodmapJumpPlanner = {
     calculateDistanceKm,
     getViewportPrefetchTiles,
+    getViewportNeighborTiles,
     buildProgressiveJumpPlan,
     constants: Object.freeze({
         PROGRESSIVE_DISTANCE_THRESHOLD_KM,

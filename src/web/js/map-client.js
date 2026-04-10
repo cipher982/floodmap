@@ -54,6 +54,7 @@ class FloodMapClient {
         this.transitionOverlayHideTimer = null;
         this.progressiveJumpSequence = 0;
         this.lastProgressiveJumpPlan = null;
+        this.refinementNeighborPrefetchTimer = null;
         this.suppressViewportSync = false;
 
         // Initialize WebWorker for rendering if available
@@ -1014,6 +1015,13 @@ class FloodMapClient {
         this.transitionOverlayHideTimer = window.setTimeout(finalize, 220);
     }
 
+    cancelRefinementNeighborPrefetch() {
+        if (this.refinementNeighborPrefetchTimer) {
+            window.clearTimeout(this.refinementNeighborPrefetchTimer);
+            this.refinementNeighborPrefetchTimer = null;
+        }
+    }
+
     waitForMapIdle(timeoutMs = 1800) {
         return new Promise((resolve) => {
             if (!this.map) {
@@ -1109,6 +1117,36 @@ class FloodMapClient {
             viewportWidth: viewport.width,
             viewportHeight: viewport.height
         });
+    }
+
+    buildRefinementNeighborPrefetchTiles(targetCamera) {
+        if (!targetCamera || !this.map) return [];
+
+        const viewport = this.getMapViewportSize();
+        const targetZoom = Math.max(0, Math.floor(Number(targetCamera.zoom) || 0));
+
+        return this.jumpPlanner.getViewportNeighborTiles({
+            center: targetCamera.center,
+            zoom: targetZoom,
+            viewportWidth: viewport.width,
+            viewportHeight: viewport.height,
+            maxTiles: 12
+        });
+    }
+
+    scheduleRefinementNeighborPrefetch(targetCamera, sequence) {
+        const tiles = this.buildRefinementNeighborPrefetchTiles(targetCamera);
+        if (!tiles.length) return;
+
+        this.cancelRefinementNeighborPrefetch();
+        this.refinementNeighborPrefetchTimer = window.setTimeout(() => {
+            this.refinementNeighborPrefetchTimer = null;
+            if (sequence !== this.progressiveJumpSequence) return;
+
+            void this.prefetchElevationTilesProgressively(tiles, {
+                shouldContinue: () => sequence === this.progressiveJumpSequence
+            });
+        }, 120);
     }
 
     cancelSearchResultPrefetch({ clearPlan = true } = {}) {
@@ -1280,6 +1318,7 @@ class FloodMapClient {
     async transitionToSearchTarget(targetCamera) {
         if (!targetCamera || !this.map) return;
 
+        this.cancelRefinementNeighborPrefetch();
         const plan = this.buildProgressiveJumpPlanForTarget(targetCamera);
 
         this.lastProgressiveJumpPlan = {
@@ -1327,6 +1366,7 @@ class FloodMapClient {
             this.suppressViewportSync = false;
             this.schedulePermalinkUpdate();
             this.trackViewportView();
+            this.scheduleRefinementNeighborPrefetch(targetCamera, sequence);
             return;
         }
 
@@ -1340,6 +1380,7 @@ class FloodMapClient {
         this.suppressViewportSync = false;
         this.schedulePermalinkUpdate();
         this.trackViewportView();
+        this.scheduleRefinementNeighborPrefetch(targetCamera, sequence);
     }
 
     cancelLocationTypeahead() {

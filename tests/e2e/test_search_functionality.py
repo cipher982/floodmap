@@ -296,6 +296,8 @@ async def test_location_search_typeahead_does_not_shift_share_controls(
 
 @pytest.mark.asyncio
 async def test_far_location_search_uses_progressive_jump_overlay(map_page: MapPage):
+    batch_payloads: list[dict] = []
+
     async def handle_search(route):
         await route.fulfill(
             status=200,
@@ -327,7 +329,13 @@ async def test_far_location_search_uses_progressive_jump_overlay(map_page: MapPa
         await asyncio.sleep(0.55 if z >= 8 else 0.08)
         await route.fulfill(response=response)
 
+    async def handle_batch(route):
+        batch_payloads.append(json.loads(route.request.post_data or "{}"))
+        response = await route.fetch()
+        await route.fulfill(response=response)
+
     await map_page.page.route("**/api/places/search*", handle_search)
+    await map_page.page.route("**/api/v1/tiles/elevation-batch.u16*", handle_batch)
     await map_page.page.route(
         "**/api/v1/tiles/elevation-data/**", delay_elevation_tiles
     )
@@ -387,6 +395,9 @@ async def test_far_location_search_uses_progressive_jump_overlay(map_page: MapPa
     assert abs(state["lat"] - 47.6062) < 0.02
     assert abs(state["lng"] - (-122.3321)) < 0.02
     assert abs(state["zoom"] - 10.5) < 0.2
+    assert len(batch_payloads) >= 2
+    assert batch_payloads[0]["tiles"] == plan["prefetchTiles"]
+    assert all(tile["z"] == 10 for tile in batch_payloads[-1]["tiles"])
 
 
 @pytest.mark.asyncio
