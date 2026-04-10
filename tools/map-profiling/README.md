@@ -13,12 +13,20 @@ Quick start
 - Single capture: node capture-har.mjs https://your.url --width=1440 --height=900 --duration=10000 --selector='CSS'
 - Analyze: node analyze-har.mjs har.json
 - Suite (recommended): URL=https://your.url SELECTOR='CSS' npm run suite
+- City-jump profiler: URL=https://your.url npm run city-jumps
+- Explicit city pair: URL=https://your.url npm run city-jumps -- --pair='ny/new-york:tx/houston'
 
 Scenarios (suite)
 - cold: initial load only
 - pan: smooth drags across the map
 - zoomout: 3 zoom-out steps, then idle
 - warm: one reload within the same context
+
+City-jump profiler
+- Loads one city viewport, then `flyTo(...)` jumps to another city at its default zoom.
+- Records blank-screen ratio in the center of the map from screenshots, first tile timings, tile-loaded completion, and transfer totals by elevation/vector.
+- Uses the curated city defaults from `src/api/location_catalog.py`.
+- Outputs: `results/<timestamp>-city-jumps/summary.(json|md)`
 
 Outputs
 - results/<timestamp>/har_*.json – raw HAR files
