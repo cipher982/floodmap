@@ -6,6 +6,7 @@ This repo powers `https://drose.io/floodmap` (MapLibre + client-side elevation/f
 - Never create/overwrite `.env` (ask before appending).
 - Prefer project tooling: `uv run ...` (don’t assume `python` exists).
 - Avoid `docker wait` (can hang).
+- "Shipped" means live in production. Do not describe local-only commits or unpushed changes as shipped; if it is not deployed, say so plainly.
 
 ## Fast Checks
 - Python unit tests: `uv run pytest tests/unit -q`
