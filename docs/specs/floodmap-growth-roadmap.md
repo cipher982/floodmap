@@ -384,7 +384,23 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 9 status
-- Pending
+- Completed on 2026-04-10.
+- Shipped via commit `2dd94b1`, pushed to `origin/main`, and deployed with Coolify deployment `towc4cc4k04ko44csogogcos`.
+- Added JSON-LD structured data in `src/api/page_renderer.py`:
+  - homepage now emits a `WebSite` + `WebPage` graph
+  - city pages now emit a `WebSite` + `WebPage` + `Place` + `BreadcrumbList` graph
+- Added a visible breadcrumb on city pages so the breadcrumb markup matches the page that users actually see, with a relative home link that works at both `/` and `/floodmap`.
+- Regression coverage added in `tests/unit/test_structured_data.py` for homepage and city-page graph contents, plus an updated browser assertion in `tests/e2e/test_city_pages.py` for the visible breadcrumb.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e -q`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap` serves asset version `20260410g` and a JSON-LD `WebSite`/`WebPage` graph
+  - `https://drose.io/floodmap/fl/tampa` serves asset version `20260410g`, a JSON-LD `WebSite`/`WebPage`/`Place`/`BreadcrumbList` graph, and a visible breadcrumb nav
+  - live browser smoke confirms the Tampa page still loads in flood mode at water `3.0`, centered on Tampa
+  - `https://drose.io/floodmap/api/places/search?q=Tampa` still returns results
+- Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 10 status
 - Pending
