@@ -5,6 +5,7 @@ Single server architecture with clear separation of concerns.
 
 import logging
 import os
+from pathlib import Path
 
 import uvicorn
 from dotenv import load_dotenv
@@ -16,6 +17,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 # Get logger
 logger = logging.getLogger(__name__)
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+INDEX_HTML_PATH = WEB_DIR / "index.html"
+FAVICON_SVG_PATH = WEB_DIR / "favicon.svg"
 
 # OpenTelemetry imports
 from opentelemetry import trace
@@ -243,15 +247,16 @@ app.include_router(places.router, prefix="/api", tags=["places"])
 #
 # Production is hosted under a `/floodmap` subpath (reverse proxy), but local
 # dev/tests commonly run at `/`. Mount both so local E2E works.
-app.mount("/static", StaticFiles(directory="../web"), name="static")
-app.mount("/floodmap/static", StaticFiles(directory="../web"), name="static_floodmap")
+app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+app.mount(
+    "/floodmap/static", StaticFiles(directory=str(WEB_DIR)), name="static_floodmap"
+)
 
 
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def serve_frontend():
     """Serve the main application frontend."""
-    with open("../web/index.html") as f:
-        return HTMLResponse(content=f.read())
+    return HTMLResponse(content=INDEX_HTML_PATH.read_text(encoding="utf-8"))
 
 
 @app.api_route("/floodmap/", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -264,8 +269,10 @@ async def serve_frontend_floodmap():
 async def favicon_svg():
     """Serve the app's SVG favicon from the static web directory."""
     try:
-        with open("../web/favicon.svg") as f:
-            return Response(content=f.read(), media_type="image/svg+xml")
+        return Response(
+            content=FAVICON_SVG_PATH.read_text(encoding="utf-8"),
+            media_type="image/svg+xml",
+        )
     except Exception:
         # Fallback to a simple emoji-based favicon if file missing
         svg = (
@@ -284,26 +291,27 @@ async def favicon_svg_floodmap():
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon_ico():
     """Redirect .ico requests to the SVG favicon to avoid 404s."""
-    return RedirectResponse(url="/favicon.svg")
+    return RedirectResponse(url="favicon.svg")
 
 
 @app.get("/floodmap/favicon.ico", include_in_schema=False)
 async def favicon_ico_floodmap():
-    return RedirectResponse(url="/floodmap/favicon.svg")
+    return RedirectResponse(url="favicon.svg")
 
 
-def _build_site_manifest(start_url: str, icon_src: str) -> Response:
-    """Build a minimal web app manifest for installability and theming."""
+def _build_site_manifest() -> Response:
+    """Build a minimal path-relative web app manifest for installability."""
     manifest = {
         "name": "FloodMap USA",
         "short_name": "FloodMap",
-        "start_url": start_url,
+        "start_url": "./",
+        "scope": "./",
         "display": "standalone",
         "background_color": "#0d47a1",
         "theme_color": "#0d47a1",
         "icons": [
             {
-                "src": icon_src,
+                "src": "favicon.svg",
                 "sizes": "any",
                 "type": "image/svg+xml",
                 "purpose": "any maskable",
@@ -319,16 +327,14 @@ def _build_site_manifest(start_url: str, icon_src: str) -> Response:
 
 @app.get("/site.webmanifest", include_in_schema=False)
 async def site_manifest():
-    """Serve a manifest when the app is hosted at the domain root."""
-    return _build_site_manifest(start_url="/", icon_src="/favicon.svg")
+    """Serve a manifest that works at either root or /floodmap."""
+    return _build_site_manifest()
 
 
 @app.get("/floodmap/site.webmanifest", include_in_schema=False)
 async def site_manifest_floodmap():
-    """Serve a manifest when the app is hosted under /floodmap."""
-    return _build_site_manifest(
-        start_url="/floodmap/", icon_src="/floodmap/favicon.svg"
-    )
+    """Serve the same path-relative manifest on the /floodmap subpath."""
+    return _build_site_manifest()
 
 
 if __name__ == "__main__":

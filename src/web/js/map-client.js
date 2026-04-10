@@ -3,6 +3,14 @@
  * Uses custom protocol handler to intercept tile requests
  */
 
+function requireFloodmapUrlHelper(helperName) {
+    const helper = typeof window !== 'undefined' ? window[helperName] : null;
+    if (typeof helper !== 'function') {
+        throw new Error(`${helperName} is required before loading Floodmap client scripts.`);
+    }
+    return helper;
+}
+
 class FloodMapClient {
     constructor() {
         this.map = null;
@@ -35,10 +43,8 @@ class FloodMapClient {
         if (typeof Worker !== 'undefined') {
             try {
                 // Cache-bust worker URL alongside other static assets
-                const workerUrl = new URL('/floodmap/static/js/render-worker.js', window.location.origin);
-                const assetVersion = window.FLOODMAP_ASSET_VERSION;
-                if (assetVersion) workerUrl.searchParams.set('v', assetVersion);
-                this.renderWorker = new Worker(workerUrl.toString());
+                const workerUrl = requireFloodmapUrlHelper('floodmapAssetUrl')('/js/render-worker.js');
+                this.renderWorker = new Worker(workerUrl);
                 this.workerReady = false;
                 this.pendingWorkerJobs = new Map();
                 this.workerJobId = 0;
@@ -393,7 +399,12 @@ class FloodMapClient {
                     },
                     'vector-tiles': {
                         type: 'vector',
-                        tiles: [window.location.origin + '/floodmap/api/v1/tiles/vector/usa/{z}/{x}/{y}.pbf'],
+                        tiles: [
+                            new URL(
+                                requireFloodmapUrlHelper('floodmapApiUrl')('/v1/tiles/vector/usa/{z}/{x}/{y}.pbf'),
+                                window.location.origin
+                            ).toString()
+                        ],
                         maxzoom: config.maxZoom
                     }
                 },
@@ -702,10 +713,13 @@ class FloodMapClient {
         this.updateSearchStatus(`Searching for "${normalizedQuery}"...`, 'loading');
 
         try {
-            const response = await fetch(
-                `/floodmap/api/places/search?q=${encodeURIComponent(normalizedQuery)}`,
-                { signal: controller.signal }
+            const searchUrl = new URL(
+                requireFloodmapUrlHelper('floodmapApiUrl')('/places/search'),
+                window.location.origin
             );
+            searchUrl.searchParams.set('q', normalizedQuery);
+
+            const response = await fetch(searchUrl.toString(), { signal: controller.signal });
 
             let payload = null;
             try {
@@ -1002,7 +1016,7 @@ class FloodMapClient {
                 return;
             }
 
-            const response = await fetch('/floodmap/api/risk/location', {
+            const response = await fetch(requireFloodmapUrlHelper('floodmapApiUrl')('/risk/location'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

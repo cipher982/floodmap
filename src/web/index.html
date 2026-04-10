@@ -11,30 +11,82 @@
         // Unified cache-busting version (edit this value only)
         window.FLOODMAP_ASSET_VERSION = "20260410a";
 
+        // Public app path is either domain-root local/dev or /floodmap in production.
+        window.FLOODMAP_PUBLIC_BASE_PATH = (function determineFloodmapPublicBasePath() {
+            const pathname = window.location.pathname || '/';
+            return pathname === '/floodmap' || pathname.startsWith('/floodmap/') ? '/floodmap' : '';
+        })();
+
+        function normalizeFloodmapPath(path) {
+            if (typeof path !== 'string' || !path.trim()) {
+                throw new TypeError('Floodmap path helpers require a non-empty string path.');
+            }
+            return path.startsWith('/') ? path : `/${path}`;
+        }
+
+        window.floodmapPublicUrl = function floodmapPublicUrl(path) {
+            return `${window.FLOODMAP_PUBLIC_BASE_PATH}${normalizeFloodmapPath(path)}`;
+        };
+
+        window.floodmapApiUrl = function floodmapApiUrl(path) {
+            const normalizedPath = normalizeFloodmapPath(path);
+            const apiPath = normalizedPath === '/api' || normalizedPath.startsWith('/api/')
+                ? normalizedPath
+                : `/api${normalizedPath}`;
+            return window.floodmapPublicUrl(apiPath);
+        };
+
         // Optional: allow tiles to be busted independently via ?tile_v=... (defaults to ASSET_VERSION)
         const tileV = new URLSearchParams(window.location.search).get('tile_v');
         window.FLOODMAP_TILE_VERSION = tileV || window.FLOODMAP_ASSET_VERSION;
 
         // Helper for generating cache-busted URLs for Floodmap-owned static assets
         window.floodmapAssetUrl = function floodmapAssetUrl(path) {
-            const u = new URL(path, window.location.origin);
+            const normalizedPath = normalizeFloodmapPath(path);
+            const staticPath = normalizedPath === '/static' || normalizedPath.startsWith('/static/')
+                ? normalizedPath
+                : `/static${normalizedPath}`;
+            const u = new URL(window.floodmapPublicUrl(staticPath), window.location.origin);
             const v = window.FLOODMAP_ASSET_VERSION;
             if (v) u.searchParams.set('v', v);
             return u.toString();
         };
 
-        // Inject stylesheet with unified cache-busting
-        (function injectFloodmapCss() {
+        function appendHeadLink(attributes) {
             const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = window.floodmapAssetUrl('/floodmap/static/css/style.css');
+            Object.entries(attributes).forEach(([name, value]) => {
+                if (value !== undefined && value !== null) link.setAttribute(name, value);
+            });
             document.head.appendChild(link);
+            return link;
+        }
+
+        // Inject app-owned head assets with a consistent public-path helper.
+        (function injectFloodmapHeadLinks() {
+            appendHeadLink({
+                rel: 'stylesheet',
+                href: window.floodmapAssetUrl('/css/style.css')
+            });
+            appendHeadLink({
+                rel: 'icon',
+                type: 'image/svg+xml',
+                href: window.floodmapPublicUrl('/favicon.svg')
+            });
+            appendHeadLink({
+                rel: 'alternate icon',
+                href: window.floodmapPublicUrl('/favicon.ico')
+            });
+            appendHeadLink({
+                rel: 'mask-icon',
+                href: window.floodmapPublicUrl('/favicon.svg'),
+                color: '#0d47a1'
+            });
+            appendHeadLink({
+                rel: 'manifest',
+                href: window.floodmapPublicUrl('/site.webmanifest')
+            });
         })();
     </script>
-    <link rel="icon" type="image/svg+xml" href="/floodmap/favicon.svg">
-    <link rel="alternate icon" href="/floodmap/favicon.ico">
-    <link rel="mask-icon" href="/floodmap/favicon.svg" color="#0d47a1">
-    <link rel="manifest" href="/floodmap/site.webmanifest">
     <meta name="theme-color" content="#0d47a1">
 
     <!-- Social metadata -->
@@ -224,8 +276,8 @@
                 });
             }
 
-            const er = window.floodmapAssetUrl('/floodmap/static/js/elevation-renderer.js');
-            const mc = window.floodmapAssetUrl('/floodmap/static/js/map-client.js');
+            const er = window.floodmapAssetUrl('/js/elevation-renderer.js');
+            const mc = window.floodmapAssetUrl('/js/map-client.js');
 
             loadScript(er)
                 .then(() => loadScript(mc))

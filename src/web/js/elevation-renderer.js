@@ -3,6 +3,14 @@
  * Eliminates network bottleneck by computing flood colors in the browser
  */
 
+function requireFloodmapApiUrl() {
+    const helper = typeof window !== 'undefined' ? window.floodmapApiUrl : null;
+    if (typeof helper !== 'function') {
+        throw new Error('window.floodmapApiUrl is required before loading elevation tiles.');
+    }
+    return helper;
+}
+
 class ElevationRenderer {
     constructor() {
         // Elevation data cache (bounded LRU)
@@ -126,9 +134,13 @@ class ElevationRenderer {
                 (window.FLOODMAP_TILE_VERSION || window.FLOODMAP_ASSET_VERSION) :
                 null;
         if (tileVersion) qs.set('v', tileVersion);
-        const url = `/floodmap/api/v1/tiles/elevation-data/${z}/${x}/${y}.u16?${qs.toString()}`;
+        const url = new URL(
+            requireFloodmapApiUrl()(`/v1/tiles/elevation-data/${z}/${x}/${y}.u16`),
+            window.location.origin
+        );
+        url.search = qs.toString();
 
-        const loadPromise = fetch(url, { signal })
+        const loadPromise = fetch(url.toString(), { signal })
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Failed to load elevation tile ${key}: ${response.status}`);
@@ -172,7 +184,7 @@ class ElevationRenderer {
                     throw error;
                 }
                 console.error(`❌ Error loading elevation tile ${key}:`, error);
-                console.error(`   URL was: ${url}`);
+                console.error(`   URL was: ${url.toString()}`);
                 this.loadingTiles.delete(key);
                 // Return NODATA tile on error
                 return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);
