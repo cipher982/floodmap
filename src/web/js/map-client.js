@@ -44,6 +44,7 @@ class FloodMapClient {
         this.locationSearchAbortController = null;
         this.locationSearchDebounceTimer = null;
         this.searchResults = [];
+        this.searchResultsSignature = '';
         this.activeSearchResultIndex = -1;
 
         // Initialize WebWorker for rendering if available
@@ -976,11 +977,10 @@ class FloodMapClient {
         this.setSearchLoading(true, { disableButton: !isTypeahead });
         if (!isTypeahead) {
             this.clearSearchResults();
+            this.updateSearchStatus(`Searching for "${normalizedQuery}"...`, 'loading');
+        } else {
+            this.updateSearchStatus('', '');
         }
-        this.updateSearchStatus(
-            `${isTypeahead ? 'Finding matches' : 'Searching'} for "${normalizedQuery}"...`,
-            'loading'
-        );
 
         try {
             const searchUrl = new URL(
@@ -1005,7 +1005,11 @@ class FloodMapClient {
             const results = Array.isArray(payload?.results) ? payload.results : [];
             if (!results.length) {
                 this.clearSearchResults();
-                this.updateSearchStatus(`No US matches found for "${normalizedQuery}".`, 'error');
+                if (isTypeahead) {
+                    this.updateSearchStatus('', '');
+                } else {
+                    this.updateSearchStatus(`No US matches found for "${normalizedQuery}".`, 'error');
+                }
                 return;
             }
 
@@ -1016,11 +1020,7 @@ class FloodMapClient {
 
             this.renderSearchResults(results);
             if (isTypeahead) {
-                const label = results.length === 1 ? 'match' : 'matches';
-                this.updateSearchStatus(
-                    `${results.length} ${label} for "${normalizedQuery}". Click one below or press Go.`,
-                    'success'
-                );
+                this.updateSearchStatus('', '');
             } else {
                 this.updateSearchStatus(`Choose a match for "${normalizedQuery}".`, 'success');
             }
@@ -1039,15 +1039,39 @@ class FloodMapClient {
         }
     }
 
+    createSearchResultsSignature(results) {
+        if (!Array.isArray(results) || !results.length) {
+            return '';
+        }
+
+        return results.map((result) => {
+            const name = result?.name || '';
+            const label = result?.label || '';
+            const latitude = Number.isFinite(result?.latitude) ? result.latitude.toFixed(5) : '';
+            const longitude = Number.isFinite(result?.longitude) ? result.longitude.toFixed(5) : '';
+            return `${name}|${label}|${latitude}|${longitude}`;
+        }).join('||');
+    }
+
     renderSearchResults(results) {
         const container = document.getElementById('location-search-results');
         if (!container) return;
 
-        container.innerHTML = '';
-        this.searchResults = results;
+        const normalizedResults = Array.isArray(results) ? results : [];
+        const nextSignature = this.createSearchResultsSignature(normalizedResults);
+        this.searchResults = normalizedResults;
         this.activeSearchResultIndex = -1;
-        results.forEach((result) => {
-            const index = container.childElementCount;
+
+        if (
+            this.searchResultsSignature === nextSignature
+            && container.childElementCount === normalizedResults.length
+        ) {
+            this.syncSearchResultsA11y();
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        normalizedResults.forEach((result, index) => {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'search-result';
@@ -1073,17 +1097,20 @@ class FloodMapClient {
                 this.setActiveSearchResultIndex(index, { scrollIntoView: false });
             });
 
-            container.appendChild(button);
+            fragment.appendChild(button);
         });
+        container.replaceChildren(fragment);
+        this.searchResultsSignature = nextSignature;
         this.syncSearchResultsA11y();
     }
 
     clearSearchResults() {
         const container = document.getElementById('location-search-results');
-        if (container) {
-            container.innerHTML = '';
+        if (container && container.childElementCount) {
+            container.replaceChildren();
         }
         this.searchResults = [];
+        this.searchResultsSignature = '';
         this.activeSearchResultIndex = -1;
         this.syncSearchResultsA11y();
     }
@@ -1160,19 +1187,28 @@ class FloodMapClient {
         const status = document.getElementById('location-search-status');
         if (!status) return;
 
-        status.textContent = message;
-        status.className = 'search-status';
-        if (state) {
-            status.classList.add(`is-${state}`);
+        const nextMessage = message || '';
+        const nextClassName = state ? `search-status is-${state}` : 'search-status';
+        if (status.textContent === nextMessage && status.className === nextClassName) {
+            return;
         }
+
+        status.textContent = nextMessage;
+        status.className = nextClassName;
     }
 
     setSearchLoading(isLoading, { disableButton = true } = {}) {
         const button = document.getElementById('location-search-button');
         if (!button) return;
 
-        button.disabled = Boolean(disableButton && isLoading);
-        button.textContent = disableButton && isLoading ? '...' : 'Go';
+        const nextDisabled = Boolean(disableButton && isLoading);
+        const nextText = nextDisabled ? '...' : 'Go';
+        if (button.disabled !== nextDisabled) {
+            button.disabled = nextDisabled;
+        }
+        if (button.textContent !== nextText) {
+            button.textContent = nextText;
+        }
     }
 
     selectSearchResult(result) {

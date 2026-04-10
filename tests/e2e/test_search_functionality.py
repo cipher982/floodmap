@@ -117,7 +117,7 @@ async def test_location_search_typeahead_shows_suggestions_before_submit(
     current_path = urlparse(map_page.page.url).path
     state_before_select = await map_page.get_map_state()
 
-    assert '2 matches for "new yo"' in status_text
+    assert status_text.strip() == ""
     assert suggestion_names == ["New York", "New York County"]
     assert current_path == "/"
     assert abs(state_before_select["lat"] - initial_state["lat"]) < 0.001
@@ -138,6 +138,82 @@ async def test_location_search_typeahead_shows_suggestions_before_submit(
     assert abs(state["lat"] - 40.7128) < 0.02
     assert abs(state["lng"] - (-74.006)) < 0.02
     assert abs(state["zoom"] - 10.5) < 0.2
+
+
+@pytest.mark.asyncio
+async def test_location_search_typeahead_does_not_shift_share_controls(
+    map_page: MapPage,
+):
+    async def handle_search(route):
+        query = parse_qs(urlparse(route.request.url).query).get("q", [""])[0]
+        results = []
+        if query == "new":
+            results = [
+                {
+                    "name": "New Orleans",
+                    "label": "New Orleans Lakefront Airport, Keubel Drive, Seabrook, New Orleans, Orleans Parish, Louisiana, 70126, United States",
+                    "latitude": 29.9934,
+                    "longitude": -90.258,
+                    "type": "city",
+                    "bounds": None,
+                },
+                {
+                    "name": "New",
+                    "label": "New, Owen County, Kentucky, United States",
+                    "latitude": 38.537,
+                    "longitude": -84.7922,
+                    "type": "hamlet",
+                    "bounds": None,
+                },
+                {
+                    "name": "Town of Pound Ridge",
+                    "label": "New, Town of Pound Ridge, Westchester County, New York, 10518, United States",
+                    "latitude": 41.2085,
+                    "longitude": -73.5746,
+                    "type": "town",
+                    "bounds": None,
+                },
+            ]
+
+        await route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"query": query, "results": results}),
+        )
+
+    await map_page.page.route("**/api/places/search*", handle_search)
+    await map_page.goto_homepage()
+    await map_page.wait_for_app_ready()
+
+    share_label = map_page.page.locator("label[for='share-view-button']")
+    share_top_before = await share_label.evaluate(
+        "(node) => node.getBoundingClientRect().top"
+    )
+
+    await map_page.page.fill("#location-search", "new")
+    await map_page.page.wait_for_function(
+        """() => document.querySelectorAll('.search-result').length === 3""",
+        timeout=10000,
+    )
+
+    share_top_after = await share_label.evaluate(
+        "(node) => node.getBoundingClientRect().top"
+    )
+    layout_state = await map_page.page.evaluate(
+        """() => {
+            const shell = document.querySelector('.location-search-shell');
+            const results = document.getElementById('location-search-results');
+            return {
+                resultsPosition: window.getComputedStyle(results).position,
+                shellBottom: shell?.getBoundingClientRect().bottom ?? 0,
+                resultsTop: results?.getBoundingClientRect().top ?? 0,
+            };
+        }"""
+    )
+
+    assert abs(share_top_after - share_top_before) < 4
+    assert layout_state["resultsPosition"] == "absolute"
+    assert layout_state["resultsTop"] >= layout_state["shellBottom"] - 1
 
 
 @pytest.mark.asyncio
