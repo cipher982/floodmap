@@ -356,7 +356,32 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 8 status
-- Pending
+- Completed on 2026-04-10.
+- Shipped via commit `a4dc8fe`, pushed to `origin/main`, and deployed with Coolify deployment `gkc88kwk8okowog88ksg0w8o`.
+- Added a first batch of crawlable city pages backed by a curated catalog in `src/api/location_catalog.py` and a server-side renderer in `src/api/page_renderer.py`.
+- Home and city routes now render distinct HTML from the same template:
+  - homepage remains `https://drose.io/floodmap`
+  - city routes now work at paths like `https://drose.io/floodmap/fl/tampa`
+  - shipped starter city pages include Tampa, Miami, New Orleans, Charleston, Norfolk, Houston, New York, Boston, Savannah, Annapolis, San Francisco, and Seattle
+- City pages now provide:
+  - location-specific title, description, canonical, and Open Graph/Twitter metadata
+  - city-specific explanatory copy in the visible HTML instead of a generic map shell
+  - route-specific default map state injected into the page so the map loads at the slug's city center, zoom, view mode, and water level without requiring query params
+- Updated `src/web/js/map-client.js` to respect route-specific default view state so slug pages stay clean until the user changes the scenario.
+- Added regression coverage:
+  - `tests/unit/test_location_pages.py` for city-page HTML, canonical metadata, route context, and unknown-slug 404s
+  - `tests/e2e/test_city_pages.py` for slug-default map state and explicit-query override behavior
+  - `src/web/js/url-state.test.mjs` for custom default-state handling
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e -q`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap/fl/tampa` serves Tampa-specific title, canonical, Open Graph metadata, and route-context JSON with asset version `20260410f`
+  - live browser smoke confirms `https://drose.io/floodmap/fl/tampa` loads in flood mode at water `3.0`, centered on Tampa, with the clean slug URL intact
+  - `https://drose.io/floodmap` still serves the homepage with asset version `20260410f`
+  - `https://drose.io/floodmap/api/places/search?q=Tampa` still returns results
+- Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 9 status
 - Pending
