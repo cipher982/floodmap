@@ -237,6 +237,48 @@ Acceptance criteria:
 - ZIP pages are `noindex` by default
 - indexing decision remains explicit and reversible
 
+### Phase 12: Add live city and ZIP typeahead suggestions
+Maps to docket: `Add live city and ZIP typeahead suggestions`
+
+Goal:
+- show useful location suggestions while the user types instead of waiting for submit
+
+Depends on:
+- Phases 1 and 4
+
+Acceptance criteria:
+- typing a city or ZIP shows live suggestions after a debounce
+- current submit/search behavior still works as a fallback
+- loading, empty, and error states stay understandable
+
+### Phase 13: Add keyboard navigation for location suggestions
+Maps to docket: `Add keyboard navigation for location suggestions`
+
+Goal:
+- make the suggestion list fully usable without a mouse
+
+Depends on:
+- Phase 12
+
+Acceptance criteria:
+- arrow keys move through suggestions
+- Enter selects the active suggestion
+- Escape dismisses the suggestion list cleanly
+
+### Phase 14: Support browser autocomplete and search history in location field
+Maps to docket: `Support browser autocomplete and search history in location field`
+
+Goal:
+- make the search field cooperate with browser-level history/autocomplete instead of fighting it
+
+Depends on:
+- Phase 12
+
+Acceptance criteria:
+- the field uses an intentional autocomplete setting
+- browser-level history does not conflict badly with live suggestions
+- final behavior is covered by tests or explicit rationale
+
 ## Working Notes
 
 ### Phase 1 status
@@ -426,4 +468,24 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 11 status
-- Pending
+- Completed on 2026-04-10.
+- Shipped via commit `bca5158`, pushed to `origin/main`, and deployed with Coolify deployment `fg8w0k0sos8k4sockksogo40`.
+- Added curated ZIP routes in `src/api/location_catalog.py`, server-side ZIP rendering in `src/api/page_renderer.py`, and ZIP route wiring in `src/api/main.py`.
+- ZIP pages now provide:
+  - useful ZIP-specific copy and tighter default map views for an initial curated set of ZIPs
+  - explicit `noindex,follow` control in both HTML metadata and the `X-Robots-Tag` response header
+  - breadcrumb/internal-link wiring back to the broader city page
+- Added regression coverage:
+  - `tests/unit/test_zip_pages.py` for ZIP-page metadata, route context, `X-Robots-Tag`, and 404 handling
+  - `tests/e2e/test_zip_pages.py` for ZIP route defaults and explicit-query override behavior
+  - updated `tests/unit/test_sitemaps.py` to assert ZIP URLs remain out of published sitemaps
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e -q`
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap/zip/33602` returns `200` with `X-Robots-Tag: noindex, follow`
+  - live HTML for `https://drose.io/floodmap/zip/33602` serves asset version `20260410i`, the ZIP-specific title/copy, and `<meta name="robots" content="noindex,follow">`
+  - live browser smoke confirms `/floodmap/zip/33602` loads in flood mode at water `3.0`, centered on Tampa ZIP `33602`, with zoom `11.0`
+  - `https://drose.io/floodmap/sitemap.xml` still omits ZIP URLs and no ZIP sitemap is published
+- Claude Haiku cursory review: `APPROVE`.
