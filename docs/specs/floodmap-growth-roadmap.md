@@ -240,10 +240,18 @@ Acceptance criteria:
 ## Working Notes
 
 ### Phase 1 status
-- Pending
+- Completed on 2026-04-10.
+- Shipped via `git push origin main` to commit `6c787a4` and explicit Coolify deploy `a0cs08g004g0gwo8k48gggow`.
+- Live verification passed:
+  - `https://drose.io/floodmap` contains `Jump To Location`
+  - `https://drose.io/floodmap/api/places/search?q=Tampa` returns search results
+  - versioned JS/CSS assets for `20260410a` contain the search code/styles
+- CDN purge succeeded with Cloudflare global-key auth after bearer-token auth returned an authentication error.
+- Claude Haiku cursory review: `APPROVE` after rerunning with a constrained prompt and explicit live checks.
 
 ### Phase 2 status
-- Pending
+- Ready to start.
+- Production note carried into this phase: `https://drose.io/floodmap/site.webmanifest` still resolves to root-style values (`/`, `/favicon.svg`) because the current subpath proxying strips `/floodmap` before the app sees the request.
 
 ### Phase 3 status
 - Pending
