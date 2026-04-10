@@ -285,10 +285,22 @@ Acceptance criteria:
 - Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 4 status
-- Ready to start.
+- Completed on 2026-04-10.
+- Shipped via commit `4db35fc`, pushed to `origin/main`. No production deploy was required because this phase only touched the browser test suite.
+- Replaced stale Playwright debugging/visual files with a smaller reliable suite covering:
+  - app smoke and max-zoom guardrails
+  - current view-mode and slider behavior
+  - permalink restoration and URL updates
+  - deterministic location-search behavior with route interception
+- Updated the E2E server fixture to run `uvicorn` directly instead of `python main.py`, which removes the dev reloader from the browser-test path.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e -q`
+- Claude Haiku cursory review: `APPROVE`.
 
 ### Phase 5 status
-- Pending
+- Ready to start.
 
 ### Phase 6 status
 - Pending
