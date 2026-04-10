@@ -504,3 +504,22 @@ Acceptance criteria:
   - live browser smoke confirms typing `tampa` without pressing `Go` shows multiple suggestions and a status message before submit
   - clicking the first live suggestion sets the input to `Tampa`, shows the `Showing Tampa...` status, and moves the live map to Tampa
 - Claude Haiku cursory review: `APPROVE` with no obvious regressions called out.
+
+### Phase 13 status
+- Completed on 2026-04-10.
+- Shipped via commits `5e4fc67` and `8080e44`, pushed to `origin/main`, and deployed with Coolify deployment `jsgk8c4og480koo4cg8c4gs4`.
+- Added keyboard navigation and ARIA state management for search suggestions across `src/web/js/map-client.js`, `src/web/index.html`, and `src/web/css/style.css`:
+  - ArrowDown and ArrowUp move the active suggestion
+  - Enter selects the active suggestion from the input without needing a mouse
+  - Escape dismisses the suggestion list and clears the combobox state cleanly
+- Expanded browser coverage in `tests/e2e/test_search_functionality.py` for ArrowDown, ArrowUp, Enter selection, and Escape dismissal. After the Haiku review called out missing ArrowUp coverage, a follow-up test-only commit `e8e9a88` was pushed to close that gap.
+- Checks passed:
+  - `uv run pytest tests/unit -q`
+  - `node --test src/web/js/render-worker.test.mjs src/web/js/url-state.test.mjs`
+  - `uv run pytest tests/e2e -q`
+  - `uv run pytest tests/e2e/test_search_functionality.py -q` after the ArrowUp coverage addition
+- Live verification passed after Cloudflare purge:
+  - `https://drose.io/floodmap` serves asset version `20260410k` plus the listbox/ARIA attributes on the search input and results container
+  - live browser smoke confirms ArrowDown activates the second `tampa` suggestion, Enter selects it, dismisses the list, clears `aria-activedescendant`, leaves `aria-expanded=false`, and moves the map to Kansas
+  - reopening the suggestions and pressing Escape clears the list, clears `aria-activedescendant`, sets `aria-expanded=false`, and clears the status text
+- Claude Haiku cursory review: `APPROVE`, with a minor note about ArrowUp coverage that was addressed immediately in `e8e9a88`.
