@@ -142,6 +142,73 @@ async def test_location_search_typeahead_shows_suggestions_before_submit(
 
 
 @pytest.mark.asyncio
+async def test_far_location_typeahead_prefetches_coarse_tiles_before_click(
+    map_page: MapPage,
+):
+    elevation_requests: list[str] = []
+
+    async def handle_search(route):
+        query = parse_qs(urlparse(route.request.url).query).get("q", [""])[0]
+        results = []
+        if query == "sea":
+            results = [
+                {
+                    "name": "Seattle",
+                    "label": "Seattle, Washington, United States",
+                    "latitude": 47.6062,
+                    "longitude": -122.3321,
+                    "type": "city",
+                    "bounds": None,
+                }
+            ]
+
+        await route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"query": query, "results": results}),
+        )
+
+    async def handle_elevation(route):
+        elevation_requests.append(route.request.url)
+        response = await route.fetch()
+        await route.fulfill(response=response)
+
+    await map_page.page.route("**/api/places/search*", handle_search)
+    await map_page.page.route("**/api/v1/tiles/elevation-data/**", handle_elevation)
+    await map_page.goto_homepage()
+    await map_page.wait_for_app_ready()
+
+    initial_state = await map_page.get_map_state()
+
+    await map_page.page.fill("#location-search", "sea")
+    await map_page.page.wait_for_function(
+        """() => document.querySelectorAll('.search-result').length === 1""",
+        timeout=10000,
+    )
+    await map_page.page.wait_for_function(
+        """() => Boolean(window.floodMap.lastSearchPrefetchPlan?.useProgressive)""",
+        timeout=10000,
+    )
+
+    for _ in range(20):
+        if elevation_requests:
+            break
+        await asyncio.sleep(0.1)
+
+    prefetch_plan = await map_page.page.evaluate(
+        "() => window.floodMap.lastSearchPrefetchPlan"
+    )
+    state_before_click = await map_page.get_map_state()
+
+    assert elevation_requests
+    assert prefetch_plan["targetCenter"]["lat"] == pytest.approx(47.6062, abs=0.02)
+    assert prefetch_plan["prefetchTiles"]
+    assert len(prefetch_plan["prefetchTiles"]) == 8
+    assert abs(state_before_click["lat"] - initial_state["lat"]) < 0.001
+    assert abs(state_before_click["lng"] - initial_state["lng"]) < 0.001
+
+
+@pytest.mark.asyncio
 async def test_location_search_typeahead_does_not_shift_share_controls(
     map_page: MapPage,
 ):

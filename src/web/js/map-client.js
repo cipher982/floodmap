@@ -47,6 +47,10 @@ class FloodMapClient {
         this.searchResults = [];
         this.searchResultsSignature = '';
         this.activeSearchResultIndex = -1;
+        this.searchPrefetchSequence = 0;
+        this.searchPrefetchDebounceTimer = null;
+        this.lastSearchPrefetchKey = '';
+        this.lastSearchPrefetchPlan = null;
         this.transitionOverlayHideTimer = null;
         this.progressiveJumpSequence = 0;
         this.lastProgressiveJumpPlan = null;
@@ -1017,7 +1021,10 @@ class FloodMapClient {
         });
     }
 
-    async prefetchElevationTilesProgressively(tiles, sequence, concurrency = 4) {
+    async prefetchElevationTilesProgressively(
+        tiles,
+        { shouldContinue = null, concurrency = 4 } = {}
+    ) {
         const queue = Array.isArray(tiles)
             ? tiles.filter((tile) => Number.isInteger(tile?.z) && Number.isInteger(tile?.x) && Number.isInteger(tile?.y))
             : [];
@@ -1027,7 +1034,7 @@ class FloodMapClient {
         const workerCount = Math.max(1, Math.min(concurrency, queue.length));
         const worker = async () => {
             while (index < queue.length) {
-                if (sequence !== this.progressiveJumpSequence) return;
+                if (typeof shouldContinue === 'function' && !shouldContinue()) return;
                 const tile = queue[index];
                 index += 1;
                 try {
@@ -1041,6 +1048,102 @@ class FloodMapClient {
         };
 
         await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    }
+
+    buildProgressiveJumpPlanForTarget(targetCamera) {
+        if (!targetCamera || !this.map) {
+            return {
+                distanceKm: 0,
+                zoomDelta: 0,
+                useProgressive: false,
+                stageZoom: 0,
+                requiresFinalRefine: false,
+                prefetchTiles: []
+            };
+        }
+
+        const currentCenter = this.map.getCenter();
+        const currentZoom = this.map.getZoom();
+        const viewport = this.getMapViewportSize();
+
+        return this.jumpPlanner.buildProgressiveJumpPlan({
+            currentCenter: {
+                lat: currentCenter.lat,
+                lng: currentCenter.lng
+            },
+            currentZoom,
+            targetCenter: targetCamera.center,
+            targetZoom: targetCamera.zoom,
+            viewportWidth: viewport.width,
+            viewportHeight: viewport.height
+        });
+    }
+
+    cancelSearchResultPrefetch({ clearPlan = true } = {}) {
+        if (this.searchPrefetchDebounceTimer) {
+            window.clearTimeout(this.searchPrefetchDebounceTimer);
+            this.searchPrefetchDebounceTimer = null;
+        }
+
+        this.searchPrefetchSequence += 1;
+
+        if (clearPlan) {
+            this.lastSearchPrefetchKey = '';
+            this.lastSearchPrefetchPlan = null;
+        }
+    }
+
+    scheduleSearchResultPrefetch(result, { immediate = false } = {}) {
+        if (!result || !this.map) return;
+
+        const targetCamera = this.getSearchTargetCamera(
+            result,
+            this.getSearchBounds(result)
+        );
+        const plan = this.buildProgressiveJumpPlanForTarget(targetCamera);
+        if (!plan.useProgressive || !plan.prefetchTiles.length) return;
+
+        const prefetchTiles = plan.prefetchTiles.slice(0, 8);
+        const prefetchKey = [
+            result?.name || '',
+            result?.label || '',
+            targetCamera.kind,
+            targetCamera.zoom.toFixed(2),
+            prefetchTiles.map((tile) => `${tile.z}/${tile.x}/${tile.y}`).join(',')
+        ].join('|');
+
+        if (prefetchKey === this.lastSearchPrefetchKey) {
+            return;
+        }
+
+        this.cancelSearchResultPrefetch({ clearPlan: false });
+        const sequence = this.searchPrefetchSequence;
+        this.lastSearchPrefetchKey = prefetchKey;
+        this.lastSearchPrefetchPlan = {
+            ...plan,
+            targetKind: targetCamera.kind,
+            targetZoom: targetCamera.zoom,
+            targetCenter: targetCamera.center,
+            prefetchTiles
+        };
+
+        const runPrefetch = () => {
+            this.searchPrefetchDebounceTimer = null;
+            void this.prefetchElevationTilesProgressively(
+                prefetchTiles,
+                {
+                    shouldContinue: () => sequence === this.searchPrefetchSequence,
+                    concurrency: 2
+                }
+            );
+        };
+
+        if (immediate) {
+            runPrefetch();
+            return;
+        }
+
+        this.searchPrefetchDebounceTimer = window.setTimeout(runPrefetch, 140);
     }
 
     getSearchTargetCamera(result, bounds = null) {
@@ -1145,20 +1248,7 @@ class FloodMapClient {
     async transitionToSearchTarget(targetCamera) {
         if (!targetCamera || !this.map) return;
 
-        const currentCenter = this.map.getCenter();
-        const currentZoom = this.map.getZoom();
-        const viewport = this.getMapViewportSize();
-        const plan = this.jumpPlanner.buildProgressiveJumpPlan({
-            currentCenter: {
-                lat: currentCenter.lat,
-                lng: currentCenter.lng
-            },
-            currentZoom,
-            targetCenter: targetCamera.center,
-            targetZoom: targetCamera.zoom,
-            viewportWidth: viewport.width,
-            viewportHeight: viewport.height
-        });
+        const plan = this.buildProgressiveJumpPlanForTarget(targetCamera);
 
         this.lastProgressiveJumpPlan = {
             ...plan,
@@ -1182,7 +1272,9 @@ class FloodMapClient {
 
         const prefetchPromise = this.prefetchElevationTilesProgressively(
             plan.prefetchTiles,
-            sequence
+            {
+                shouldContinue: () => sequence === this.progressiveJumpSequence
+            }
         );
 
         this.map.jumpTo({
@@ -1237,6 +1329,7 @@ class FloodMapClient {
 
         if (!normalizedQuery || normalizedQuery.length < 2) {
             this.abortLocationSearch({ resetLoading: true });
+            this.cancelSearchResultPrefetch();
             this.clearSearchResults();
             this.updateSearchStatus('', '');
             return;
@@ -1304,6 +1397,7 @@ class FloodMapClient {
 
             const results = Array.isArray(payload?.results) ? payload.results : [];
             if (!results.length) {
+                this.cancelSearchResultPrefetch();
                 this.clearSearchResults();
                 if (isTypeahead) {
                     this.updateSearchStatus('', '');
@@ -1367,6 +1461,7 @@ class FloodMapClient {
             && container.childElementCount === normalizedResults.length
         ) {
             this.syncSearchResultsA11y();
+            this.scheduleSearchResultPrefetch(normalizedResults[0]);
             return;
         }
 
@@ -1402,6 +1497,7 @@ class FloodMapClient {
         container.replaceChildren(fragment);
         this.searchResultsSignature = nextSignature;
         this.syncSearchResultsA11y();
+        this.scheduleSearchResultPrefetch(normalizedResults[0]);
     }
 
     clearSearchResults() {
@@ -1409,6 +1505,7 @@ class FloodMapClient {
         if (container && container.childElementCount) {
             container.replaceChildren();
         }
+        this.cancelSearchResultPrefetch();
         this.searchResults = [];
         this.searchResultsSignature = '';
         this.activeSearchResultIndex = -1;
@@ -1461,6 +1558,7 @@ class FloodMapClient {
 
         this.activeSearchResultIndex = index;
         this.syncSearchResultsA11y();
+        this.scheduleSearchResultPrefetch(this.searchResults[index], { immediate: true });
 
         if (!scrollIntoView) return;
         const activeOption = document.getElementById(`location-search-result-${index}`);
@@ -1515,6 +1613,7 @@ class FloodMapClient {
         if (!result || !this.map) return;
         this.cancelLocationTypeahead();
         this.abortLocationSearch({ resetLoading: true });
+        this.cancelSearchResultPrefetch();
         this.setActiveSearchResultIndex(-1, { scrollIntoView: false });
 
         const searchInput = document.getElementById('location-search');
