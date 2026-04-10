@@ -4,6 +4,8 @@ Reliable smoke coverage for the current Floodmap app.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from conftest import MapPage
 
@@ -40,11 +42,14 @@ async def test_health_endpoint_is_available(map_page: MapPage):
 @pytest.mark.asyncio
 async def test_homepage_uses_local_maplibre_assets(map_page: MapPage):
     vendor_requests: list[str] = []
+    vector_requests: list[str] = []
     unpkg_requests: list[str] = []
 
     def track_request(req):
         if "maplibre-gl" in req.url:
             vendor_requests.append(req.url)
+        if "/api/v1/tiles/vector/usa/" in req.url:
+            vector_requests.append(req.url)
         if "unpkg.com" in req.url:
             unpkg_requests.append(req.url)
 
@@ -55,6 +60,11 @@ async def test_homepage_uses_local_maplibre_assets(map_page: MapPage):
 
     assert any("maplibre-gl-4.7.1.css" in url for url in vendor_requests)
     assert any("maplibre-gl-csp-4.7.1.js" in url for url in vendor_requests)
+    assert not any("%7Bz%7D" in url or "{z}" in url for url in vector_requests)
+    assert any(
+        re.search(r"/api/v1/tiles/vector/usa/\d+/\d+/\d+\.pbf", url)
+        for url in vector_requests
+    )
     assert not unpkg_requests
 
 

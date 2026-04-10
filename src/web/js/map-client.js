@@ -411,10 +411,7 @@ class FloodMapClient {
                     'vector-tiles': {
                         type: 'vector',
                         tiles: [
-                            new URL(
-                                requireFloodmapUrlHelper('floodmapApiUrl')('/v1/tiles/vector/usa/{z}/{x}/{y}.pbf'),
-                                window.location.origin
-                            ).toString()
+                            requireFloodmapUrlHelper('floodmapApiUrl')('/v1/tiles/vector/usa/{z}/{x}/{y}.pbf')
                         ],
                         maxzoom: config.maxZoom
                     }
