@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk</title>
-    <meta name="description" content="Interactive U.S. flood map for any city or ZIP code. Search a location, compare elevation, test storm surge or sea-level scenarios, and share the exact map view.">
-    <link rel="canonical" href="https://drose.io/floodmap">
+    <title>__FLOODMAP_PAGE_TITLE__</title>
+    <meta name="description" content="__FLOODMAP_PAGE_DESCRIPTION__">
+    <link rel="canonical" href="__FLOODMAP_CANONICAL_URL__">
+    __FLOODMAP_ROBOTS_META__
     <script>
         // Unified cache-busting version (edit this value only)
-        window.FLOODMAP_ASSET_VERSION = "20260410e";
+        window.FLOODMAP_ASSET_VERSION = "__FLOODMAP_ASSET_VERSION__";
 
         // Public app path is either domain-root local/dev or /floodmap in production.
         window.FLOODMAP_PUBLIC_BASE_PATH = (function determineFloodmapPublicBasePath() {
@@ -90,23 +91,26 @@
             });
         })();
     </script>
+    <script>
+        window.FLOODMAP_ROUTE_CONTEXT = __FLOODMAP_ROUTE_CONTEXT_JSON__;
+    </script>
     <meta name="theme-color" content="#0d47a1">
 
     <!-- Social metadata -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="FloodMap USA">
-    <meta property="og:title" content="FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk">
-    <meta property="og:description" content="Search any U.S. city or ZIP code, compare elevation, and test flood or sea-level scenarios with a shareable map view.">
-    <meta property="og:url" content="https://drose.io/floodmap">
-    <meta property="og:image" content="https://drose.io/floodmap/static/images/social-card.jpg?v=20260410d">
+    <meta property="og:title" content="__FLOODMAP_OG_TITLE__">
+    <meta property="og:description" content="__FLOODMAP_OG_DESCRIPTION__">
+    <meta property="og:url" content="__FLOODMAP_OG_URL__">
+    <meta property="og:image" content="__FLOODMAP_SOCIAL_IMAGE_URL__">
     <meta property="og:image:type" content="image/jpeg">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="633">
     <meta property="og:image:alt" content="FloodMap USA social preview showing a U.S. coastal flood map with search and scenario messaging.">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk">
-    <meta name="twitter:description" content="Search any U.S. city or ZIP code, compare elevation, and test flood or sea-level scenarios with a shareable map view.">
-    <meta name="twitter:image" content="https://drose.io/floodmap/static/images/social-card.jpg?v=20260410d">
+    <meta name="twitter:title" content="__FLOODMAP_TWITTER_TITLE__">
+    <meta name="twitter:description" content="__FLOODMAP_TWITTER_DESCRIPTION__">
+    <meta name="twitter:image" content="__FLOODMAP_SOCIAL_IMAGE_URL__">
     <meta name="twitter:image:alt" content="FloodMap USA social preview showing a U.S. coastal flood map with search and scenario messaging.">
     <script>
         // Analytics (Umami): dual tracking - project dashboard + aggregate domain tracking
@@ -143,14 +147,15 @@
             }
         })();
     </script>
+    __FLOODMAP_STRUCTURED_DATA__
 
 </head>
 <body>
     <div id="app">
         <header>
             <div class="header-copy">
-                <h1>FloodMap USA</h1>
-                <p class="header-kicker">Search any U.S. city or ZIP code, compare elevation, and preview flood or sea-level scenarios in a shareable map view.</p>
+                <h1>__FLOODMAP_PAGE_H1__</h1>
+                <p class="header-kicker">__FLOODMAP_HEADER_KICKER__</p>
             </div>
             <div class="header-meta">
                 <div id="location-info"></div>
@@ -271,26 +276,22 @@
             </div>
 
             <section id="about-panel" aria-labelledby="about-panel-title">
-                <h2 id="about-panel-title">Flood map for any U.S. city or ZIP</h2>
-                <p>FloodMap USA is a fast screening tool for exploring elevation and water exposure across the United States. Search a location, inspect terrain, switch to flood mode, and share the exact scenario you are looking at.</p>
+                <h2 id="about-panel-title">__FLOODMAP_ABOUT_TITLE__</h2>
+                <p>__FLOODMAP_ABOUT_INTRO__</p>
 
                 <h3>What you can do</h3>
                 <ul class="feature-list">
-                    <li>Jump straight to a city or ZIP code instead of manually panning.</li>
-                    <li>Compare elevation and flood-risk views at the same location.</li>
-                    <li>Test scenarios from high tide through extreme storm surge.</li>
-                    <li>Copy a permalink with the current center, zoom, view mode, and water level.</li>
+__FLOODMAP_FEATURE_ITEMS__
                 </ul>
 
                 <h3>How to use it</h3>
                 <ol class="how-to-list">
-                    <li>Search for a U.S. city or ZIP code, or pan to the area you care about.</li>
-                    <li>Use elevation mode for terrain context, then switch to flood mode to test a scenario.</li>
-                    <li>Click a specific point on the map for a location-based risk sample and share the permalink if you want the same view later.</li>
+__FLOODMAP_HOW_TO_ITEMS__
                 </ol>
 
                 <h3>Model notes</h3>
-                <p class="model-summary">This is a rapid relative-visibility tool built from elevation and map data. It is useful for exploration, communication, and scenario comparison, but it is not a substitute for parcel surveys, FEMA products, insurance decisions, or emergency instructions.</p>
+                <p class="model-summary">__FLOODMAP_MODEL_SUMMARY__</p>
+__FLOODMAP_NEARBY_LINKS_SECTION__
             </section>
         </div>
     </div>

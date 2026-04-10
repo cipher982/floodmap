@@ -18,13 +18,25 @@ function requireFloodmapUrlHelper(helperName) {
     return requireFloodmapGlobal(helperName, 'function');
 }
 
+function getFloodmapRouteContext() {
+    if (typeof window === 'undefined') {
+        return {};
+    }
+
+    const routeContext = window.FLOODMAP_ROUTE_CONTEXT;
+    return routeContext && typeof routeContext === 'object' ? routeContext : {};
+}
+
 class FloodMapClient {
     constructor() {
         this.map = null;
         this.shareStatusResetTimer = null;
         this.pendingPermalinkFrame = null;
+        this.routeContext = getFloodmapRouteContext();
+        this.defaultViewState = this.routeContext.defaultViewState
+            || requireFloodmapGlobal('FloodmapUrlState').DEFAULT_VIEW_STATE;
         this.initialViewState = requireFloodmapGlobal('FloodmapUrlState')
-            .parseFloodmapUrlState(window.location.href);
+            .parseFloodmapUrlState(window.location.href, this.defaultViewState);
         this.currentWaterLevel = this.initialViewState.water;
         this.viewMode = this.initialViewState.view;
         this.elevationRenderer = new ElevationRenderer();
@@ -752,11 +764,15 @@ class FloodMapClient {
         const urlState = requireFloodmapGlobal('FloodmapUrlState');
         const currentViewState = this.getCurrentViewState();
 
-        if (!includeDefaults && urlState.isDefaultViewState(currentViewState)) {
+        if (!includeDefaults && urlState.isDefaultViewState(currentViewState, this.defaultViewState)) {
             return urlState.stripFloodmapStateParams(window.location.href);
         }
 
-        return urlState.buildFloodmapShareUrl(window.location.href, currentViewState);
+        return urlState.buildFloodmapShareUrl(
+            window.location.href,
+            currentViewState,
+            this.defaultViewState
+        );
     }
 
     schedulePermalinkUpdate() {
@@ -776,7 +792,10 @@ class FloodMapClient {
 
     applyPermalinkStateFromCurrentUrl() {
         const urlState = requireFloodmapGlobal('FloodmapUrlState');
-        const nextState = urlState.parseFloodmapUrlState(window.location.href);
+        const nextState = urlState.parseFloodmapUrlState(
+            window.location.href,
+            this.defaultViewState
+        );
 
         this.initialViewState = nextState;
         this.currentWaterLevel = nextState.water;

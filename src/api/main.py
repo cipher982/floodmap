@@ -9,7 +9,7 @@ from pathlib import Path
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -18,7 +18,6 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 # Get logger
 logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
-INDEX_HTML_PATH = WEB_DIR / "index.html"
 FAVICON_SVG_PATH = WEB_DIR / "favicon.svg"
 MAPLIBRE_CSP_JS_GZ_PATH = WEB_DIR / "vendor" / "maplibre-gl-csp-4.7.1.js.gz"
 MAPLIBRE_CSP_WORKER_GZ_PATH = WEB_DIR / "vendor" / "maplibre-gl-csp-worker-4.7.1.js.gz"
@@ -162,9 +161,11 @@ from config import (
     FORCE_HTTPS,
     IS_DEVELOPMENT,
 )
+from location_catalog import get_city_page
 
 # Import middleware
 from middleware.rate_limiter import RateLimitMiddleware
+from page_renderer import build_city_page_html, build_home_page_html
 from routers import diagnostics as diagnostics_router
 from routers import health, places, risk, tiles_performance_test, tiles_v1
 
@@ -301,7 +302,7 @@ app.mount(
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def serve_frontend():
     """Serve the main application frontend."""
-    return HTMLResponse(content=INDEX_HTML_PATH.read_text(encoding="utf-8"))
+    return HTMLResponse(content=build_home_page_html())
 
 
 @app.api_route("/floodmap/", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -380,6 +381,27 @@ async def site_manifest():
 async def site_manifest_floodmap():
     """Serve the same path-relative manifest on the /floodmap subpath."""
     return _build_site_manifest()
+
+
+@app.api_route(
+    "/{state_slug}/{city_slug}", methods=["GET", "HEAD"], response_class=HTMLResponse
+)
+async def serve_city_frontend(state_slug: str, city_slug: str):
+    """Serve crawlable city landing pages at the domain root for local/dev use."""
+    city_page = get_city_page(state_slug, city_slug)
+    if city_page is None:
+        raise HTTPException(status_code=404, detail="City page not found")
+    return HTMLResponse(content=build_city_page_html(city_page))
+
+
+@app.api_route(
+    "/floodmap/{state_slug}/{city_slug}",
+    methods=["GET", "HEAD"],
+    response_class=HTMLResponse,
+)
+async def serve_city_frontend_floodmap(state_slug: str, city_slug: str):
+    """Serve the same city landing pages when hosted under the /floodmap subpath."""
+    return await serve_city_frontend(state_slug, city_slug)
 
 
 if __name__ == "__main__":

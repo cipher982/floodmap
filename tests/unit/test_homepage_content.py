@@ -22,7 +22,10 @@ def test_homepage_contains_social_metadata_and_explanatory_copy(monkeypatch):
 
     assert resp.status_code == 200
     html = resp.text
-    assert "FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk" in html
+    assert (
+        "<title>FloodMap USA | Search ZIP Codes, Cities, Elevation &amp; Flood Risk</title>"
+        in html
+    )
     assert "Interactive U.S. flood map for any city or ZIP code." in html
     assert (
         'og:image" content="https://drose.io/floodmap/static/images/social-card.jpg?v='

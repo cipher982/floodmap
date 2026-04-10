@@ -91,3 +91,26 @@ test("isDefaultViewState matches normalized defaults", () => {
     false
   );
 });
+
+test("custom defaults let location pages stay query-free until state changes", () => {
+  const cityDefaults = {
+    lat: 40.7128,
+    lng: -74.006,
+    zoom: 10.1,
+    view: "flood",
+    water: 3.0,
+  };
+
+  const parsed = parseFloodmapUrlState(
+    "https://drose.io/floodmap/ny/new-york",
+    cityDefaults,
+  );
+
+  assert.equal(parsed.lat, cityDefaults.lat);
+  assert.equal(parsed.lng, cityDefaults.lng);
+  assert.equal(parsed.zoom, cityDefaults.zoom);
+  assert.equal(parsed.view, cityDefaults.view);
+  assert.equal(parsed.water, cityDefaults.water);
+  assert.equal(parsed.hasExplicitState, false);
+  assert.equal(isDefaultViewState(parsed, cityDefaults), true);
+});
