@@ -42,6 +42,7 @@ class FloodMapClient {
         this.elevationRenderer = new ElevationRenderer();
         this.modelNoteState = { nearWater: false, coastal: false };
         this.locationSearchAbortController = null;
+        this.locationSearchDebounceTimer = null;
 
         // Initialize WebWorker for rendering if available
         this.initWorker();
@@ -552,7 +553,10 @@ class FloodMapClient {
         if (locationSearchForm && locationSearchInput) {
             locationSearchForm.addEventListener('submit', (e) => {
                 e.preventDefault();
-                this.handleLocationSearch(locationSearchInput.value);
+                void this.handleLocationSearch(locationSearchInput.value);
+            });
+            locationSearchInput.addEventListener('input', () => {
+                this.scheduleLocationTypeahead(locationSearchInput.value);
             });
         }
 
@@ -881,23 +885,74 @@ class FloodMapClient {
         return { x, y };
     }
 
-    async handleLocationSearch(query) {
+    cancelLocationTypeahead() {
+        if (this.locationSearchDebounceTimer) {
+            window.clearTimeout(this.locationSearchDebounceTimer);
+            this.locationSearchDebounceTimer = null;
+        }
+    }
+
+    abortLocationSearch({ resetLoading = false } = {}) {
+        if (this.locationSearchAbortController) {
+            this.locationSearchAbortController.abort();
+            this.locationSearchAbortController = null;
+        }
+        if (resetLoading) {
+            this.setSearchLoading(false);
+        }
+    }
+
+    scheduleLocationTypeahead(query) {
         const normalizedQuery = String(query || '').trim();
+        this.cancelLocationTypeahead();
+
+        if (!normalizedQuery || normalizedQuery.length < 2) {
+            this.abortLocationSearch({ resetLoading: true });
+            this.clearSearchResults();
+            this.updateSearchStatus('', '');
+            return;
+        }
+
+        this.locationSearchDebounceTimer = window.setTimeout(() => {
+            this.locationSearchDebounceTimer = null;
+            void this.fetchLocationMatches(normalizedQuery, { mode: 'typeahead' });
+        }, 220);
+    }
+
+    async handleLocationSearch(query) {
+        this.cancelLocationTypeahead();
+        await this.fetchLocationMatches(query, { mode: 'submit' });
+    }
+
+    async fetchLocationMatches(query, { mode = 'submit' } = {}) {
+        const normalizedQuery = String(query || '').trim();
+        const isTypeahead = mode === 'typeahead';
         if (!normalizedQuery) {
             this.clearSearchResults();
             this.updateSearchStatus('Enter a US ZIP code or city.', 'error');
             return;
         }
 
-        if (this.locationSearchAbortController) {
-            this.locationSearchAbortController.abort();
+        if (normalizedQuery.length < 2) {
+            if (!isTypeahead) {
+                this.clearSearchResults();
+                this.updateSearchStatus('Enter at least 2 characters.', 'error');
+            }
+            return;
         }
+
+        this.abortLocationSearch();
 
         const controller = new AbortController();
         this.locationSearchAbortController = controller;
-        this.setSearchLoading(true);
-        this.clearSearchResults();
-        this.updateSearchStatus(`Searching for "${normalizedQuery}"...`, 'loading');
+        this.setSearchLoading(true, { disableButton: !isTypeahead });
+        if (!isTypeahead) {
+            this.clearSearchResults();
+        }
+        this.updateSearchStatus(
+            `${isTypeahead ? 'Finding matches' : 'Searching'} for "${normalizedQuery}"...`,
+            'loading'
+        );
 
         try {
             const searchUrl = new URL(
@@ -921,17 +976,26 @@ class FloodMapClient {
 
             const results = Array.isArray(payload?.results) ? payload.results : [];
             if (!results.length) {
+                this.clearSearchResults();
                 this.updateSearchStatus(`No US matches found for "${normalizedQuery}".`, 'error');
                 return;
             }
 
-            if (results.length === 1) {
+            if (!isTypeahead && results.length === 1) {
                 this.selectSearchResult(results[0]);
                 return;
             }
 
             this.renderSearchResults(results);
-            this.updateSearchStatus(`Choose a match for "${normalizedQuery}".`, 'success');
+            if (isTypeahead) {
+                const label = results.length === 1 ? 'match' : 'matches';
+                this.updateSearchStatus(
+                    `${results.length} ${label} for "${normalizedQuery}". Click one below or press Go.`,
+                    'success'
+                );
+            } else {
+                this.updateSearchStatus(`Choose a match for "${normalizedQuery}".`, 'success');
+            }
         } catch (error) {
             if (error?.name === 'AbortError') {
                 return;
@@ -942,7 +1006,7 @@ class FloodMapClient {
         } finally {
             if (this.locationSearchAbortController === controller) {
                 this.locationSearchAbortController = null;
-                this.setSearchLoading(false);
+                this.setSearchLoading(false, { disableButton: !isTypeahead });
             }
         }
     }
@@ -994,16 +1058,18 @@ class FloodMapClient {
         }
     }
 
-    setSearchLoading(isLoading) {
+    setSearchLoading(isLoading, { disableButton = true } = {}) {
         const button = document.getElementById('location-search-button');
         if (!button) return;
 
-        button.disabled = isLoading;
-        button.textContent = isLoading ? '...' : 'Go';
+        button.disabled = Boolean(disableButton && isLoading);
+        button.textContent = disableButton && isLoading ? '...' : 'Go';
     }
 
     selectSearchResult(result) {
         if (!result || !this.map) return;
+        this.cancelLocationTypeahead();
+        this.abortLocationSearch({ resetLoading: true });
 
         const searchInput = document.getElementById('location-search');
         if (searchInput && result.name) {
