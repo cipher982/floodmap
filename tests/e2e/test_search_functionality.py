@@ -138,3 +138,154 @@ async def test_location_search_typeahead_shows_suggestions_before_submit(
     assert abs(state["lat"] - 40.7128) < 0.02
     assert abs(state["lng"] - (-74.006)) < 0.02
     assert abs(state["zoom"] - 10.5) < 0.2
+
+
+@pytest.mark.asyncio
+async def test_location_search_keyboard_navigation_selects_active_suggestion(
+    map_page: MapPage,
+):
+    async def handle_search(route):
+        query = parse_qs(urlparse(route.request.url).query).get("q", [""])[0]
+        results = []
+        if query == "tampa":
+            results = [
+                {
+                    "name": "Tampa, Florida",
+                    "label": "Tampa, Hillsborough County, Florida, United States",
+                    "latitude": 27.95,
+                    "longitude": -82.46,
+                    "type": "city",
+                    "bounds": None,
+                },
+                {
+                    "name": "Tampa, Kansas",
+                    "label": "Tampa, Marion County, Kansas, 67483, United States",
+                    "latitude": 38.5482,
+                    "longitude": -97.2417,
+                    "type": "hamlet",
+                    "bounds": None,
+                },
+            ]
+
+        await route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"query": query, "results": results}),
+        )
+
+    await map_page.page.route("**/api/places/search*", handle_search)
+    await map_page.goto_homepage()
+    await map_page.wait_for_app_ready()
+
+    await map_page.page.fill("#location-search", "tampa")
+    await map_page.page.wait_for_function(
+        """() => document.querySelectorAll('.search-result').length === 2""",
+        timeout=10000,
+    )
+
+    await map_page.page.press("#location-search", "ArrowDown")
+    active_descendant = await map_page.page.locator("#location-search").get_attribute(
+        "aria-activedescendant"
+    )
+    active_name = await map_page.page.locator(
+        ".search-result.is-active .search-result__name"
+    ).text_content()
+
+    assert active_descendant == "location-search-result-0"
+    assert active_name == "Tampa, Florida"
+
+    await map_page.page.press("#location-search", "ArrowDown")
+    active_descendant = await map_page.page.locator("#location-search").get_attribute(
+        "aria-activedescendant"
+    )
+    active_name = await map_page.page.locator(
+        ".search-result.is-active .search-result__name"
+    ).text_content()
+
+    assert active_descendant == "location-search-result-1"
+    assert active_name == "Tampa, Kansas"
+
+    await map_page.page.press("#location-search", "Enter")
+    await map_page.page.wait_for_function(
+        """() => document
+            .getElementById('location-search-status')
+            ?.textContent
+            ?.includes('Showing Tampa, Kansas')""",
+        timeout=10000,
+    )
+    await map_page.page.wait_for_timeout(1300)
+
+    state = await map_page.get_map_state()
+    input_value = await map_page.page.input_value("#location-search")
+    expanded = await map_page.page.locator("#location-search").get_attribute(
+        "aria-expanded"
+    )
+
+    assert input_value == "Tampa, Kansas"
+    assert expanded == "false"
+    assert abs(state["lat"] - 38.5482) < 0.02
+    assert abs(state["lng"] - (-97.2417)) < 0.02
+
+
+@pytest.mark.asyncio
+async def test_location_search_escape_dismisses_suggestions(
+    map_page: MapPage,
+):
+    async def handle_search(route):
+        query = parse_qs(urlparse(route.request.url).query).get("q", [""])[0]
+        results = []
+        if query == "tampa":
+            results = [
+                {
+                    "name": "Tampa",
+                    "label": "Tampa, Hillsborough County, Florida, United States",
+                    "latitude": 27.95,
+                    "longitude": -82.46,
+                    "type": "city",
+                    "bounds": None,
+                },
+                {
+                    "name": "Tampa",
+                    "label": "Tampa, Marion County, Kansas, 67483, United States",
+                    "latitude": 38.5482,
+                    "longitude": -97.2417,
+                    "type": "hamlet",
+                    "bounds": None,
+                },
+            ]
+
+        await route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"query": query, "results": results}),
+        )
+
+    await map_page.page.route("**/api/places/search*", handle_search)
+    await map_page.goto_homepage()
+    await map_page.wait_for_app_ready()
+
+    await map_page.page.fill("#location-search", "tampa")
+    await map_page.page.wait_for_function(
+        """() => document.querySelectorAll('.search-result').length === 2""",
+        timeout=10000,
+    )
+
+    await map_page.page.press("#location-search", "ArrowDown")
+    await map_page.page.press("#location-search", "Escape")
+
+    await map_page.page.wait_for_function(
+        """() => document.querySelectorAll('.search-result').length === 0""",
+        timeout=10000,
+    )
+
+    expanded = await map_page.page.locator("#location-search").get_attribute(
+        "aria-expanded"
+    )
+    active_descendant = await map_page.page.locator("#location-search").get_attribute(
+        "aria-activedescendant"
+    )
+    status_text = await map_page.page.text_content("#location-search-status")
+
+    assert expanded == "false"
+    assert active_descendant is None
+    assert status_text.strip() == ""

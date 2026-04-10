@@ -225,13 +225,13 @@
                     <label for="location-search">Jump To Location:</label>
                     <form id="location-search-form" class="location-search-form">
                         <div class="location-search-row">
-                            <input id="location-search" type="search" inputmode="search" autocomplete="off" placeholder="ZIP code or city, state">
+                            <input id="location-search" type="search" inputmode="search" autocomplete="off" placeholder="ZIP code or city, state" aria-autocomplete="list" aria-controls="location-search-results" aria-expanded="false" aria-haspopup="listbox">
                             <button id="location-search-button" type="submit">Go</button>
                         </div>
                     <p class="control-hint">Start typing a US ZIP code or city, pick a match, then click the map for a point-specific risk sample.</p>
                     </form>
                     <div id="location-search-status" class="search-status" aria-live="polite"></div>
-                    <div id="location-search-results" class="search-results" role="list"></div>
+                    <div id="location-search-results" class="search-results" role="listbox" aria-label="Location suggestions"></div>
                 </div>
                 <div class="control-group">
                     <label for="share-view-button">Share This View:</label>

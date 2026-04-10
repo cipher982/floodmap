@@ -230,6 +230,13 @@ header h1 {
     box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
 }
 
+.search-result.is-active,
+.search-result:focus-visible {
+    border-color: #2563eb;
+    background: #eff6ff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
 .search-result__name {
     display: block;
     font-weight: 600;

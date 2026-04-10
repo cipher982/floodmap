@@ -43,6 +43,8 @@ class FloodMapClient {
         this.modelNoteState = { nearWater: false, coastal: false };
         this.locationSearchAbortController = null;
         this.locationSearchDebounceTimer = null;
+        this.searchResults = [];
+        this.activeSearchResultIndex = -1;
 
         // Initialize WebWorker for rendering if available
         this.initWorker();
@@ -556,7 +558,33 @@ class FloodMapClient {
                 void this.handleLocationSearch(locationSearchInput.value);
             });
             locationSearchInput.addEventListener('input', () => {
+                this.setActiveSearchResultIndex(-1, { scrollIntoView: false });
                 this.scheduleLocationTypeahead(locationSearchInput.value);
+            });
+            locationSearchInput.addEventListener('keydown', (e) => {
+                const hasResults = this.searchResults.length > 0;
+                if ((e.key === 'ArrowDown' || e.key === 'Down') && hasResults) {
+                    e.preventDefault();
+                    this.moveActiveSearchResult(1);
+                    return;
+                }
+                if ((e.key === 'ArrowUp' || e.key === 'Up') && hasResults) {
+                    e.preventDefault();
+                    this.moveActiveSearchResult(-1);
+                    return;
+                }
+                if (e.key === 'Enter' && this.activeSearchResultIndex >= 0) {
+                    const activeResult = this.searchResults[this.activeSearchResultIndex];
+                    if (activeResult) {
+                        e.preventDefault();
+                        this.selectSearchResult(activeResult);
+                    }
+                    return;
+                }
+                if (e.key === 'Escape' && hasResults) {
+                    e.preventDefault();
+                    this.dismissSearchResults({ clearStatus: true });
+                }
             });
         }
 
@@ -1016,11 +1044,17 @@ class FloodMapClient {
         if (!container) return;
 
         container.innerHTML = '';
+        this.searchResults = results;
+        this.activeSearchResultIndex = -1;
         results.forEach((result) => {
+            const index = container.childElementCount;
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'search-result';
-            button.setAttribute('role', 'listitem');
+            button.id = `location-search-result-${index}`;
+            button.setAttribute('role', 'option');
+            button.setAttribute('aria-selected', 'false');
+            button.tabIndex = -1;
 
             const name = document.createElement('span');
             name.className = 'search-result__name';
@@ -1035,9 +1069,13 @@ class FloodMapClient {
             button.addEventListener('click', () => {
                 this.selectSearchResult(result);
             });
+            button.addEventListener('mouseenter', () => {
+                this.setActiveSearchResultIndex(index, { scrollIntoView: false });
+            });
 
             container.appendChild(button);
         });
+        this.syncSearchResultsA11y();
     }
 
     clearSearchResults() {
@@ -1045,6 +1083,77 @@ class FloodMapClient {
         if (container) {
             container.innerHTML = '';
         }
+        this.searchResults = [];
+        this.activeSearchResultIndex = -1;
+        this.syncSearchResultsA11y();
+    }
+
+    dismissSearchResults({ clearStatus = false } = {}) {
+        this.cancelLocationTypeahead();
+        this.abortLocationSearch({ resetLoading: true });
+        this.clearSearchResults();
+        if (clearStatus) {
+            this.updateSearchStatus('', '');
+        }
+    }
+
+    syncSearchResultsA11y() {
+        const input = document.getElementById('location-search');
+        const container = document.getElementById('location-search-results');
+        if (!input || !container) return;
+
+        const hasResults = this.searchResults.length > 0;
+        input.setAttribute('aria-expanded', hasResults ? 'true' : 'false');
+
+        const options = Array.from(container.querySelectorAll('.search-result'));
+        options.forEach((option, index) => {
+            const isActive = index === this.activeSearchResultIndex;
+            option.classList.toggle('is-active', isActive);
+            option.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        if (this.activeSearchResultIndex >= 0 && this.activeSearchResultIndex < options.length) {
+            input.setAttribute('aria-activedescendant', options[this.activeSearchResultIndex].id);
+        } else {
+            input.removeAttribute('aria-activedescendant');
+        }
+    }
+
+    setActiveSearchResultIndex(index, { scrollIntoView = true } = {}) {
+        if (!this.searchResults.length) {
+            this.activeSearchResultIndex = -1;
+            this.syncSearchResultsA11y();
+            return;
+        }
+
+        if (!Number.isInteger(index) || index < 0 || index >= this.searchResults.length) {
+            this.activeSearchResultIndex = -1;
+            this.syncSearchResultsA11y();
+            return;
+        }
+
+        this.activeSearchResultIndex = index;
+        this.syncSearchResultsA11y();
+
+        if (!scrollIntoView) return;
+        const activeOption = document.getElementById(`location-search-result-${index}`);
+        activeOption?.scrollIntoView?.({ block: 'nearest' });
+    }
+
+    moveActiveSearchResult(direction) {
+        if (!this.searchResults.length) return;
+
+        const lastIndex = this.searchResults.length - 1;
+        if (this.activeSearchResultIndex === -1) {
+            this.setActiveSearchResultIndex(direction > 0 ? 0 : lastIndex);
+            return;
+        }
+
+        const nextIndex = Math.min(
+            lastIndex,
+            Math.max(0, this.activeSearchResultIndex + direction)
+        );
+        this.setActiveSearchResultIndex(nextIndex);
     }
 
     updateSearchStatus(message = '', state = '') {
@@ -1070,6 +1179,7 @@ class FloodMapClient {
         if (!result || !this.map) return;
         this.cancelLocationTypeahead();
         this.abortLocationSearch({ resetLoading: true });
+        this.setActiveSearchResultIndex(-1, { scrollIntoView: false });
 
         const searchInput = document.getElementById('location-search');
         if (searchInput && result.name) {
