@@ -145,6 +145,7 @@ async def test_location_search_typeahead_shows_suggestions_before_submit(
 async def test_far_location_typeahead_prefetches_coarse_tiles_before_click(
     map_page: MapPage,
 ):
+    batch_payloads: list[dict] = []
     elevation_requests: list[str] = []
 
     async def handle_search(route):
@@ -173,12 +174,19 @@ async def test_far_location_typeahead_prefetches_coarse_tiles_before_click(
         response = await route.fetch()
         await route.fulfill(response=response)
 
+    async def handle_batch(route):
+        batch_payloads.append(json.loads(route.request.post_data or "{}"))
+        response = await route.fetch()
+        await route.fulfill(response=response)
+
     await map_page.page.route("**/api/places/search*", handle_search)
+    await map_page.page.route("**/api/v1/tiles/elevation-batch.u16*", handle_batch)
     await map_page.page.route("**/api/v1/tiles/elevation-data/**", handle_elevation)
     await map_page.goto_homepage()
     await map_page.wait_for_app_ready()
 
     initial_state = await map_page.get_map_state()
+    elevation_requests.clear()
 
     await map_page.page.fill("#location-search", "sea")
     await map_page.page.wait_for_function(
@@ -191,7 +199,7 @@ async def test_far_location_typeahead_prefetches_coarse_tiles_before_click(
     )
 
     for _ in range(20):
-        if elevation_requests:
+        if batch_payloads:
             break
         await asyncio.sleep(0.1)
 
@@ -200,7 +208,9 @@ async def test_far_location_typeahead_prefetches_coarse_tiles_before_click(
     )
     state_before_click = await map_page.get_map_state()
 
-    assert elevation_requests
+    assert len(batch_payloads) == 1
+    assert batch_payloads[0]["tiles"] == prefetch_plan["prefetchTiles"]
+    assert elevation_requests == []
     assert prefetch_plan["targetCenter"]["lat"] == pytest.approx(47.6062, abs=0.02)
     assert prefetch_plan["prefetchTiles"]
     assert len(prefetch_plan["prefetchTiles"]) == 8

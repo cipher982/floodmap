@@ -1045,6 +1045,23 @@ class FloodMapClient {
             : [];
         if (!queue.length) return;
 
+        if (typeof shouldContinue === 'function' && !shouldContinue()) return;
+
+        if (queue.length > 1) {
+            try {
+                await this.elevationRenderer.preloadTileBatch(queue);
+                return;
+            } catch (error) {
+                if (error?.name === 'AbortError') {
+                    return;
+                }
+                console.warn(
+                    'Destination batch prefetch failed; falling back to individual tile loads:',
+                    error
+                );
+            }
+        }
+
         let index = 0;
         const workerCount = Math.max(1, Math.min(concurrency, queue.length));
         const worker = async () => {

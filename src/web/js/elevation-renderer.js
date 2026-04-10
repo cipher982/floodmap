@@ -50,6 +50,10 @@ class ElevationRenderer {
         // Constants
         this.TILE_SIZE = 256;
         this.NODATA_VALUE = 65535;
+        this.ELEVATION_TILE_BYTE_LENGTH =
+            this.TILE_SIZE * this.TILE_SIZE * Uint16Array.BYTES_PER_ELEMENT;
+        this.ELEVATION_BATCH_MAGIC = 'FMB1';
+        this.ELEVATION_BATCH_VERSION = 1;
         this.ELEVATION_MIN = -500;
         this.ELEVATION_MAX = 9000;
         this.ELEVATION_RANGE = this.ELEVATION_MAX - this.ELEVATION_MIN;
@@ -126,19 +130,7 @@ class ElevationRenderer {
         // Start loading
         // NOTE: We include a stable `v=` in production to avoid getting pinned to
         // cached precompressed-miss (NODATA) responses after data repairs.
-        const qs = new URLSearchParams();
-        qs.set('method', 'precompressed');
-        if (window.location.hostname === 'localhost') qs.set('t', String(Date.now()));
-        const tileVersion =
-            (typeof window !== 'undefined' && (window.FLOODMAP_TILE_VERSION || window.FLOODMAP_ASSET_VERSION)) ?
-                (window.FLOODMAP_TILE_VERSION || window.FLOODMAP_ASSET_VERSION) :
-                null;
-        if (tileVersion) qs.set('v', tileVersion);
-        const url = new URL(
-            requireFloodmapApiUrl()(`/v1/tiles/elevation-data/${z}/${x}/${y}.u16`),
-            window.location.origin
-        );
-        url.search = qs.toString();
+        const url = this.buildElevationRequestUrl(`/v1/tiles/elevation-data/${z}/${x}/${y}.u16`);
 
         const loadPromise = fetch(url.toString(), { signal })
             .then(response => {
@@ -166,12 +158,7 @@ class ElevationRenderer {
                     });
                 }
 
-                // Cache the data
-                this.elevationCache.set(key, elevationData);
-                while (this.elevationCache.size > this.elevationCacheMaxTiles) {
-                    const oldestKey = this.elevationCache.keys().next().value;
-                    this.elevationCache.delete(oldestKey);
-                }
+                this.storeElevationTile(key, elevationData);
                 this.loadingTiles.delete(key);
                 this.stats.tilesLoaded++;
 
@@ -192,6 +179,147 @@ class ElevationRenderer {
 
         this.loadingTiles.set(key, loadPromise);
         return loadPromise;
+    }
+
+    buildElevationRequestUrl(path) {
+        const qs = new URLSearchParams();
+        qs.set('method', 'precompressed');
+        if (window.location.hostname === 'localhost') qs.set('t', String(Date.now()));
+        const tileVersion =
+            (typeof window !== 'undefined'
+                && (window.FLOODMAP_TILE_VERSION || window.FLOODMAP_ASSET_VERSION))
+                ? (window.FLOODMAP_TILE_VERSION || window.FLOODMAP_ASSET_VERSION)
+                : null;
+        if (tileVersion) qs.set('v', tileVersion);
+
+        const url = new URL(requireFloodmapApiUrl()(path), window.location.origin);
+        url.search = qs.toString();
+        return url;
+    }
+
+    storeElevationTile(key, elevationData) {
+        this.elevationCache.delete(key);
+        this.elevationCache.set(key, elevationData);
+        while (this.elevationCache.size > this.elevationCacheMaxTiles) {
+            const oldestKey = this.elevationCache.keys().next().value;
+            this.elevationCache.delete(oldestKey);
+        }
+    }
+
+    parseElevationTileBatch(buffer) {
+        const view = new DataView(buffer);
+        if (view.byteLength < 7) {
+            throw new Error('Elevation tile batch payload is too small');
+        }
+
+        const magic = String.fromCharCode(...new Uint8Array(buffer, 0, 4));
+        if (magic !== this.ELEVATION_BATCH_MAGIC) {
+            throw new Error(`Unexpected elevation batch magic: ${magic}`);
+        }
+
+        const version = view.getUint8(4);
+        if (version !== this.ELEVATION_BATCH_VERSION) {
+            throw new Error(`Unsupported elevation batch version: ${version}`);
+        }
+
+        const tileCount = view.getUint16(5, true);
+        const headerLength = 7 + (tileCount * 5);
+        const expectedLength = headerLength + (tileCount * this.ELEVATION_TILE_BYTE_LENGTH);
+        if (view.byteLength !== expectedLength) {
+            throw new Error(
+                `Unexpected elevation batch size: ${view.byteLength} (expected ${expectedLength})`
+            );
+        }
+
+        const entries = [];
+        let metaOffset = 7;
+        let dataOffset = headerLength;
+
+        for (let index = 0; index < tileCount; index += 1) {
+            const z = view.getUint8(metaOffset);
+            const x = view.getUint16(metaOffset + 1, true);
+            const y = view.getUint16(metaOffset + 3, true);
+            const tileBuffer = buffer.slice(dataOffset, dataOffset + this.ELEVATION_TILE_BYTE_LENGTH);
+
+            entries.push({
+                z,
+                x,
+                y,
+                elevationData: new Uint16Array(tileBuffer)
+            });
+
+            metaOffset += 5;
+            dataOffset += this.ELEVATION_TILE_BYTE_LENGTH;
+        }
+
+        return entries;
+    }
+
+    async preloadTileBatch(tiles, signal = null) {
+        const seenKeys = new Set();
+        const uncachedTiles = [];
+
+        for (const tile of Array.isArray(tiles) ? tiles : []) {
+            if (!Number.isInteger(tile?.z) || !Number.isInteger(tile?.x) || !Number.isInteger(tile?.y)) {
+                continue;
+            }
+
+            const key = `${tile.z}/${tile.x}/${tile.y}`;
+            if (seenKeys.has(key) || this.elevationCache.has(key)) {
+                continue;
+            }
+
+            seenKeys.add(key);
+            uncachedTiles.push({ z: tile.z, x: tile.x, y: tile.y, key });
+        }
+
+        if (!uncachedTiles.length) {
+            return [];
+        }
+
+        const url = this.buildElevationRequestUrl('/v1/tiles/elevation-batch.u16');
+        const response = await fetch(url.toString(), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                tiles: uncachedTiles.map(({ z, x, y }) => ({ z, x, y }))
+            }),
+            signal
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to preload elevation batch: ${response.status}`);
+        }
+
+        const entries = this.parseElevationTileBatch(await response.arrayBuffer());
+        if (entries.length !== uncachedTiles.length) {
+            throw new Error(
+                `Elevation batch entry mismatch: received ${entries.length}, expected ${uncachedTiles.length}`
+            );
+        }
+
+        for (let index = 0; index < entries.length; index += 1) {
+            const expected = uncachedTiles[index];
+            const actual = entries[index];
+            if (
+                actual.z !== expected.z
+                || actual.x !== expected.x
+                || actual.y !== expected.y
+            ) {
+                throw new Error(
+                    `Unexpected elevation batch tile order at index ${index}: `
+                    + `received ${actual.z}/${actual.x}/${actual.y}, `
+                    + `expected ${expected.z}/${expected.x}/${expected.y}`
+                );
+            }
+
+            this.storeElevationTile(expected.key, actual.elevationData);
+            this.stats.tilesLoaded++;
+        }
+
+        return entries.map((entry) => entry.elevationData);
     }
 
     /**

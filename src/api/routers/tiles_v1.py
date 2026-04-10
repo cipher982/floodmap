@@ -8,6 +8,7 @@ import contextlib
 import gzip
 import io
 import logging
+import struct
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
@@ -18,6 +19,7 @@ import mapbox_vector_tile
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Path, Query, Request, Response
+from pydantic import BaseModel, Field
 
 try:
     import brotli  # type: ignore
@@ -78,6 +80,22 @@ LOW_ZOOM_VECTOR_PROPERTY_ALLOWLIST = {
     "waterway": frozenset({"class"}),
     "transportation": frozenset(),
 }
+ELEVATION_TILE_BYTE_LENGTH = TILE_SIZE * TILE_SIZE * np.dtype(np.uint16).itemsize
+ELEVATION_BATCH_MAGIC = b"FMB1"
+ELEVATION_BATCH_VERSION = 1
+MAX_ELEVATION_BATCH_TILES = 24
+
+
+class ElevationBatchTileRequest(BaseModel):
+    z: int = Field(..., description="Zoom level")
+    x: int = Field(..., description="Tile X coordinate")
+    y: int = Field(..., description="Tile Y coordinate")
+
+
+class ElevationBatchRequest(BaseModel):
+    tiles: list[ElevationBatchTileRequest] = Field(
+        ..., min_length=1, max_length=MAX_ELEVATION_BATCH_TILES
+    )
 
 
 def _negotiate_compression(accept_encoding: str) -> str | None:
@@ -219,6 +237,83 @@ def validate_water_level(water_level: float) -> None:
             status_code=400,
             detail=f"Water level must be between {SUPPORTED_WATER_LEVEL_RANGE[0]} and {SUPPORTED_WATER_LEVEL_RANGE[1]} meters",
         )
+
+
+async def load_runtime_elevation_tile_bytes(z: int, x: int, y: int) -> bytes:
+    """Load raw elevation bytes from the runtime path, reusing the tile cache."""
+    cache_key_format = -1000.0  # Special value for raw elevation data
+    cached_data = tile_cache.get(cache_key_format, z, x, y)
+    if cached_data is not None:
+        return cached_data
+
+    loop = asyncio.get_event_loop()
+    elevation_data = await loop.run_in_executor(
+        CPU_EXECUTOR, generate_elevation_data_sync, z, x, y
+    )
+    tile_cache.put(cache_key_format, z, x, y, elevation_data)
+    return elevation_data
+
+
+async def load_precompressed_elevation_tile_bytes(
+    z: int, x: int, y: int
+) -> tuple[bytes, bool]:
+    """Load raw elevation bytes from precompressed storage for batch delivery.
+
+    Returns (raw_tile_bytes, is_precompressed_miss).
+    """
+    if PRECOMPRESSED_TILES_DIR is None:
+        raise HTTPException(
+            status_code=501, detail="Pre-compressed tiles not configured"
+        )
+
+    tile_dir = PRECOMPRESSED_TILES_DIR / str(z) / str(x)
+    raw_path = tile_dir / f"{y}.u16"
+    if raw_path.exists():
+        return await asyncio.to_thread(raw_path.read_bytes), False
+
+    gzip_path = tile_dir / f"{y}.u16.gz"
+    if gzip_path.exists():
+        compressed = await asyncio.to_thread(gzip_path.read_bytes)
+        return gzip.decompress(compressed), False
+
+    if brotli is not None:
+        brotli_path = tile_dir / f"{y}.u16.br"
+        if brotli_path.exists():
+            compressed = await asyncio.to_thread(brotli_path.read_bytes)
+            return brotli.decompress(compressed), False  # type: ignore[arg-type]
+
+    return _NODATA_TILE_BYTES, True
+
+
+def serialize_elevation_tile_batch(
+    tiles: list[ElevationBatchTileRequest], tile_payloads: list[bytes]
+) -> bytes:
+    """Pack multiple fixed-size elevation tiles into one binary payload."""
+    if len(tiles) != len(tile_payloads):
+        raise ValueError("Tile metadata count must match payload count")
+
+    tile_count = len(tiles)
+    header_length = 7 + (tile_count * 5)
+    payload = bytearray(header_length + (tile_count * ELEVATION_TILE_BYTE_LENGTH))
+    payload[0:4] = ELEVATION_BATCH_MAGIC
+    payload[4] = ELEVATION_BATCH_VERSION
+    struct.pack_into("<H", payload, 5, tile_count)
+
+    meta_offset = 7
+    data_offset = header_length
+    for tile, tile_bytes in zip(tiles, tile_payloads, strict=True):
+        if len(tile_bytes) != ELEVATION_TILE_BYTE_LENGTH:
+            raise ValueError(
+                f"Unexpected tile byte length for {tile.z}/{tile.x}/{tile.y}: "
+                f"{len(tile_bytes)}"
+            )
+
+        struct.pack_into("<BHH", payload, meta_offset, tile.z, tile.x, tile.y)
+        meta_offset += 5
+        payload[data_offset : data_offset + ELEVATION_TILE_BYTE_LENGTH] = tile_bytes
+        data_offset += ELEVATION_TILE_BYTE_LENGTH
+
+    return bytes(payload)
 
 
 def create_tile_response(
@@ -877,6 +972,86 @@ async def get_elevation_data_tile(
         raise HTTPException(
             status_code=500, detail="Elevation data generation failed"
         ) from e
+
+
+@router.post("/elevation-batch.u16")
+@log_performance
+async def get_elevation_data_batch(
+    batch_request: ElevationBatchRequest,
+    method: Literal["runtime", "precompressed"] = Query(
+        "precompressed", description="Serving method: 'runtime' or 'precompressed'"
+    ),
+    request: Request = None,
+):
+    """Serve a fixed-size binary pack of multiple raw elevation tiles."""
+    unique_tiles: list[ElevationBatchTileRequest] = []
+    seen: set[tuple[int, int, int]] = set()
+
+    for tile in batch_request.tiles:
+        validate_tile_coordinates(tile.z, tile.x, tile.y)
+        tile_key = (tile.z, tile.x, tile.y)
+        if tile_key in seen:
+            continue
+        seen.add(tile_key)
+        unique_tiles.append(tile)
+
+    if not unique_tiles:
+        raise HTTPException(
+            status_code=400, detail="At least one unique tile is required"
+        )
+
+    if method == "precompressed":
+        loaded_tiles = await asyncio.gather(
+            *(
+                load_precompressed_elevation_tile_bytes(tile.z, tile.x, tile.y)
+                for tile in unique_tiles
+            )
+        )
+        tile_payloads = [payload for payload, _ in loaded_tiles]
+        miss_count = sum(1 for _, is_miss in loaded_tiles if is_miss)
+        cache_control = (
+            (
+                "no-cache, no-store, must-revalidate"
+                if IS_DEVELOPMENT
+                else "public, max-age=3600"
+            )
+            if miss_count
+            else TILE_CACHE_CONTROL
+        )
+    else:
+        tile_payloads = await asyncio.gather(
+            *(
+                load_runtime_elevation_tile_bytes(tile.z, tile.x, tile.y)
+                for tile in unique_tiles
+            )
+        )
+        miss_count = 0
+        cache_control = TILE_CACHE_CONTROL
+
+    payload = serialize_elevation_tile_batch(unique_tiles, tile_payloads)
+    accept_enc = request.headers.get("accept-encoding", "") if request else ""
+    response_payload, content_encoding = _maybe_compress(
+        payload, accept_enc, min_size=512
+    )
+
+    headers = {
+        "Cache-Control": cache_control,
+        "Access-Control-Allow-Origin": "*",
+        "X-Tile-Source": "elevation-batch",
+        "X-Batch-Method": method,
+        "X-Tile-Count": str(len(unique_tiles)),
+        "Vary": "Accept-Encoding",
+    }
+    if miss_count:
+        headers["X-Precompressed-Miss-Count"] = str(miss_count)
+    if content_encoding:
+        headers["Content-Encoding"] = content_encoding
+
+    return Response(
+        content=response_payload,
+        media_type="application/octet-stream",
+        headers=headers,
+    )
 
 
 # ============================================================================
