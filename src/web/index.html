@@ -123,6 +123,7 @@
             if (isLocalhost && params.get('analytics') !== '1') return;
 
             const scriptUrl = 'https://analytics.drose.io/script.js';
+            const recorderUrl = 'https://analytics.drose.io/recorder.js';
 
             // Project-specific dashboard
             const projectId = '15b5b3f8-7de9-439e-ac52-abb3f770a354';
@@ -132,7 +133,18 @@
                 s1.src = scriptUrl;
                 s1.dataset.websiteId = projectId;
                 s1.dataset.domains = 'drose.io';
+                s1.dataset.tag = 'prod';
+                s1.dataset.performance = 'true';
                 document.head.appendChild(s1);
+
+                const r1 = document.createElement('script');
+                r1.defer = true;
+                r1.src = recorderUrl;
+                r1.dataset.websiteId = projectId;
+                r1.dataset.sampleRate = '1';
+                r1.dataset.maskLevel = 'moderate';
+                r1.dataset.maxDuration = '1800000';
+                document.head.appendChild(r1);
             }
 
             // Aggregate domain dashboard
@@ -143,6 +155,8 @@
                 s2.src = scriptUrl;
                 s2.dataset.websiteId = aggregateId;
                 s2.dataset.domains = 'drose.io';
+                s2.dataset.tag = 'prod';
+                s2.dataset.performance = 'true';
                 document.head.appendChild(s2);
             }
         })();
