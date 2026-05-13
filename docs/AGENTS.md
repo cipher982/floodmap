@@ -1,6 +1,7 @@
-# Floodmap Docs Index (for Agents)
+# Floodmap Docs Index
 
-Use these when investigating recurring issues. Keep the root `AGENTS.md` short; put deep procedures here.
+Use these for repo-specific procedures that would make the root `AGENTS.md`
+too long. Prefer current-state checks over copied snapshots.
 
 - Prod ops & containers: `docs/runbooks/prod-ops.md`
 - DEM data gaps / “blue polygons”: `docs/runbooks/data-gap-repair.md`

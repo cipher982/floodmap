@@ -6,9 +6,11 @@
 
 ## Unified versioning (preferred)
 Floodmap uses a single version string to bust caches end-to-end:
-- `window.FLOODMAP_ASSET_VERSION` in `src/web/index.html` (edit this one value)
+- `ASSET_VERSION` in `src/api/page_renderer.py` (edit this one value)
 
-`index.html` injects Floodmap-owned CSS/JS with `?v=<ASSET_VERSION>`, and runtime URLs derive from it:
+The page renderer replaces the `src/web/index.html` placeholder, then the
+browser injects Floodmap-owned CSS/JS with `?v=<ASSET_VERSION>`. Runtime URLs
+derive from the same value:
 - Worker URL: `render-worker.js?v=<ASSET_VERSION>`
 - Elevation tile fetch: `...u16?method=precompressed&v=<TILE_VERSION>`
 
