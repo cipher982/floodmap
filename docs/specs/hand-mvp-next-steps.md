@@ -117,6 +117,22 @@ Success criteria:
 - Parameters are either frozen with a short rationale or flagged for region
   overrides before national build work.
 
+Result:
+
+- Complete on `2026-05-14` for Houston-first sensitivity.
+- `tools/hand/run_sensitivity.py` ran 12 Houston variants:
+  burn depths `0m`, `2m`, `5m`; accumulation thresholds `0.25`, `1`, `4`,
+  and `16 km^2`.
+- Report committed under `docs/qa/hand-sensitivity/houston-bayou-pilot/`.
+- Current baseline `burn5m-acc1km2` at 6ft: coverage `52.07%`, precision
+  `0.282`, recall `0.585`, precision lift `1.124x`.
+- Best Houston variant `burn5m-acc16km2` at 6ft: coverage `18.54%`, precision
+  `0.486`, recall `0.357`, precision lift `1.927x`, Jaccard vs baseline
+  `0.331`.
+- Decision: stricter accumulation improves Houston substantially, but still
+  misses the `>=2.0x` flat-terrain target. Treat HAND as a terrain/drainage
+  screen, not a standalone national floodplain detector.
+
 ### Gate 5: One HUC-Scale Build
 
 Goal: prove the compute shape before CONUS.

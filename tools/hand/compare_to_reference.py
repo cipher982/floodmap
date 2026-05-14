@@ -28,6 +28,7 @@ import numpy as np
 FEMA_NFHL_FLOOD_HAZARD_ZONES_QUERY_URL = (
     "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query"
 )
+FEMA_SFHA_FILTER = "SFHA_TF = 'T'"
 DEFAULT_THRESHOLDS_FT = (3.0, 6.0, 10.0)
 U16_NODATA = 65535
 
@@ -196,8 +197,13 @@ def esri_polygon_to_shape(geometry: dict[str, Any]):
     return MultiPolygon(polygons)
 
 
-def cache_path_for_region(cache_dir: Path, region: HandRegion, epsg: int) -> Path:
-    return cache_dir / f"{region.id}-fema-sfha-epsg{epsg}.json.gz"
+def cache_path_for_region(
+    cache_dir: Path, region: HandRegion, epsg: int, simplify_m: float
+) -> Path:
+    simplify_tag = f"{simplify_m:g}".replace(".", "p").replace("-", "m")
+    return cache_dir / (
+        f"{region.id}-fema-sfha-epsg{epsg}-offset{simplify_tag}m.json.gz"
+    )
 
 
 def request_json(
@@ -241,11 +247,15 @@ def fetch_fema_sfha_features(
     chunk_size: int,
     simplify_m: float,
 ) -> list[dict[str, Any]]:
-    cache_path = cache_path_for_region(cache_dir, region, target_epsg)
+    cache_path = cache_path_for_region(cache_dir, region, target_epsg, simplify_m)
     if cache_path.exists():
         with gzip.open(cache_path, "rt", encoding="utf-8") as fh:
             cached = json.load(fh)
         validate_spatial_reference(cached.get("spatial_reference"), target_epsg)
+        if cached.get("where") != FEMA_SFHA_FILTER:
+            raise ValueError(f"FEMA cache filter mismatch in {cache_path}")
+        if cached.get("simplify_m") != simplify_m:
+            raise ValueError(f"FEMA cache simplify_m mismatch in {cache_path}")
         return cached["features"]
 
     west, south, east, north = region.bbox
@@ -260,7 +270,7 @@ def fetch_fema_sfha_features(
         FEMA_NFHL_FLOOD_HAZARD_ZONES_QUERY_URL,
         params={
             "f": "json",
-            "where": "SFHA_TF = 'T'",
+            "where": FEMA_SFHA_FILTER,
             "returnIdsOnly": "true",
             "geometry": f"{west},{south},{east},{north}",
             "geometryType": "esriGeometryEnvelope",
@@ -303,9 +313,10 @@ def fetch_fema_sfha_features(
         json.dump(
             {
                 "source": FEMA_NFHL_FLOOD_HAZARD_ZONES_QUERY_URL,
-                "where": "SFHA_TF = 'T'",
+                "where": FEMA_SFHA_FILTER,
                 "target_epsg": target_epsg,
                 "spatial_reference": {"wkid": target_epsg},
+                "simplify_m": simplify_m,
                 "feature_count": len(features),
                 "features": features,
             },
@@ -375,11 +386,12 @@ def compute_metrics(
     valid_count = int(valid.sum())
     fema_valid = fema_mask & valid
     fema_count = int(fema_valid.sum())
+    hand_float = hand_values.astype(np.float32)
     metrics = []
     for threshold_ft in thresholds_ft:
         threshold_m = threshold_ft * 0.3048
         threshold_dm = threshold_m * 10.0
-        hand_mask = (hand_values.astype(np.float32) <= threshold_dm) & valid
+        hand_mask = (hand_float <= threshold_dm) & valid
         tp = int((hand_mask & fema_valid).sum())
         fp = int((hand_mask & ~fema_valid & valid).sum())
         fn = int((~hand_mask & fema_valid).sum())
@@ -396,11 +408,14 @@ def compute_metrics(
         )
         expected_random_iou = (
             expected_random_tp / expected_random_union
-            if expected_random_tp and expected_random_union
+            if expected_random_tp is not None
+            and expected_random_tp > 0
+            and expected_random_union is not None
+            and expected_random_union > 0
             else None
         )
         expected_random_precision = (
-            fema_count / valid_count if hand_count and valid_count else None
+            fema_count / valid_count if hand_count > 0 and valid_count > 0 else None
         )
         iou = tp / union if union else None
         precision = tp / (tp + fp) if (tp + fp) else None
@@ -431,10 +446,14 @@ def compute_metrics(
                 "expected_random_iou": expected_random_iou,
                 "expected_random_precision": expected_random_precision,
                 "precision_lift_vs_random": precision / expected_random_precision
-                if precision is not None and expected_random_precision
+                if precision is not None
+                and expected_random_precision is not None
+                and expected_random_precision > 0
                 else None,
                 "iou_lift_vs_random": iou / expected_random_iou
-                if iou is not None and expected_random_iou
+                if iou is not None
+                and expected_random_iou is not None
+                and expected_random_iou > 0
                 else None,
             }
         )
@@ -599,7 +618,7 @@ def write_summary(
         f"- Terrain manifest version: `{dataset_version}`",
         f"- HAND source: `{hand_path}`",
         f"- FEMA source: `{FEMA_NFHL_FLOOD_HAZARD_ZONES_QUERY_URL}`",
-        "- FEMA filter: `SFHA_TF = 'T'` (Special Flood Hazard Area, 1% annual chance flood hazard)",
+        f"- FEMA filter: `{FEMA_SFHA_FILTER}` (Special Flood Hazard Area, 1% annual chance flood hazard)",
         f"- FEMA feature count fetched: `{fema_feature_count}`",
         f"- Rasterization: `all_touched={str(all_touched).lower()}`, `maxAllowableOffset={simplify_m}m`",
         f"- Bbox: `{region.bbox}`",

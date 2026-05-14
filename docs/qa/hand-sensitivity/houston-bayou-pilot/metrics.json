@@ -1,0 +1,1240 @@
+{
+  "bbox": [
+    -95.82,
+    29.45,
+    -94.95,
+    30.15
+  ],
+  "region_id": "houston-bayou-pilot",
+  "thresholds_ft": [
+    3.0,
+    6.0,
+    10.0
+  ],
+  "variants": [
+    {
+      "accumulated_cell_count": 604656,
+      "accumulation_threshold_km2": 1.0,
+      "drain_cell_count": 762500,
+      "drain_cell_fraction_pct": 1.0939100000288362,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.16299038996049445,
+          "expected_random_precision": 0.2510596042651099,
+          "expected_random_true_positive": 5551617.259974892,
+          "false_negative_fema_only": 10611804,
+          "false_positive_hand_only": 15224669,
+          "fema_cells": 17499881,
+          "fema_coverage_pct": 25.105960426510993,
+          "hand_cells": 22112746,
+          "hand_coverage_pct": 31.72374292130839,
+          "iou": 0.2104865307544336,
+          "iou_lift_vs_random": 1.2914045472585916,
+          "overlap_pct_of_fema": 39.36070765281204,
+          "overlap_pct_of_hand": 31.14980382807273,
+          "precision": 0.3114980382807273,
+          "precision_lift_vs_random": 1.2407334074811835,
+          "recall": 0.3936070765281204,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 36979539,
+          "true_positive": 6888077,
+          "valid_cells": 69704089
+        },
+        {
+          "expected_random_iou": 0.20393019378751803,
+          "expected_random_precision": 0.2510596042651099,
+          "expected_random_true_positive": 9112049.416072665,
+          "false_negative_fema_only": 7256333,
+          "false_positive_hand_only": 26050819,
+          "fema_cells": 17499881,
+          "fema_coverage_pct": 25.105960426510993,
+          "hand_cells": 36294367,
+          "hand_coverage_pct": 52.06920787674307,
+          "iou": 0.23520972108370244,
+          "iou_lift_vs_random": 1.1533835020466643,
+          "overlap_pct_of_fema": 58.53495803771466,
+          "overlap_pct_of_hand": 28.22352019529642,
+          "precision": 0.2822352019529642,
+          "precision_lift_vs_random": 1.1241760807323427,
+          "recall": 0.5853495803771466,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 26153389,
+          "true_positive": 10243548,
+          "valid_cells": 69704089
+        },
+        {
+          "expected_random_iou": 0.22501396755640557,
+          "expected_random_precision": 0.2510596042651099,
+          "expected_random_true_positive": 11977600.30584309,
+          "false_negative_fema_only": 4375976,
+          "false_positive_hand_only": 34584289,
+          "fema_cells": 17499881,
+          "fema_coverage_pct": 25.105960426510993,
+          "hand_cells": 47708194,
+          "hand_coverage_pct": 68.44389573759439,
+          "iou": 0.2519749282747522,
+          "iou_lift_vs_random": 1.1198190539508983,
+          "overlap_pct_of_fema": 74.99425281806202,
+          "overlap_pct_of_hand": 27.508702173886523,
+          "precision": 0.27508702173886523,
+          "precision_lift_vs_random": 1.0957040362749206,
+          "recall": 0.7499425281806202,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 17619919,
+          "true_positive": 13123905,
+          "valid_cells": 69704089
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 1.0,
+        "3ft": 1.0,
+        "6ft": 1.0
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 4643.0,
+      "stream_burn_depth_m": 5.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 47708194,
+          "coverage_pct": 68.44389573759439
+        },
+        "3ft": {
+          "cells": 22112746,
+          "coverage_pct": 31.72374292130839
+        },
+        "6ft": {
+          "cells": 36294367,
+          "coverage_pct": 52.06920787674307
+        }
+      },
+      "valid_cells": 69704089,
+      "variant_id": "burn5m-acc1km2",
+      "wall_time_s": 124.15
+    },
+    {
+      "accumulated_cell_count": 1186440,
+      "accumulation_threshold_km2": 0.25,
+      "drain_cell_count": 1449304,
+      "drain_cell_fraction_pct": 2.139412679181776,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.20540165947217168,
+          "expected_random_precision": 0.2496365311301621,
+          "expected_random_true_positive": 9078904.434951583,
+          "false_negative_fema_only": 7866894,
+          "false_positive_hand_only": 27324240,
+          "fema_cells": 16911147,
+          "fema_coverage_pct": 24.96365311301621,
+          "hand_cells": 36368493,
+          "hand_coverage_pct": 53.685917548653464,
+          "iou": 0.20445741776826776,
+          "iou_lift_vs_random": 0.9954029499745505,
+          "overlap_pct_of_fema": 53.48101462307672,
+          "overlap_pct_of_hand": 24.868374392087127,
+          "precision": 0.24868374392087128,
+          "precision_lift_vs_random": 0.9961833021594343,
+          "recall": 0.5348101462307672,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 23507691,
+          "true_positive": 9044253,
+          "valid_cells": 67743078
+        },
+        {
+          "expected_random_iou": 0.2285844393104173,
+          "expected_random_precision": 0.2496365311301621,
+          "expected_random_true_positive": 12353578.285005296,
+          "false_negative_fema_only": 4947292,
+          "false_positive_hand_only": 37522405,
+          "fema_cells": 16911147,
+          "fema_coverage_pct": 24.96365311301621,
+          "hand_cells": 49486260,
+          "hand_coverage_pct": 73.04991367531308,
+          "iou": 0.21978824751322493,
+          "iou_lift_vs_random": 0.9615188513105778,
+          "overlap_pct_of_fema": 70.7453787729478,
+          "overlap_pct_of_hand": 24.17611474376928,
+          "precision": 0.2417611474376928,
+          "precision_lift_vs_random": 0.9684525992377173,
+          "recall": 0.7074537877294781,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 13309526,
+          "true_positive": 11963855,
+          "valid_cells": 67743078
+        },
+        {
+          "expected_random_iou": 0.23815212751143042,
+          "expected_random_precision": 0.2496365311301621,
+          "expected_random_true_positive": 14173259.593012603,
+          "false_negative_fema_only": 2789038,
+          "false_positive_hand_only": 42653474,
+          "fema_cells": 16911147,
+          "fema_coverage_pct": 24.96365311301621,
+          "hand_cells": 56775583,
+          "hand_coverage_pct": 83.81016138652572,
+          "iou": 0.23708887529058567,
+          "iou_lift_vs_random": 0.9955354074223263,
+          "overlap_pct_of_fema": 83.50769465844039,
+          "overlap_pct_of_hand": 24.873560523367942,
+          "precision": 0.2487356052336794,
+          "precision_lift_vs_random": 0.9963910494493574,
+          "recall": 0.8350769465844038,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 8178457,
+          "true_positive": 14122109,
+          "valid_cells": 67743078
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.7597538299831036,
+        "3ft": 0.5177195190218287,
+        "6ft": 0.6498529962490449
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 4854.9,
+      "stream_burn_depth_m": 0.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 56775583,
+          "coverage_pct": 83.81016138652572
+        },
+        "3ft": {
+          "cells": 36368493,
+          "coverage_pct": 53.68591754865346
+        },
+        "6ft": {
+          "cells": 49486260,
+          "coverage_pct": 73.04991367531306
+        }
+      },
+      "valid_cells": 67743078,
+      "variant_id": "burn0m-acc0p25km2",
+      "wall_time_s": 123.26
+    },
+    {
+      "accumulated_cell_count": 599793,
+      "accumulation_threshold_km2": 1.0,
+      "drain_cell_count": 870530,
+      "drain_cell_fraction_pct": 1.2562101070532634,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.16399503795202808,
+          "expected_random_precision": 0.24988335542315787,
+          "expected_random_true_positive": 5593387.528491833,
+          "false_negative_fema_only": 10633571,
+          "false_positive_hand_only": 15701118,
+          "fema_cells": 17316447,
+          "fema_coverage_pct": 24.988335542315788,
+          "hand_cells": 22383994,
+          "hand_coverage_pct": 32.30101145166692,
+          "iou": 0.2024036599912804,
+          "iou_lift_vs_random": 1.2342060011016165,
+          "overlap_pct_of_fema": 38.59265125230366,
+          "overlap_pct_of_hand": 29.855601283667248,
+          "precision": 0.2985560128366725,
+          "precision_lift_vs_random": 1.1947815104815256,
+          "recall": 0.3859265125230366,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 36280556,
+          "true_positive": 6682876,
+          "valid_cells": 69298121
+        },
+        {
+          "expected_random_iou": 0.20417000238057864,
+          "expected_random_precision": 0.24988335542315787,
+          "expected_random_true_positive": 9133089.459420076,
+          "false_negative_fema_only": 7315643,
+          "false_positive_hand_only": 26548607,
+          "fema_cells": 17316447,
+          "fema_coverage_pct": 24.988335542315788,
+          "hand_cells": 36549411,
+          "hand_coverage_pct": 52.74228286795828,
+          "iou": 0.22799023568966767,
+          "iou_lift_vs_random": 1.116668624339277,
+          "overlap_pct_of_fema": 57.75320999740882,
+          "overlap_pct_of_hand": 27.362421791147334,
+          "precision": 0.27362421791147334,
+          "precision_lift_vs_random": 1.0950077785217514,
+          "recall": 0.5775320999740882,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 25433067,
+          "true_positive": 10000804,
+          "valid_cells": 69298121
+        },
+        {
+          "expected_random_iou": 0.22464683857398907,
+          "expected_random_precision": 0.24988335542315787,
+          "expected_random_true_positive": 11945967.169063328,
+          "false_negative_fema_only": 4437933,
+          "false_positive_hand_only": 34927660,
+          "fema_cells": 17316447,
+          "fema_coverage_pct": 24.988335542315788,
+          "hand_cells": 47806174,
+          "hand_coverage_pct": 68.9862485593224,
+          "iou": 0.24650653900544228,
+          "iou_lift_vs_random": 1.0973069577574026,
+          "overlap_pct_of_fema": 74.37157287519778,
+          "overlap_pct_of_hand": 26.939018378672174,
+          "precision": 0.26939018378672175,
+          "precision_lift_vs_random": 1.0780637363002052,
+          "recall": 0.7437157287519778,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 17054014,
+          "true_positive": 12878514,
+          "valid_cells": 69298121
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.9433367949365604,
+        "3ft": 0.8864627436163571,
+        "6ft": 0.9231687467176612
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.2,
+      "stream_burn_depth_m": 0.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 47806174,
+          "coverage_pct": 68.9862485593224
+        },
+        "3ft": {
+          "cells": 22383994,
+          "coverage_pct": 32.30101145166692
+        },
+        "6ft": {
+          "cells": 36549411,
+          "coverage_pct": 52.74228286795828
+        }
+      },
+      "valid_cells": 69298121,
+      "variant_id": "burn0m-acc1km2",
+      "wall_time_s": 122.74
+    },
+    {
+      "accumulated_cell_count": 295381,
+      "accumulation_threshold_km2": 4.0,
+      "drain_cell_count": 579006,
+      "drain_cell_fraction_pct": 0.8159646925166864,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.11010936733464226,
+          "expected_random_precision": 0.25102732977067205,
+          "expected_random_true_positive": 2920972.836261273,
+          "false_negative_fema_only": 13053878,
+          "false_positive_hand_only": 6877132,
+          "fema_cells": 17812821,
+          "fema_coverage_pct": 25.102732977067205,
+          "hand_cells": 11636075,
+          "hand_coverage_pct": 16.3981484811489,
+          "iou": 0.19274815954489666,
+          "iou_lift_vs_random": 1.7505155484101564,
+          "overlap_pct_of_fema": 26.716391524958343,
+          "overlap_pct_of_hand": 40.89818087284587,
+          "precision": 0.4089818087284587,
+          "precision_lift_vs_random": 1.6292321999444728,
+          "recall": 0.26716391524958344,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 46269735,
+          "true_positive": 4758943,
+          "valid_cells": 70959688
+        },
+        {
+          "expected_random_iou": 0.15771361638078982,
+          "expected_random_precision": 0.25102732977067205,
+          "expected_random_true_positive": 5306209.421009221,
+          "false_negative_fema_only": 9954908,
+          "false_positive_hand_only": 13280062,
+          "fema_cells": 17812821,
+          "fema_coverage_pct": 25.102732977067205,
+          "hand_cells": 21137975,
+          "hand_coverage_pct": 29.788709048438882,
+          "iou": 0.2527238468044279,
+          "iou_lift_vs_random": 1.6024224959387254,
+          "overlap_pct_of_fema": 44.113804321056165,
+          "overlap_pct_of_hand": 37.174388748212635,
+          "precision": 0.3717438874821264,
+          "precision_lift_vs_random": 1.4808900999812884,
+          "recall": 0.44113804321056166,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 39866805,
+          "true_positive": 7857913,
+          "valid_cells": 70959688
+        },
+        {
+          "expected_random_iou": 0.19362873867622754,
+          "expected_random_precision": 0.25102732977067205,
+          "expected_random_true_positive": 8167674.471557048,
+          "false_negative_fema_only": 6549370,
+          "false_positive_hand_only": 21273542,
+          "fema_cells": 17812821,
+          "fema_coverage_pct": 25.102732977067205,
+          "hand_cells": 32536993,
+          "hand_coverage_pct": 45.85278475294311,
+          "iou": 0.288168305656886,
+          "iou_lift_vs_random": 1.4882517317780029,
+          "overlap_pct_of_fema": 63.23226961074835,
+          "overlap_pct_of_hand": 34.617369220321,
+          "precision": 0.34617369220321004,
+          "precision_lift_vs_random": 1.3790279031349284,
+          "recall": 0.6323226961074835,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 31873325,
+          "true_positive": 11263451,
+          "valid_cells": 70959688
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.600908161392633,
+        "3ft": 0.42043732647436655,
+        "6ft": 0.491893062099549
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.2,
+      "stream_burn_depth_m": 0.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 32536993,
+          "coverage_pct": 45.85278475294311
+        },
+        "3ft": {
+          "cells": 11636075,
+          "coverage_pct": 16.3981484811489
+        },
+        "6ft": {
+          "cells": 21137975,
+          "coverage_pct": 29.788709048438882
+        }
+      },
+      "valid_cells": 70959688,
+      "variant_id": "burn0m-acc4km2",
+      "wall_time_s": 123.63
+    },
+    {
+      "accumulated_cell_count": 156299,
+      "accumulation_threshold_km2": 16.0,
+      "drain_cell_count": 464234,
+      "drain_cell_fraction_pct": 0.6468742654919778,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.07840838685011314,
+          "expected_random_precision": 0.25208319503611504,
+          "expected_random_true_positive": 1848504.6421282534,
+          "false_negative_fema_only": 14415989,
+          "false_positive_hand_only": 3657971,
+          "fema_cells": 18090933,
+          "fema_coverage_pct": 25.208319503611502,
+          "hand_cells": 7332915,
+          "hand_coverage_pct": 10.21785135199082,
+          "iou": 0.1689714571364148,
+          "iou_lift_vs_random": 2.1550176444698907,
+          "overlap_pct_of_fema": 20.313733957225978,
+          "overlap_pct_of_hand": 50.11573160196184,
+          "precision": 0.5011573160196184,
+          "precision_lift_vs_random": 1.9880631707632057,
+          "recall": 0.20313733957225977,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 50016820,
+          "true_positive": 3674944,
+          "valid_cells": 71765724
+        },
+        {
+          "expected_random_iou": 0.12008210898440609,
+          "expected_random_precision": 0.25208319503611504,
+          "expected_random_true_positive": 3374739.0693928762,
+          "false_negative_fema_only": 11839202,
+          "false_positive_hand_only": 7135671,
+          "fema_cells": 18090933,
+          "fema_coverage_pct": 25.208319503611502,
+          "hand_cells": 13387402,
+          "hand_coverage_pct": 18.65431191079463,
+          "iou": 0.24782293328107105,
+          "iou_lift_vs_random": 2.063778987369829,
+          "overlap_pct_of_fema": 34.557261364021414,
+          "overlap_pct_of_hand": 46.69861262102983,
+          "precision": 0.46698612621029834,
+          "precision_lift_vs_random": 1.8525079632674242,
+          "recall": 0.34557261364021413,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 46539120,
+          "true_positive": 6251731,
+          "valid_cells": 71765724
+        },
+        {
+          "expected_random_iou": 0.16125080975477465,
+          "expected_random_precision": 0.25208319503611504,
+          "expected_random_true_positive": 5592986.233673961,
+          "false_negative_fema_only": 8432784,
+          "false_positive_hand_only": 12528916,
+          "fema_cells": 18090933,
+          "fema_coverage_pct": 25.208319503611502,
+          "hand_cells": 22187065,
+          "hand_coverage_pct": 30.915963447954624,
+          "iou": 0.3154211831678203,
+          "iou_lift_vs_random": 1.9560905377622804,
+          "overlap_pct_of_fema": 53.38668271006255,
+          "overlap_pct_of_hand": 43.530539077611216,
+          "precision": 0.43530539077611213,
+          "precision_lift_vs_random": 1.726832249621985,
+          "recall": 0.5338668271006255,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 41145875,
+          "true_positive": 9658149,
+          "valid_cells": 71765724
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.4002371910274247,
+        "3ft": 0.2629597261070926,
+        "6ft": 0.30494920348269294
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.2,
+      "stream_burn_depth_m": 0.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 22187065,
+          "coverage_pct": 30.915963447954624
+        },
+        "3ft": {
+          "cells": 7332915,
+          "coverage_pct": 10.21785135199082
+        },
+        "6ft": {
+          "cells": 13387402,
+          "coverage_pct": 18.65431191079463
+        }
+      },
+      "valid_cells": 71765724,
+      "variant_id": "burn0m-acc16km2",
+      "wall_time_s": 123.72
+    },
+    {
+      "accumulated_cell_count": 1190926,
+      "accumulation_threshold_km2": 0.25,
+      "drain_cell_count": 1362483,
+      "drain_cell_fraction_pct": 2.0052053277873885,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.2047441519358934,
+          "expected_random_precision": 0.24931023755378912,
+          "expected_random_true_positive": 9043917.096493052,
+          "false_negative_fema_only": 7899925,
+          "false_positive_hand_only": 27235721,
+          "fema_cells": 16939959,
+          "fema_coverage_pct": 24.931023755378913,
+          "hand_cells": 36275755,
+          "hand_coverage_pct": 53.38806957261853,
+          "iou": 0.2046382534462401,
+          "iou_lift_vs_random": 0.9994827764864002,
+          "overlap_pct_of_fema": 53.36514686959987,
+          "overlap_pct_of_hand": 24.920319370334262,
+          "precision": 0.24920319370334262,
+          "precision_lift_vs_random": 0.9995706399725226,
+          "recall": 0.5336514686959987,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 23771626,
+          "true_positive": 9040034,
+          "valid_cells": 67947306
+        },
+        {
+          "expected_random_iou": 0.2281647784319892,
+          "expected_random_precision": 0.24931023755378912,
+          "expected_random_true_positive": 12349333.057679152,
+          "false_negative_fema_only": 4937500,
+          "false_positive_hand_only": 37531540,
+          "fema_cells": 16939959,
+          "fema_coverage_pct": 24.931023755378913,
+          "hand_cells": 49533999,
+          "hand_coverage_pct": 72.90060771504318,
+          "iou": 0.22034383522289336,
+          "iou_lift_vs_random": 0.965722390358216,
+          "overlap_pct_of_fema": 70.85294008090574,
+          "overlap_pct_of_hand": 24.230749065909254,
+          "precision": 0.24230749065909254,
+          "precision_lift_vs_random": 0.9719115148924211,
+          "recall": 0.7085294008090575,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 13475807,
+          "true_positive": 12002459,
+          "valid_cells": 67947306
+        },
+        {
+          "expected_random_iou": 0.23780655858482833,
+          "expected_random_precision": 0.24931023755378912,
+          "expected_random_true_positive": 14187193.031363185,
+          "false_negative_fema_only": 2772902,
+          "false_positive_hand_only": 42738721,
+          "fema_cells": 16939959,
+          "fema_coverage_pct": 24.931023755378913,
+          "hand_cells": 56905778,
+          "hand_coverage_pct": 83.7498664038277,
+          "iou": 0.23738891342770987,
+          "iou_lift_vs_random": 0.9982437609811781,
+          "overlap_pct_of_fema": 83.63099934303266,
+          "overlap_pct_of_hand": 24.89563889276762,
+          "precision": 0.24895638892767621,
+          "precision_lift_vs_random": 0.9985806895473494,
+          "recall": 0.8363099934303265,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 8268626,
+          "true_positive": 14167057,
+          "valid_cells": 67947306
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.7715991583352226,
+        "3ft": 0.534907812210998,
+        "6ft": 0.6638607052806144
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.2,
+      "stream_burn_depth_m": 2.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 56905778,
+          "coverage_pct": 83.7498664038277
+        },
+        "3ft": {
+          "cells": 36275755,
+          "coverage_pct": 53.38806957261852
+        },
+        "6ft": {
+          "cells": 49533999,
+          "coverage_pct": 72.90060771504318
+        }
+      },
+      "valid_cells": 67947306,
+      "variant_id": "burn2m-acc0p25km2",
+      "wall_time_s": 125.04
+    },
+    {
+      "accumulated_cell_count": 599083,
+      "accumulation_threshold_km2": 1.0,
+      "drain_cell_count": 789017,
+      "drain_cell_fraction_pct": 1.1372622953206195,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.16214061541618244,
+          "expected_random_precision": 0.2494967830872417,
+          "expected_random_true_positive": 5478775.706834799,
+          "false_negative_fema_only": 10718599,
+          "false_positive_hand_only": 15368158,
+          "fema_cells": 17309745,
+          "fema_coverage_pct": 24.94967830872417,
+          "hand_cells": 21959304,
+          "hand_coverage_pct": 31.651394672970625,
+          "iou": 0.20170039674822463,
+          "iou_lift_vs_random": 1.243984403479043,
+          "overlap_pct_of_fema": 38.07766087830872,
+          "overlap_pct_of_hand": 30.015277351231166,
+          "precision": 0.3001527735123117,
+          "precision_lift_vs_random": 1.2030326395324986,
+          "recall": 0.3807766087830872,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 36700727,
+          "true_positive": 6591146,
+          "valid_cells": 69378630
+        },
+        {
+          "expected_random_iou": 0.20307412427224414,
+          "expected_random_precision": 0.2494967830872417,
+          "expected_random_true_positive": 9033170.001381766,
+          "false_negative_fema_only": 7334844,
+          "false_positive_hand_only": 26230656,
+          "fema_cells": 17309745,
+          "fema_coverage_pct": 24.94967830872417,
+          "hand_cells": 36205557,
+          "hand_coverage_pct": 52.185459701351846,
+          "iou": 0.22909529473557214,
+          "iou_lift_vs_random": 1.1281363174977608,
+          "overlap_pct_of_fema": 57.62592689840318,
+          "overlap_pct_of_hand": 27.550745870309356,
+          "precision": 0.27550745870309357,
+          "precision_lift_vs_random": 1.1042525490469217,
+          "recall": 0.5762592689840318,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 25838229,
+          "true_positive": 9974901,
+          "valid_cells": 69378630
+        },
+        {
+          "expected_random_iou": 0.22397803927918822,
+          "expected_random_precision": 0.2494967830872417,
+          "expected_random_true_positive": 11883209.428601574,
+          "false_negative_fema_only": 4405497,
+          "false_positive_hand_only": 34724460,
+          "fema_cells": 17309745,
+          "fema_coverage_pct": 24.94967830872417,
+          "hand_cells": 47628708,
+          "hand_coverage_pct": 68.65040142764421,
+          "iou": 0.24799548681487493,
+          "iou_lift_vs_random": 1.1072312607654762,
+          "overlap_pct_of_fema": 74.54903581768536,
+          "overlap_pct_of_hand": 27.093424411176553,
+          "precision": 0.27093424411176553,
+          "precision_lift_vs_random": 1.0859227953132677,
+          "recall": 0.7454903581768536,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 17344425,
+          "true_positive": 12904248,
+          "valid_cells": 69378630
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.9741733946703993,
+        "3ft": 0.9587912078143911,
+        "6ft": 0.9679241063436901
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.5,
+      "stream_burn_depth_m": 2.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 47628708,
+          "coverage_pct": 68.65040142764421
+        },
+        "3ft": {
+          "cells": 21959304,
+          "coverage_pct": 31.651394672970625
+        },
+        "6ft": {
+          "cells": 36205557,
+          "coverage_pct": 52.185459701351846
+        }
+      },
+      "valid_cells": 69378630,
+      "variant_id": "burn2m-acc1km2",
+      "wall_time_s": 124.26
+    },
+    {
+      "accumulated_cell_count": 294227,
+      "accumulation_threshold_km2": 4.0,
+      "drain_cell_count": 513574,
+      "drain_cell_fraction_pct": 0.7253666892352436,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.10830728320574329,
+          "expected_random_precision": 0.24975821651774924,
+          "expected_random_true_positive": 2838825.5676146103,
+          "false_negative_fema_only": 13071021,
+          "false_positive_hand_only": 6753939,
+          "fema_cells": 17683377,
+          "fema_coverage_pct": 24.975821651774925,
+          "hand_cells": 11366295,
+          "hand_coverage_pct": 16.053639345101395,
+          "iou": 0.18874233160466558,
+          "iou_lift_vs_random": 1.7426559509033739,
+          "overlap_pct_of_fema": 26.08300439446606,
+          "overlap_pct_of_hand": 40.57923888127134,
+          "precision": 0.4057923888127134,
+          "precision_lift_vs_random": 1.6247408972984698,
+          "recall": 0.2608300439446606,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 46364667,
+          "true_positive": 4612356,
+          "valid_cells": 70801983
+        },
+        {
+          "expected_random_iou": 0.1551367988856705,
+          "expected_random_precision": 0.24975821651774924,
+          "expected_random_true_positive": 5137452.585338012,
+          "false_negative_fema_only": 9969219,
+          "false_positive_hand_only": 12855546,
+          "fema_cells": 17683377,
+          "fema_coverage_pct": 24.975821651774925,
+          "hand_cells": 20569704,
+          "hand_coverage_pct": 29.052440522746377,
+          "iou": 0.25260085301632934,
+          "iou_lift_vs_random": 1.6282458760960117,
+          "overlap_pct_of_fema": 43.62378294598368,
+          "overlap_pct_of_hand": 37.50252312818891,
+          "precision": 0.37502523128188914,
+          "precision_lift_vs_random": 1.5015531281039465,
+          "recall": 0.43623782945983675,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 40263060,
+          "true_positive": 7714158,
+          "valid_cells": 70801983
+        },
+        {
+          "expected_random_iou": 0.1914982055900292,
+          "expected_random_precision": 0.24975821651774924,
+          "expected_random_true_positive": 7972276.776565792,
+          "false_negative_fema_only": 6555487,
+          "false_positive_hand_only": 20792088,
+          "fema_cells": 17683377,
+          "fema_coverage_pct": 24.975821651774925,
+          "hand_cells": 31919978,
+          "hand_coverage_pct": 45.08345197054721,
+          "iou": 0.28922041617950556,
+          "iou_lift_vs_random": 1.5103035315050728,
+          "overlap_pct_of_fema": 62.92853452143219,
+          "overlap_pct_of_hand": 34.861834804522736,
+          "precision": 0.34861834804522734,
+          "precision_lift_vs_random": 1.3958233402922002,
+          "recall": 0.6292853452143219,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 32326518,
+          "true_positive": 11127890,
+          "valid_cells": 70801983
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.6088248300284926,
+        "3ft": 0.44447358690582567,
+        "6ft": 0.5020131372628935
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.5,
+      "stream_burn_depth_m": 2.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 31919978,
+          "coverage_pct": 45.08345197054721
+        },
+        "3ft": {
+          "cells": 11366295,
+          "coverage_pct": 16.053639345101395
+        },
+        "6ft": {
+          "cells": 20569704,
+          "coverage_pct": 29.052440522746377
+        }
+      },
+      "valid_cells": 70801983,
+      "variant_id": "burn2m-acc4km2",
+      "wall_time_s": 124.11
+    },
+    {
+      "accumulated_cell_count": 153875,
+      "accumulation_threshold_km2": 16.0,
+      "drain_cell_count": 422707,
+      "drain_cell_fraction_pct": 0.5915323745751029,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.07957740799124358,
+          "expected_random_precision": 0.25057712284537165,
+          "expected_random_true_positive": 1869978.637155558,
+          "false_negative_fema_only": 14261657,
+          "false_positive_hand_only": 3818189,
+          "fema_cells": 17906155,
+          "fema_coverage_pct": 25.057712284537164,
+          "hand_cells": 7462687,
+          "hand_coverage_pct": 10.443217079018684,
+          "iou": 0.16776101501614962,
+          "iou_lift_vs_random": 2.1081487730111728,
+          "overlap_pct_of_fema": 20.353325434745763,
+          "overlap_pct_of_hand": 48.83627036749632,
+          "precision": 0.4883627036749632,
+          "precision_lift_vs_random": 1.9489516765515995,
+          "recall": 0.20353325434745762,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 49735312,
+          "true_positive": 3644498,
+          "valid_cells": 71459656
+        },
+        {
+          "expected_random_iou": 0.12058740411907967,
+          "expected_random_precision": 0.25057712284537165,
+          "expected_random_true_positive": 3377275.454784445,
+          "false_negative_fema_only": 11629785,
+          "false_positive_hand_only": 7201618,
+          "fema_cells": 17906155,
+          "fema_coverage_pct": 25.057712284537164,
+          "hand_cells": 13477988,
+          "hand_coverage_pct": 18.86097520536623,
+          "iou": 0.2499771684250929,
+          "iou_lift_vs_random": 2.072995685173231,
+          "overlap_pct_of_fema": 35.05146693971989,
+          "overlap_pct_of_hand": 46.56755889677302,
+          "precision": 0.4656755889677302,
+          "precision_lift_vs_random": 1.8584122272610395,
+          "recall": 0.3505146693971989,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 46351883,
+          "true_positive": 6276370,
+          "valid_cells": 71459656
+        },
+        {
+          "expected_random_iou": 0.1616866706553468,
+          "expected_random_precision": 0.25057712284537165,
+          "expected_random_true_positive": 5606159.714225395,
+          "false_negative_fema_only": 8220739,
+          "false_positive_hand_only": 12687575,
+          "fema_cells": 17906155,
+          "fema_coverage_pct": 25.057712284537164,
+          "hand_cells": 22372991,
+          "hand_coverage_pct": 31.308562414574176,
+          "iou": 0.31658173096252074,
+          "iou_lift_vs_random": 1.9579952365853956,
+          "overlap_pct_of_fema": 54.089870215018244,
+          "overlap_pct_of_hand": 43.29066238841289,
+          "precision": 0.43290662388412887,
+          "precision_lift_vs_random": 1.7276382575087301,
+          "recall": 0.5408987021501824,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 40865926,
+          "true_positive": 9685416,
+          "valid_cells": 71459656
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.41922354798753536,
+        "3ft": 0.28975783303272856,
+        "6ft": 0.32366395185229324
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.7,
+      "stream_burn_depth_m": 2.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 22372991,
+          "coverage_pct": 31.308562414574176
+        },
+        "3ft": {
+          "cells": 7462687,
+          "coverage_pct": 10.443217079018684
+        },
+        "6ft": {
+          "cells": 13477988,
+          "coverage_pct": 18.860975205366227
+        }
+      },
+      "valid_cells": 71459656,
+      "variant_id": "burn2m-acc16km2",
+      "wall_time_s": 123.61
+    },
+    {
+      "accumulated_cell_count": 1202731,
+      "accumulation_threshold_km2": 0.25,
+      "drain_cell_count": 1341661,
+      "drain_cell_fraction_pct": 1.9656876226310391,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.20613910560990878,
+          "expected_random_precision": 0.2509388420132678,
+          "expected_random_true_positive": 9178483.877189126,
+          "false_negative_fema_only": 7744554,
+          "false_positive_hand_only": 27193544,
+          "fema_cells": 17127587,
+          "fema_coverage_pct": 25.093884201326784,
+          "hand_cells": 36576577,
+          "hand_coverage_pct": 53.58889070123611,
+          "iou": 0.21170563088744282,
+          "iou_lift_vs_random": 1.0270037325575088,
+          "overlap_pct_of_fema": 54.783157720932905,
+          "overlap_pct_of_hand": 25.653119481355514,
+          "precision": 0.25653119481355513,
+          "precision_lift_vs_random": 1.0222857201197717,
+          "recall": 0.5478315772093291,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 23932898,
+          "true_positive": 9383033,
+          "valid_cells": 68254029
+        },
+        {
+          "expected_random_iou": 0.2295587168233962,
+          "expected_random_precision": 0.2509388420132678,
+          "expected_random_true_positive": 12491409.836803539,
+          "false_negative_fema_only": 4846391,
+          "false_positive_hand_only": 37497506,
+          "fema_cells": 17127587,
+          "fema_coverage_pct": 25.093884201326784,
+          "hand_cells": 49778702,
+          "hand_coverage_pct": 72.93152174210844,
+          "iou": 0.22482700395585598,
+          "iou_lift_vs_random": 0.9793877883052446,
+          "overlap_pct_of_fema": 71.70418109684687,
+          "overlap_pct_of_hand": 24.67158745923106,
+          "precision": 0.2467158745923106,
+          "precision_lift_vs_random": 0.9831713281727268,
+          "recall": 0.7170418109684686,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 13628936,
+          "true_positive": 12281196,
+          "valid_cells": 68254029
+        },
+        {
+          "expected_random_iou": 0.23925085436378657,
+          "expected_random_precision": 0.2509388420132678,
+          "expected_random_true_positive": 14336563.894943623,
+          "false_negative_fema_only": 2738709,
+          "false_positive_hand_only": 42742827,
+          "fema_cells": 17127587,
+          "fema_coverage_pct": 25.093884201326784,
+          "hand_cells": 57131705,
+          "hand_coverage_pct": 83.7045165494919,
+          "iou": 0.24033369804324387,
+          "iou_lift_vs_random": 1.0045259762283265,
+          "overlap_pct_of_fema": 84.0099542334831,
+          "overlap_pct_of_hand": 25.185451755728277,
+          "precision": 0.2518545175572828,
+          "precision_lift_vs_random": 1.0036489988423813,
+          "recall": 0.840099542334831,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 8383615,
+          "true_positive": 14388878,
+          "valid_cells": 68254029
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.7841677862682017,
+        "3ft": 0.5491868404232567,
+        "6ft": 0.6774850034933203
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.7,
+      "stream_burn_depth_m": 5.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 57131705,
+          "coverage_pct": 83.7045165494919
+        },
+        "3ft": {
+          "cells": 36576577,
+          "coverage_pct": 53.58889070123611
+        },
+        "6ft": {
+          "cells": 49778702,
+          "coverage_pct": 72.93152174210844
+        }
+      },
+      "valid_cells": 68254029,
+      "variant_id": "burn5m-acc0p25km2",
+      "wall_time_s": 126.62
+    },
+    {
+      "accumulated_cell_count": 293586,
+      "accumulation_threshold_km2": 4.0,
+      "drain_cell_count": 487177,
+      "drain_cell_fraction_pct": 0.6848921337451109,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.10803717715757931,
+          "expected_random_precision": 0.25141507827195075,
+          "expected_random_true_positive": 2848354.3321156288,
+          "false_negative_fema_only": 13101604,
+          "false_positive_hand_only": 6547254,
+          "fema_cells": 17883640,
+          "fema_coverage_pct": 25.141507827195074,
+          "hand_cells": 11329290,
+          "hand_coverage_pct": 15.92715091623198,
+          "iou": 0.19573724972978884,
+          "iou_lift_vs_random": 1.8117582750638999,
+          "overlap_pct_of_fema": 26.739724127750282,
+          "overlap_pct_of_hand": 42.209494151884186,
+          "precision": 0.42209494151884186,
+          "precision_lift_vs_random": 1.678876797764174,
+          "recall": 0.2673972412775028,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 46701037,
+          "true_positive": 4782036,
+          "valid_cells": 71131931
+        },
+        {
+          "expected_random_iou": 0.15497599092365827,
+          "expected_random_precision": 0.25141507827195075,
+          "expected_random_true_positive": 5146184.313093932,
+          "false_negative_fema_only": 9959297,
+          "false_positive_hand_only": 12544534,
+          "fema_cells": 17883640,
+          "fema_coverage_pct": 25.141507827195074,
+          "hand_cells": 20468877,
+          "hand_coverage_pct": 28.775933272498953,
+          "iou": 0.2604278192966821,
+          "iou_lift_vs_random": 1.6804397748614477,
+          "overlap_pct_of_fema": 44.31057100232391,
+          "overlap_pct_of_hand": 38.7141072761344,
+          "precision": 0.38714107276134396,
+          "precision_lift_vs_random": 1.5398482677422436,
+          "recall": 0.4431057100232391,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 40703757,
+          "true_positive": 7924343,
+          "valid_cells": 71131931
+        },
+        {
+          "expected_random_iou": 0.1919581902137275,
+          "expected_random_precision": 0.25141507827195075,
+          "expected_random_true_positive": 8012449.706800734,
+          "false_negative_fema_only": 6523520,
+          "false_positive_hand_only": 20509288,
+          "fema_cells": 17883640,
+          "fema_coverage_pct": 25.141507827195074,
+          "hand_cells": 31869408,
+          "hand_coverage_pct": 44.80323752211929,
+          "iou": 0.2958909515835833,
+          "iou_lift_vs_random": 1.5414343678388318,
+          "overlap_pct_of_fema": 63.52241489987497,
+          "overlap_pct_of_hand": 35.64584569628654,
+          "precision": 0.35645845696286543,
+          "precision_lift_vs_random": 1.4178085873484936,
+          "recall": 0.6352241489987497,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 32739003,
+          "true_positive": 11360120,
+          "valid_cells": 71131931
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.6221916387913301,
+        "3ft": 0.46156114071398335,
+        "6ft": 0.516107022064293
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.7,
+      "stream_burn_depth_m": 5.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 31869408,
+          "coverage_pct": 44.80323752211928
+        },
+        "3ft": {
+          "cells": 11329290,
+          "coverage_pct": 15.92715091623198
+        },
+        "6ft": {
+          "cells": 20468877,
+          "coverage_pct": 28.775933272498957
+        }
+      },
+      "valid_cells": 71131931,
+      "variant_id": "burn5m-acc4km2",
+      "wall_time_s": 126.06
+    },
+    {
+      "accumulated_cell_count": 151179,
+      "accumulation_threshold_km2": 16.0,
+      "drain_cell_count": 403020,
+      "drain_cell_fraction_pct": 0.5615258254229,
+      "fema_metrics": [
+        {
+          "expected_random_iou": 0.07870836810950914,
+          "expected_random_precision": 0.25221567373485315,
+          "expected_random_true_positive": 1858480.4489334186,
+          "false_negative_fema_only": 14348851,
+          "false_positive_hand_only": 3615368,
+          "fema_cells": 18102099,
+          "fema_coverage_pct": 25.221567373485314,
+          "hand_cells": 7368616,
+          "hand_coverage_pct": 10.266657192259409,
+          "iou": 0.17282162786295474,
+          "iou_lift_vs_random": 2.195721141397611,
+          "overlap_pct_of_fema": 20.733772365293106,
+          "overlap_pct_of_hand": 50.93558953268836,
+          "precision": 0.5093558953268836,
+          "precision_lift_vs_random": 2.0195251460159227,
+          "recall": 0.20733772365293107,
+          "threshold_ft": 3.0,
+          "threshold_m": 0.9144000000000001,
+          "true_negative": 50054833,
+          "true_positive": 3753248,
+          "valid_cells": 71772300
+        },
+        {
+          "expected_random_iou": 0.11963016956191817,
+          "expected_random_precision": 0.25221567373485315,
+          "expected_random_true_positive": 3355823.3632728504,
+          "false_negative_fema_only": 11634524,
+          "false_positive_hand_only": 6837797,
+          "fema_cells": 18102099,
+          "fema_coverage_pct": 25.221567373485314,
+          "hand_cells": 13305372,
+          "hand_coverage_pct": 18.538310741051912,
+          "iou": 0.25932646230762146,
+          "iou_lift_vs_random": 2.1677346379869444,
+          "overlap_pct_of_fema": 35.72831526332941,
+          "overlap_pct_of_hand": 48.608749909435076,
+          "precision": 0.4860874990943508,
+          "precision_lift_vs_random": 1.927269197414591,
+          "recall": 0.3572831526332941,
+          "threshold_ft": 6.0,
+          "threshold_m": 1.8288000000000002,
+          "true_negative": 46832404,
+          "true_positive": 6467575,
+          "valid_cells": 71772300
+        },
+        {
+          "expected_random_iou": 0.1613760312255151,
+          "expected_random_precision": 0.25221567373485315,
+          "expected_random_true_positive": 5601163.057854758,
+          "false_negative_fema_only": 8200254,
+          "false_positive_hand_only": 12305986,
+          "fema_cells": 18102099,
+          "fema_coverage_pct": 25.221567373485314,
+          "hand_cells": 22207831,
+          "hand_coverage_pct": 30.942063999621023,
+          "iou": 0.3256319824152031,
+          "iou_lift_vs_random": 2.017846020516816,
+          "overlap_pct_of_fema": 54.69998258213039,
+          "overlap_pct_of_hand": 44.58717737900653,
+          "precision": 0.4458717737900653,
+          "precision_lift_vs_random": 1.767819450661092,
+          "recall": 0.5469998258213039,
+          "threshold_ft": 10.0,
+          "threshold_m": 3.048,
+          "true_negative": 41364215,
+          "true_positive": 9901845,
+          "valid_cells": 71772300
+        }
+      ],
+      "jaccard_vs_baseline": {
+        "10ft": 0.4265312394233385,
+        "3ft": 0.30069581805465045,
+        "6ft": 0.3311781106360832
+      },
+      "mapped_stream_cell_count": 357691,
+      "peak_rss_mb": 5064.7,
+      "stream_burn_depth_m": 5.0,
+      "threshold_stats": {
+        "10ft": {
+          "cells": 22207831,
+          "coverage_pct": 30.942063999621023
+        },
+        "3ft": {
+          "cells": 7368616,
+          "coverage_pct": 10.266657192259409
+        },
+        "6ft": {
+          "cells": 13305372,
+          "coverage_pct": 18.53831074105191
+        }
+      },
+      "valid_cells": 71772300,
+      "variant_id": "burn5m-acc16km2",
+      "wall_time_s": 126.77
+    }
+  ]
+}

@@ -149,11 +149,6 @@ ENABLE_DIAGNOSTICS = os.getenv("ENABLE_DIAGNOSTICS", "false").lower() in (
     "true",
     "yes",
 )
-ENABLE_PERF_TEST_ROUTES = os.getenv("ENABLE_PERF_TEST_ROUTES", "false").lower() in (
-    "1",
-    "true",
-    "yes",
-)
 TERRAIN_V2_ENABLED = os.getenv("TERRAIN_V2_ENABLED", "false").lower() in (
     "1",
     "true",
