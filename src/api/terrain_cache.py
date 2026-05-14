@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -33,6 +34,16 @@ class TerrainCacheStats:
     compressed_bytes: int
 
 
+@dataclass(frozen=True)
+class TerrainCachePruneResult:
+    before_tiles: int
+    before_bytes: int
+    after_tiles: int
+    after_bytes: int
+    removed_tiles: int
+    removed_bytes: int
+
+
 class TerrainTileCache:
     """Store rendered v2 terrain tiles as `.u16.br` files.
 
@@ -43,6 +54,7 @@ class TerrainTileCache:
 
     def __init__(self, root: Path):
         self.root = root
+        self._last_prune_unix_by_scope: dict[tuple[str | None, str | None], float] = {}
 
     def tile_dir(self, layer: str, dataset_version: str, z: int, x: int) -> Path:
         return self.root / layer / dataset_version / str(z) / str(x)
@@ -152,6 +164,82 @@ class TerrainTileCache:
             tile_count=len(files),
             compressed_bytes=sum(path.stat().st_size for path in files),
         )
+
+    def prune_to_size(
+        self,
+        max_bytes: int,
+        layer: str | None = None,
+        dataset_version: str | None = None,
+        *,
+        dry_run: bool = False,
+    ) -> TerrainCachePruneResult:
+        if max_bytes < 0:
+            raise ValueError("max_bytes must be non-negative")
+
+        root = self.root
+        if layer is not None:
+            root = root / layer
+        if dataset_version is not None:
+            root = root / dataset_version
+
+        files = sorted(
+            root.rglob("*.u16.br") if root.exists() else [],
+            key=lambda path: (path.stat().st_mtime, str(path)),
+        )
+        before_bytes = sum(path.stat().st_size for path in files)
+        target_bytes = before_bytes
+        removed_tiles = 0
+        removed_bytes = 0
+
+        for path in files:
+            if target_bytes <= max_bytes:
+                break
+            size = path.stat().st_size
+            target_bytes -= size
+            removed_tiles += 1
+            removed_bytes += size
+            if dry_run:
+                continue
+            meta_path = path.with_suffix("").with_suffix(".json")
+            with suppress(FileNotFoundError):
+                path.unlink()
+            with suppress(FileNotFoundError):
+                meta_path.unlink()
+
+        after_tiles = len(files) - removed_tiles
+        after_bytes = before_bytes - removed_bytes
+        if not dry_run:
+            stats = self.stats(layer, dataset_version)
+            after_tiles = stats.tile_count
+            after_bytes = stats.compressed_bytes
+
+        return TerrainCachePruneResult(
+            before_tiles=len(files),
+            before_bytes=before_bytes,
+            after_tiles=after_tiles,
+            after_bytes=after_bytes,
+            removed_tiles=removed_tiles,
+            removed_bytes=removed_bytes,
+        )
+
+    def maybe_prune_to_size(
+        self,
+        max_bytes: int,
+        layer: str | None = None,
+        dataset_version: str | None = None,
+        *,
+        min_interval_seconds: int = 60,
+    ) -> TerrainCachePruneResult | None:
+        if max_bytes <= 0:
+            return None
+
+        scope = (layer, dataset_version)
+        now = time.time()
+        last = self._last_prune_unix_by_scope.get(scope, 0.0)
+        if now - last < min_interval_seconds:
+            return None
+        self._last_prune_unix_by_scope[scope] = now
+        return self.prune_to_size(max_bytes, layer, dataset_version)
 
     def _read_data_status(
         self, layer: str, dataset_version: str, z: int, x: int, y: int

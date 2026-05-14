@@ -37,3 +37,21 @@ def test_iter_tiles_for_bbox_respects_zoom_limits():
 
     assert tiles
     assert {tile[0] for tile in tiles} == {12}
+
+
+def test_filter_tiles_by_shard_splits_by_tile_column():
+    module = load_precompute_module()
+    tiles = [
+        (12, 0, 0),
+        (12, 1, 0),
+        (12, 2, 0),
+        (12, 3, 0),
+        (12, 4, 0),
+    ]
+
+    shard_0 = module.filter_tiles_by_shard(tiles, shard_index=0, shard_count=2)
+    shard_1 = module.filter_tiles_by_shard(tiles, shard_index=1, shard_count=2)
+
+    assert shard_0 == [(12, 0, 0), (12, 2, 0), (12, 4, 0)]
+    assert shard_1 == [(12, 1, 0), (12, 3, 0)]
+    assert sorted(shard_0 + shard_1) == tiles

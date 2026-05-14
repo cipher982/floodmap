@@ -53,3 +53,33 @@ def test_terrain_cache_rejects_wrong_tile_size(tmp_path):
         cache.write_tile("hand", "hand-test", 9, 132, 204, b"short", "ok")
 
     assert str(U16_TILE_BYTES) in str(exc.value)
+
+
+def test_terrain_cache_prunes_oldest_tiles_to_size(tmp_path):
+    cache = TerrainTileCache(tmp_path)
+    payload_a = np.full(U16_TILE_BYTES // 2, 1, dtype=np.uint16).tobytes()
+    payload_b = np.arange(U16_TILE_BYTES // 2, dtype=np.uint16).tobytes()
+    path_a = cache.write_tile("hand", "hand-test", 9, 132, 204, payload_a, "ok")
+    path_b = cache.write_tile("hand", "hand-test", 9, 133, 204, payload_b, "ok")
+
+    max_bytes = path_b.stat().st_size
+    result = cache.prune_to_size(max_bytes, "hand", "hand-test")
+
+    assert result.removed_tiles == 1
+    assert not path_a.exists()
+    assert not cache.meta_path("hand", "hand-test", 9, 132, 204).exists()
+    assert path_b.exists()
+    assert cache.stats("hand", "hand-test").tile_count == 1
+
+
+def test_terrain_cache_maybe_prune_is_interval_gated(tmp_path):
+    cache = TerrainTileCache(tmp_path)
+    payload = np.arange(U16_TILE_BYTES // 2, dtype=np.uint16).tobytes()
+    cache.write_tile("hand", "hand-test", 9, 132, 204, payload, "ok")
+    cache.write_tile("hand", "hand-test", 9, 133, 204, payload, "ok")
+
+    first = cache.maybe_prune_to_size(1, "hand", "hand-test", min_interval_seconds=60)
+    second = cache.maybe_prune_to_size(1, "hand", "hand-test", min_interval_seconds=60)
+
+    assert first is not None
+    assert second is None

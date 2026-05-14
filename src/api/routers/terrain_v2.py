@@ -6,6 +6,8 @@ import numpy as np
 from config import (
     BIRMINGHAM_HAND_COG_PATH,
     BIRMINGHAM_HAND_DATASET_VERSION,
+    TERRAIN_CACHE_MAX_BYTES,
+    TERRAIN_CACHE_PRUNE_INTERVAL_SECONDS,
     TERRAIN_CACHE_WRITE_THROUGH,
     TERRAIN_MANIFEST_PATH,
     TERRAIN_SAMPLE_CACHE_ZOOM,
@@ -17,7 +19,9 @@ from pydantic import ValidationError
 from terrain import (
     U16_NODATA,
     TerrainBatchRequest,
+    TerrainLayer,
     TerrainManifest,
+    TerrainRegion,
     TerrainTileRequest,
     lonlat_to_tile_pixel,
     maybe_compress,
@@ -33,6 +37,18 @@ from terrain_manifest import (
 
 router = APIRouter(prefix="/api/v2/terrain", tags=["terrain-v2"])
 terrain_tile_cache = TerrainTileCache(TERRAIN_TILE_CACHE_DIR)
+
+
+def write_through_tile_cache(
+    layer: str, dataset_version: str, z: int, x: int, y: int, payload: bytes
+) -> None:
+    terrain_tile_cache.write_tile(layer, dataset_version, z, x, y, payload, "ok")
+    terrain_tile_cache.maybe_prune_to_size(
+        TERRAIN_CACHE_MAX_BYTES,
+        layer,
+        dataset_version,
+        min_interval_seconds=TERRAIN_CACHE_PRUNE_INTERVAL_SECONDS,
+    )
 
 
 def get_terrain_manifest() -> TerrainManifest:
@@ -180,9 +196,7 @@ def get_terrain_tile(
     values = np.frombuffer(payload, dtype=np.uint16)
     data_status = "source-nodata" if np.all(values == U16_NODATA) else "ok"
     if TERRAIN_CACHE_WRITE_THROUGH and data_status != "source-nodata":
-        terrain_tile_cache.write_tile(
-            layer, dataset_version, z, x, y, payload, data_status
-        )
+        write_through_tile_cache(layer, dataset_version, z, x, y, payload)
     response_payload, content_encoding = maybe_compress(payload, accept_encoding)
     headers = terrain_tile_headers(
         dataset_version=dataset_version,
@@ -231,14 +245,13 @@ def get_terrain_tile_batch(
             values = np.frombuffer(tile_payload, dtype=np.uint16)
             data_status = "source-nodata" if np.all(values == U16_NODATA) else "ok"
             if TERRAIN_CACHE_WRITE_THROUGH and data_status != "source-nodata":
-                terrain_tile_cache.write_tile(
+                write_through_tile_cache(
                     layer,
                     dataset_version,
                     tile.z,
                     tile.x,
                     tile.y,
                     tile_payload,
-                    data_status,
                 )
             tile_payloads.append(tile_payload)
             cache_statuses.append("MISS")

@@ -164,6 +164,10 @@ TERRAIN_CACHE_WRITE_THROUGH = os.getenv(
     "yes",
 )
 TERRAIN_SAMPLE_CACHE_ZOOM = int(os.getenv("TERRAIN_SAMPLE_CACHE_ZOOM", "12"))
+TERRAIN_CACHE_MAX_BYTES = int(os.getenv("TERRAIN_CACHE_MAX_BYTES", "0"))
+TERRAIN_CACHE_PRUNE_INTERVAL_SECONDS = int(
+    os.getenv("TERRAIN_CACHE_PRUNE_INTERVAL_SECONDS", "60")
+)
 
 # Enforce HTTPS redirects at the app layer (typically true behind a reverse proxy)
 FORCE_HTTPS = os.getenv(

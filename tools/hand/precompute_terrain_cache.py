@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -40,6 +41,64 @@ def iter_tiles_for_bbox(
     return tiles
 
 
+def filter_tiles_by_shard(
+    tiles: list[tuple[int, int, int]], shard_index: int, shard_count: int
+) -> list[tuple[int, int, int]]:
+    if shard_count < 1:
+        raise ValueError("shard_count must be >= 1")
+    if shard_index < 0 or shard_index >= shard_count:
+        raise ValueError("shard_index must satisfy 0 <= shard_index < shard_count")
+    if shard_count == 1:
+        return tiles
+    return [tile for tile in tiles if tile[1] % shard_count == shard_index]
+
+
+def process_tile(
+    *,
+    cache: TerrainTileCache,
+    args: argparse.Namespace,
+    dataset_version: str,
+    source_path: Path | None,
+    tile: tuple[int, int, int],
+) -> dict[str, int | float | str | bool]:
+    z, x, y = tile
+    path = cache.br_path(args.layer, dataset_version, z, x, y)
+    existed = path.exists()
+    if existed and not args.overwrite:
+        return {"status": "existing", "existing": True}
+
+    if args.dry_run:
+        return {"status": "dry-run", "existing": existed}
+
+    if source_path is None:
+        raise RuntimeError("source path unexpectedly absent outside dry-run")
+    payload, _, elapsed_ms = render_cog_tile_with_cache(source_path, z, x, y)
+    values = np.frombuffer(payload, dtype=np.uint16)
+    data_status = "source-nodata" if np.all(values == U16_NODATA) else "ok"
+    if args.skip_empty and data_status == "source-nodata":
+        return {
+            "status": "empty-skipped",
+            "existing": existed,
+            "elapsed_ms": elapsed_ms,
+        }
+
+    written_path = cache.write_tile(
+        args.layer,
+        dataset_version,
+        z,
+        x,
+        y,
+        payload,
+        data_status,
+    )
+    return {
+        "status": "written",
+        "existing": existed,
+        "compressed_bytes": written_path.stat().st_size,
+        "elapsed_ms": elapsed_ms,
+    }
+
+
 def precompute_region(args: argparse.Namespace) -> dict[str, int | str | float]:
     manifest = get_terrain_manifest()
     layer = manifest.layers.get(args.layer)
@@ -58,7 +117,8 @@ def precompute_region(args: argparse.Namespace) -> dict[str, int | str | float]:
         if args.dry_run
         else require_region_source_path(manifest, args.layer, region)
     )
-    tiles = iter_tiles_for_bbox(region.bbox, args.min_zoom, args.max_zoom)
+    all_tiles = iter_tiles_for_bbox(region.bbox, args.min_zoom, args.max_zoom)
+    tiles = filter_tiles_by_shard(all_tiles, args.shard_index, args.shard_count)
     if args.limit:
         tiles = tiles[: args.limit]
 
@@ -69,7 +129,11 @@ def precompute_region(args: argparse.Namespace) -> dict[str, int | str | float]:
         "region_id": region.id,
         "source": region.url if source_path is None else str(source_path),
         "cache_dir": str(args.cache_dir),
+        "total_tiles": len(all_tiles),
         "candidate_tiles": len(tiles),
+        "workers": args.workers,
+        "shard_index": args.shard_index,
+        "shard_count": args.shard_count,
         "written": 0,
         "existing": 0,
         "empty_skipped": 0,
@@ -77,36 +141,47 @@ def precompute_region(args: argparse.Namespace) -> dict[str, int | str | float]:
         "max_render_ms": 0.0,
     }
 
-    for z, x, y in tiles:
-        if cache.br_path(args.layer, manifest.dataset_version, z, x, y).exists():
+    def record_result(result: dict[str, int | float | str | bool]) -> None:
+        if result.get("existing"):
             stats["existing"] = int(stats["existing"]) + 1
-            if not args.overwrite:
-                continue
-
-        if args.dry_run:
-            continue
-
-        if source_path is None:
-            raise RuntimeError("source path unexpectedly absent outside dry-run")
-        payload, _, elapsed_ms = render_cog_tile_with_cache(source_path, z, x, y)
-        values = np.frombuffer(payload, dtype=np.uint16)
-        data_status = "source-nodata" if np.all(values == U16_NODATA) else "ok"
-        if args.skip_empty and data_status == "source-nodata":
+        if result["status"] == "written":
+            stats["written"] = int(stats["written"]) + 1
+            stats["compressed_bytes"] = int(stats["compressed_bytes"]) + int(
+                result["compressed_bytes"]
+            )
+        elif result["status"] == "empty-skipped":
             stats["empty_skipped"] = int(stats["empty_skipped"]) + 1
-            continue
+        if "elapsed_ms" in result:
+            stats["max_render_ms"] = max(
+                float(stats["max_render_ms"]), float(result["elapsed_ms"])
+            )
 
-        path = cache.write_tile(
-            args.layer,
-            manifest.dataset_version,
-            z,
-            x,
-            y,
-            payload,
-            data_status,
-        )
-        stats["written"] = int(stats["written"]) + 1
-        stats["compressed_bytes"] = int(stats["compressed_bytes"]) + path.stat().st_size
-        stats["max_render_ms"] = max(float(stats["max_render_ms"]), elapsed_ms)
+    if args.workers == 1 or args.dry_run:
+        for tile in tiles:
+            record_result(
+                process_tile(
+                    cache=cache,
+                    args=args,
+                    dataset_version=manifest.dataset_version,
+                    source_path=source_path,
+                    tile=tile,
+                )
+            )
+    else:
+        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+            submitted = [
+                executor.submit(
+                    process_tile,
+                    cache=cache,
+                    args=args,
+                    dataset_version=manifest.dataset_version,
+                    source_path=source_path,
+                    tile=tile,
+                )
+                for tile in tiles
+            ]
+            for completed in as_completed(submitted):
+                record_result(completed.result())
 
     cache_stats = cache.stats(args.layer, manifest.dataset_version)
     stats["cache_tiles_total"] = cache_stats.tile_count
@@ -124,6 +199,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument(
         "--skip-empty",
         action=argparse.BooleanOptionalAction,
@@ -131,7 +209,14 @@ def parse_args() -> argparse.Namespace:
         help="Skip source-covered tiles that render to all NODATA.",
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON.")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.workers < 1:
+        parser.error("--workers must be >= 1")
+    if args.shard_count < 1:
+        parser.error("--shard-count must be >= 1")
+    if args.shard_index < 0 or args.shard_index >= args.shard_count:
+        parser.error("--shard-index must satisfy 0 <= index < shard-count")
+    return args
 
 
 def main() -> None:
@@ -144,7 +229,10 @@ def main() -> None:
     print("Terrain cache precompute")
     print(f"  layer/version: {stats['layer']} / {stats['dataset_version']}")
     print(f"  region: {stats['region_id']}")
-    print(f"  candidate tiles: {stats['candidate_tiles']}")
+    print(
+        f"  candidate tiles: {stats['candidate_tiles']} of {stats['total_tiles']} "
+        f"(shard {stats['shard_index']}/{stats['shard_count']}, workers {stats['workers']})"
+    )
     print(
         f"  written/existing/skipped-empty: {stats['written']} / {stats['existing']} / {stats['empty_skipped']}"
     )
