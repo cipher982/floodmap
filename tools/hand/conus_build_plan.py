@@ -192,7 +192,7 @@ def build_job_manifest(
             "min_zoom": min_precompute_zoom,
             "max_zoom": max_precompute_zoom,
             "parallelism": {
-                "strategy": "tile-column sharding plus --workers per region",
+                "strategy": "tile hash sharding plus --workers per region",
                 "example": "--shard-count 8 --shard-index 0 --workers 4",
             },
         },

@@ -72,6 +72,17 @@ def test_terrain_cache_prunes_oldest_tiles_to_size(tmp_path):
     assert cache.stats("hand", "hand-test").tile_count == 1
 
 
+def test_terrain_cache_prune_removes_orphan_metadata(tmp_path):
+    cache = TerrainTileCache(tmp_path)
+    meta_path = cache.meta_path("hand", "hand-test", 9, 132, 204)
+    meta_path.parent.mkdir(parents=True)
+    meta_path.write_text("{}", encoding="utf-8")
+
+    cache.prune_to_size(1_000_000, "hand", "hand-test")
+
+    assert not meta_path.exists()
+
+
 def test_terrain_cache_maybe_prune_is_interval_gated(tmp_path):
     cache = TerrainTileCache(tmp_path)
     payload = np.arange(U16_TILE_BYTES // 2, dtype=np.uint16).tobytes()

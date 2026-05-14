@@ -376,11 +376,15 @@ Measured Phase 6 result:
   Birmingham built-in source retained as the no-file fallback.
 - Route context uses the active terrain manifest dataset version, so the client
   is not pinned to the Birmingham constant once a national manifest exists.
-- Dynamic write-through cache has an optional `TERRAIN_CACHE_MAX_BYTES` cap and
-  interval-gated pruning, disabled by default.
+- Dynamic write-through cache has an optional `TERRAIN_CACHE_MAX_BYTES` cap
+  (integer bytes) and interval-gated pruning, disabled by default. Current
+  pruning scans the cache directory, so it is acceptable for pilots and should
+  move out-of-band or to an indexed cache before national write-through traffic.
 - `tools/hand/precompute_terrain_cache.py` supports `--workers`,
-  `--shard-count`, and `--shard-index`; tile-column sharding was dry-run tested
+  `--shard-count`, and `--shard-index`; tile-hash sharding was dry-run tested
   against Birmingham z9-z12.
+- Multi-region tiles are mosaicked in manifest order: earlier regions keep
+  priority for overlapping valid cells, later regions fill nodata cells.
 - `tools/hand/conus_build_plan.py` emits a dry-run `terrain-manifest.json` and
   `build-jobs.json` for at least Birmingham plus Houston representative regions.
   The job manifest records inputs, stages, mosaic/cache rules, and QA metrics

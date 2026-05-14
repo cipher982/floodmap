@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from terrain import TerrainEncoding, TerrainLayer, TerrainManifest, TerrainRegion
 
 BIRMINGHAM_HAND_BBOX = (-87.02, 33.30, -86.52, 33.75)
+logger = logging.getLogger(__name__)
 
 
 def build_builtin_hand_manifest(
@@ -39,7 +41,11 @@ def build_builtin_hand_manifest(
 def load_terrain_manifest_from_path(path: Path | None) -> TerrainManifest | None:
     if path is None or not path.exists():
         return None
-    return TerrainManifest.model_validate_json(path.read_text(encoding="utf-8"))
+    try:
+        return TerrainManifest.model_validate_json(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("Ignoring invalid terrain manifest at %s: %s", path, exc)
+        return None
 
 
 def hand_route_context_from_manifest(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import struct
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -13,6 +14,10 @@ from terrain import (
     TERRAIN_BATCH_TILE_META_BYTES,
     TILE_SIZE,
     U16_TILE_BYTES,
+    TerrainEncoding,
+    TerrainLayer,
+    TerrainManifest,
+    TerrainRegion,
     empty_u16_tile,
     lonlat_to_tile_pixel,
 )
@@ -158,6 +163,55 @@ def test_get_terrain_batch_packs_unique_tiles(client):
     header_length = 7 + TERRAIN_BATCH_TILE_META_BYTES
     assert len(response.content[header_length:]) == U16_TILE_BYTES
     assert response.headers["X-Tile-Count"] == "1"
+
+
+def test_render_regions_tile_fills_later_regions_only_where_first_is_nodata(
+    tmp_path, monkeypatch
+):
+    region_a = TerrainRegion(
+        id="region-a",
+        bbox=(-1, -1, 1, 1),
+        crs="EPSG:3857",
+        url=str(tmp_path / "a.tif"),
+    )
+    region_b = TerrainRegion(
+        id="region-b",
+        bbox=(-1, -1, 1, 1),
+        crs="EPSG:3857",
+        url=str(tmp_path / "b.tif"),
+    )
+    region_a_path = tmp_path / "a.tif"
+    region_b_path = tmp_path / "b.tif"
+    region_a_path.write_bytes(b"a")
+    region_b_path.write_bytes(b"b")
+    manifest = TerrainManifest(
+        dataset_version="hand-test",
+        layers={
+            "hand": TerrainLayer(
+                encoding=TerrainEncoding.HAND_DECIMETERS,
+                regions=[region_a, region_b],
+            )
+        },
+    )
+    first = np.full((TILE_SIZE, TILE_SIZE), 10, dtype=np.uint16)
+    first[0, 0] = 65535
+    second = np.full((TILE_SIZE, TILE_SIZE), 20, dtype=np.uint16)
+
+    def fake_render(path, *_args):
+        values = first if Path(path) == region_a_path else second
+        return values.tobytes(), "MISS", 1.0
+
+    monkeypatch.setattr(terrain_v2, "render_cog_tile_with_cache", fake_render)
+
+    payload, cache_status, elapsed_ms = terrain_v2.render_regions_tile(
+        manifest, "hand", [region_a, region_b], 0, 0, 0
+    )
+
+    values = np.frombuffer(payload, dtype=np.uint16).reshape((TILE_SIZE, TILE_SIZE))
+    assert cache_status == "MISS"
+    assert elapsed_ms == 2.0
+    assert values[0, 0] == 20
+    assert values[0, 1] == 10
 
 
 def test_terrain_metadata_reports_version_and_templates(client):

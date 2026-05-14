@@ -51,6 +51,20 @@ def test_load_terrain_manifest_from_path_reads_versioned_regions(tmp_path):
     ]
 
 
+def test_load_terrain_manifest_from_path_ignores_malformed_file(tmp_path):
+    path = tmp_path / "terrain-manifest.json"
+    path.write_text("{not-json", encoding="utf-8")
+
+    assert load_terrain_manifest_from_path(path) is None
+
+
+def test_load_terrain_manifest_from_path_ignores_schema_mismatch(tmp_path):
+    path = tmp_path / "terrain-manifest.json"
+    path.write_text('{"schema_version": 1, "layers": {}}', encoding="utf-8")
+
+    assert load_terrain_manifest_from_path(path) is None
+
+
 def test_hand_route_context_reports_manifest_dataset_and_coverage(tmp_path):
     manifest = build_builtin_hand_manifest(
         dataset_version="hand-test",

@@ -50,7 +50,14 @@ def filter_tiles_by_shard(
         raise ValueError("shard_index must satisfy 0 <= shard_index < shard_count")
     if shard_count == 1:
         return tiles
-    return [tile for tile in tiles if tile[1] % shard_count == shard_index]
+    return [
+        tile for tile in tiles if tile_shard_index(tile, shard_count) == shard_index
+    ]
+
+
+def tile_shard_index(tile: tuple[int, int, int], shard_count: int) -> int:
+    z, x, y = tile
+    return ((z * 73_856_093) ^ (x * 19_349_663) ^ (y * 83_492_791)) % shard_count
 
 
 def process_tile(
@@ -65,7 +72,7 @@ def process_tile(
     path = cache.br_path(args.layer, dataset_version, z, x, y)
     existed = path.exists()
     if existed and not args.overwrite:
-        return {"status": "existing", "existing": True}
+        return {"status": "existing"}
 
     if args.dry_run:
         return {"status": "dry-run", "existing": existed}
@@ -78,7 +85,7 @@ def process_tile(
     if args.skip_empty and data_status == "source-nodata":
         return {
             "status": "empty-skipped",
-            "existing": existed,
+            "pre_existing": existed,
             "elapsed_ms": elapsed_ms,
         }
 
@@ -93,7 +100,7 @@ def process_tile(
     )
     return {
         "status": "written",
-        "existing": existed,
+        "pre_existing": existed,
         "compressed_bytes": written_path.stat().st_size,
         "elapsed_ms": elapsed_ms,
     }
@@ -142,7 +149,7 @@ def precompute_region(args: argparse.Namespace) -> dict[str, int | str | float]:
     }
 
     def record_result(result: dict[str, int | float | str | bool]) -> None:
-        if result.get("existing"):
+        if result["status"] == "existing":
             stats["existing"] = int(stats["existing"]) + 1
         if result["status"] == "written":
             stats["written"] = int(stats["written"]) + 1

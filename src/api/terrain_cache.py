@@ -176,11 +176,19 @@ class TerrainTileCache:
         if max_bytes < 0:
             raise ValueError("max_bytes must be non-negative")
 
+        # Maintenance scan: this is O(tile count), so keep it interval-gated or
+        # run it out-of-band for national caches.
         root = self.root
         if layer is not None:
             root = root / layer
         if dataset_version is not None:
             root = root / dataset_version
+
+        if root.exists() and not dry_run:
+            for meta_path in root.rglob("*.json"):
+                with suppress(FileNotFoundError):
+                    if not meta_path.with_suffix(".u16.br").exists():
+                        meta_path.unlink()
 
         files = sorted(
             root.rglob("*.u16.br") if root.exists() else [],

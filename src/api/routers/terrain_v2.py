@@ -23,6 +23,7 @@ from terrain import (
     TerrainManifest,
     TerrainRegion,
     TerrainTileRequest,
+    empty_u16_tile,
     lonlat_to_tile_pixel,
     maybe_compress,
     serialize_terrain_batch,
@@ -116,6 +117,50 @@ def regions_for_tile(
     return regions
 
 
+def render_regions_tile(
+    manifest: TerrainManifest,
+    layer: str,
+    regions: list[TerrainRegion],
+    z: int,
+    x: int,
+    y: int,
+) -> tuple[bytes, str, float]:
+    """Render a tile from all intersecting regions.
+
+    Manifest order is priority order: earlier regions win for overlapping valid
+    cells, later regions fill only nodata cells. This keeps cache keys region
+    agnostic while avoiding empty seams on tiles crossing region boundaries.
+    """
+    mosaic: np.ndarray | None = None
+    cache_statuses: list[str] = []
+    elapsed_total_ms = 0.0
+
+    for region in regions:
+        source_path = require_region_source_path(manifest, layer, region)
+        payload, cache_status, elapsed_ms = render_cog_tile_with_cache(
+            source_path, z, x, y
+        )
+        values = np.frombuffer(payload, dtype=np.uint16).reshape((256, 256)).copy()
+        cache_statuses.append(cache_status)
+        elapsed_total_ms += elapsed_ms
+        if mosaic is None:
+            mosaic = values
+            continue
+        fill_mask = (mosaic == U16_NODATA) & (values != U16_NODATA)
+        mosaic[fill_mask] = values[fill_mask]
+
+    if mosaic is None:
+        return empty_u16_tile(), "MISS", elapsed_total_ms
+    cache_status = (
+        "HIT" if cache_statuses and all(s == "HIT" for s in cache_statuses) else "MISS"
+    )
+    return (
+        mosaic.astype(np.uint16, copy=False).tobytes(),
+        cache_status,
+        elapsed_total_ms,
+    )
+
+
 def renderer_unavailable(
     layer: str, dataset_version: str, detail: str
 ) -> HTTPException:
@@ -186,10 +231,9 @@ def get_terrain_tile(
             headers=headers,
         )
 
-    source_path = require_region_source_path(manifest, layer, tile_regions[0])
     try:
-        payload, cache_status, elapsed_ms = render_cog_tile_with_cache(
-            source_path, z, x, y
+        payload, cache_status, elapsed_ms = render_regions_tile(
+            manifest, layer, tile_regions, z, x, y
         )
     except RuntimeError as exc:
         raise renderer_unavailable(layer, dataset_version, str(exc)) from exc
@@ -238,9 +282,8 @@ def get_terrain_tile_batch(
                 cache_statuses.append("HIT")
                 continue
 
-            source_path = require_region_source_path(manifest, layer, tile_regions[0])
-            tile_payload, _, _ = render_cog_tile_with_cache(
-                source_path, tile.z, tile.x, tile.y
+            tile_payload, _, _ = render_regions_tile(
+                manifest, layer, tile_regions, tile.z, tile.x, tile.y
             )
             values = np.frombuffer(tile_payload, dtype=np.uint16)
             data_status = "source-nodata" if np.all(values == U16_NODATA) else "ok"
