@@ -18,6 +18,9 @@ def _default_data_root() -> Path:
     In containers, data is mounted under `/app/data`. In local development and
     tests, the repository `data/` directory is used by default.
     """
+    if env_root := os.getenv("FLOODMAP_DATA_ROOT"):
+        return Path(env_root).expanduser()
+
     container_root = Path("/app/data")
     if container_root.exists():
         return container_root

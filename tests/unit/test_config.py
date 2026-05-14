@@ -65,6 +65,14 @@ class TestContainerPaths:
 
         assert BASE_MAPS_DIR == DATA_ROOT / "base-maps"
 
+    def test_floodmap_data_root_override(self, monkeypatch, tmp_path):
+        """FLOODMAP_DATA_ROOT should support external data mounts."""
+        monkeypatch.setenv("FLOODMAP_DATA_ROOT", str(tmp_path))
+
+        from config import _default_data_root
+
+        assert _default_data_root() == tmp_path
+
     def test_legacy_aliases(self):
         """Legacy path aliases should point to correct directories."""
         from config import (
