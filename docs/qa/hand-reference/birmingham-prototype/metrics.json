@@ -1,0 +1,103 @@
+{
+  "all_touched": true,
+  "bbox_lonlat": [
+    -87.02,
+    33.3,
+    -86.52,
+    33.75
+  ],
+  "dataset_version": "hand-houston-20260514a",
+  "fema_feature_count": 2560,
+  "fema_filter": "SFHA_TF = 'T'",
+  "fema_source": "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query",
+  "hand_path": "/mnt/storage/floodmap/data/terrain/hand/birmingham-drainage.tif",
+  "images": {
+    "10ft": "comparison-10ft.png",
+    "3ft": "comparison-3ft.png",
+    "6ft": "comparison-6ft.png"
+  },
+  "raster_bounds": [
+    824819.9083866612,
+    1176000.2660429627,
+    875604.4434318073,
+    1230502.5699276067
+  ],
+  "raster_crs_epsg": 5070,
+  "raster_shape": {
+    "height": 5820,
+    "width": 5423
+  },
+  "region_id": "birmingham-prototype",
+  "simplify_m": 5.0,
+  "thresholds": [
+    {
+      "expected_random_iou": 0.027437155702057257,
+      "expected_random_precision": 0.06633209286032957,
+      "expected_random_true_positive": 91908.02323285828,
+      "false_negative_fema_only": 1238526,
+      "false_positive_hand_only": 568001,
+      "fema_cells": 2056099,
+      "fema_coverage_pct": 6.633209286032956,
+      "hand_cells": 1385574,
+      "hand_coverage_pct": 4.4700193537790875,
+      "iou": 0.3115632026218513,
+      "iou_lift_vs_random": 11.355521177382466,
+      "overlap_pct_of_fema": 39.763309062452734,
+      "overlap_pct_of_hand": 59.0060870079837,
+      "precision": 0.590060870079837,
+      "precision_lift_vs_random": 8.89555635342734,
+      "recall": 0.39763309062452734,
+      "threshold_ft": 3.0,
+      "threshold_m": 0.9144000000000001,
+      "true_negative": 28372947,
+      "true_positive": 817573,
+      "valid_cells": 30997047
+    },
+    {
+      "expected_random_iou": 0.03515510649191238,
+      "expected_random_precision": 0.06633209286032957,
+      "expected_random_true_positive": 143085.62082994552,
+      "false_negative_fema_only": 898963,
+      "false_positive_hand_only": 999974,
+      "fema_cells": 2056099,
+      "fema_coverage_pct": 6.633209286032956,
+      "hand_cells": 2157110,
+      "hand_coverage_pct": 6.959082263545943,
+      "iou": 0.37863493444037494,
+      "iou_lift_vs_random": 10.770410680664044,
+      "overlap_pct_of_fema": 56.2782239571149,
+      "overlap_pct_of_hand": 53.642883302196,
+      "precision": 0.53642883302196,
+      "precision_lift_vs_random": 8.08701806155095,
+      "recall": 0.562782239571149,
+      "threshold_ft": 6.0,
+      "threshold_m": 1.8288000000000002,
+      "true_negative": 27940974,
+      "true_positive": 1157136,
+      "valid_cells": 30997047
+    },
+    {
+      "expected_random_iou": 0.041614158416187146,
+      "expected_random_precision": 0.06633209286032957,
+      "expected_random_true_positive": 206547.12603965146,
+      "false_negative_fema_only": 580561,
+      "false_positive_hand_only": 1638296,
+      "fema_cells": 2056099,
+      "fema_coverage_pct": 6.633209286032956,
+      "hand_cells": 3113834,
+      "hand_coverage_pct": 10.045582729219335,
+      "iou": 0.3993990897021028,
+      "iou_lift_vs_random": 9.597673121433207,
+      "overlap_pct_of_fema": 71.76395689118083,
+      "overlap_pct_of_hand": 47.3865337715498,
+      "precision": 0.473865337715498,
+      "precision_lift_vs_random": 7.143832152458692,
+      "recall": 0.7176395689118082,
+      "threshold_ft": 10.0,
+      "threshold_m": 3.048,
+      "true_negative": 27302652,
+      "true_positive": 1475538,
+      "valid_cells": 30997047
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "dataset_version": "hand-houston-20260514a",
+  "region_count": 2,
+  "regions": [
+    {
+      "metrics": "birmingham-prototype/metrics.json",
+      "region_id": "birmingham-prototype",
+      "summary": "birmingham-prototype/summary.md"
+    },
+    {
+      "metrics": "houston-bayou-pilot/metrics.json",
+      "region_id": "houston-bayou-pilot",
+      "summary": "houston-bayou-pilot/summary.md"
+    }
+  ]
+}
