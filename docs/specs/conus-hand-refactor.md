@@ -1,6 +1,6 @@
 # CONUS HAND Refactor Spec
 
-Status: Phase 4 implementation review pending
+Status: Phase 6 implementation review pending
 Owner: Codex
 Baseline commit: `1865fd4 Add Birmingham HAND prototype`
 
@@ -369,6 +369,22 @@ Deliverables:
   HAND values, sample images.
 
 Opus review before any large compute.
+
+Measured Phase 6 result:
+
+- Terrain manifest loading now supports `TERRAIN_MANIFEST_PATH`, with the
+  Birmingham built-in source retained as the no-file fallback.
+- Route context uses the active terrain manifest dataset version, so the client
+  is not pinned to the Birmingham constant once a national manifest exists.
+- Dynamic write-through cache has an optional `TERRAIN_CACHE_MAX_BYTES` cap and
+  interval-gated pruning, disabled by default.
+- `tools/hand/precompute_terrain_cache.py` supports `--workers`,
+  `--shard-count`, and `--shard-index`; tile-column sharding was dry-run tested
+  against Birmingham z9-z12.
+- `tools/hand/conus_build_plan.py` emits a dry-run `terrain-manifest.json` and
+  `build-jobs.json` for at least Birmingham plus Houston representative regions.
+  The job manifest records inputs, stages, mosaic/cache rules, and QA metrics
+  before any national compute is attempted.
 
 ### Phase 7: CONUS pilot compute
 
