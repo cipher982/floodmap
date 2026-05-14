@@ -239,6 +239,27 @@
                     <span>Ocean/Water</span>
                 </div>
             </div>
+
+            <!-- HAND drainage mode legend -->
+            <div id="hand-legend" class="legend-content" style="display: none;">
+                <h4>Drainage Height</h4>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgba(33, 150, 243, 0.86);"></span>
+                    <span>0-0.5m above drainage</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgba(244, 67, 54, 0.8);"></span>
+                    <span>0.5-2m</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgba(255, 193, 7, 0.6);"></span>
+                    <span>2-5m</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background-color: rgba(76, 175, 80, 0.5);"></span>
+                    <span>Within selected threshold</span>
+                </div>
+            </div>
         </div>
 
         <div class="sidebar">
@@ -269,13 +290,15 @@
                     <label>View Mode:</label>
                     <div class="segmented-control" id="view-mode">
                         <input type="radio" name="view-mode" id="elevation-mode" value="elevation" checked>
-                        <label for="elevation-mode">🗻 Elevation</label>
+                        <label for="elevation-mode">Elevation</label>
                         <input type="radio" name="view-mode" id="flood-mode" value="flood">
-                        <label for="flood-mode">🌊 Flood Risk</label>
+                        <label for="flood-mode">Flood Risk</label>
+                        <input type="radio" name="view-mode" id="hand-mode" value="hand">
+                        <label for="hand-mode">Drainage</label>
                     </div>
                 </div>
                 <div class="control-group" id="water-level-controls">
-                    <label for="water-level">Water Level:</label>
+                    <label id="water-level-label" for="water-level">Water Level:</label>
                     <input type="range" id="water-level" min="0" max="100" step="1" value="30">
                     <div id="water-level-display-container">
                         <span id="water-level-display">1.0m</span>

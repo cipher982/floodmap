@@ -22,6 +22,10 @@ async def test_view_mode_switching_updates_client_tile_source(map_page: MapPage)
     flood_source = await map_page.get_current_tile_source()
     assert "client://flood/" in flood_source
 
+    await map_page.set_view_mode("hand")
+    hand_source = await map_page.get_current_tile_source()
+    assert "client://hand/" in hand_source
+
     await map_page.set_view_mode("elevation")
     elevation_source_again = await map_page.get_current_tile_source()
     assert elevation_source_again == "client://elevation/{z}/{x}/{y}"

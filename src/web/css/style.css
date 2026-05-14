@@ -578,6 +578,16 @@ button:disabled {
     transform: scale(1.02);
 }
 
+.segmented-control input[type="radio"]:disabled + label {
+    cursor: not-allowed;
+    color: #94a3b8;
+    opacity: 0.65;
+}
+
+.segmented-control input[type="radio"]:disabled + label:hover {
+    transform: none;
+}
+
 .segmented-control label:active {
     transform: scale(0.98);
 }

@@ -58,7 +58,9 @@ function normalizeZoom(value, fallback = FLOODMAP_DEFAULT_VIEW_STATE.zoom) {
 }
 
 function normalizeViewMode(value, fallback = FLOODMAP_DEFAULT_VIEW_STATE.view) {
-    return value === 'flood' || value === 'elevation' ? value : fallback;
+    return value === 'flood' || value === 'elevation' || value === 'hand'
+        ? value
+        : fallback;
 }
 
 function normalizeWaterLevel(value, fallback = FLOODMAP_DEFAULT_VIEW_STATE.water) {

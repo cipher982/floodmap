@@ -68,6 +68,8 @@ class WorkerElevationRenderer {
         this._elevationLut = null;
         this._floodLut = null;
         this._floodLutWlKey = null;
+        this._handLut = null;
+        this._handLutThresholdKey = null;
         this._lutRebuilds = 0;
     }
 
@@ -85,6 +87,13 @@ class WorkerElevationRenderer {
             return -32768; // NODATA sentinel value
         }
         return (uint16Value / 65534) * this.ELEVATION_RANGE + this.ELEVATION_MIN;
+    }
+
+    decodeHandHeight(uint16Value) {
+        if (uint16Value === this.NODATA_VALUE) {
+            return Number.NaN;
+        }
+        return uint16Value / 10.0;
     }
 
     /**
@@ -140,6 +149,29 @@ class WorkerElevationRenderer {
             }
         }
         return stops[stops.length - 1].color;
+    }
+
+    calculateHandColor(heightAboveDrainageM, thresholdM) {
+        if (!Number.isFinite(heightAboveDrainageM)) {
+            return this.colors.TRANSPARENT;
+        }
+
+        const threshold = Number.isFinite(thresholdM) ? Math.max(0, thresholdM) : 1.0;
+        if (heightAboveDrainageM > threshold) {
+            return this.colors.TRANSPARENT;
+        }
+        if (heightAboveDrainageM <= 0.5) {
+            return this.colors.FLOODED;
+        }
+        if (heightAboveDrainageM <= 2.0) {
+            const t = (heightAboveDrainageM - 0.5) / 1.5;
+            return this.interpolateColors(this.colors.FLOODED, this.colors.DANGER, t);
+        }
+        if (heightAboveDrainageM <= 5.0) {
+            const t = (heightAboveDrainageM - 2.0) / 3.0;
+            return this.interpolateColors(this.colors.DANGER, this.colors.CAUTION, t);
+        }
+        return this.colors.SAFE;
     }
 
     /**
@@ -210,6 +242,17 @@ class WorkerElevationRenderer {
         return lut;
     }
 
+    buildHandLut(thresholdM) {
+        const lut = new Uint32Array(65536);
+        for (let u = 0; u < 65536; u++) {
+            const height = this.decodeHandHeight(u);
+            const [r, g, b, a] = this.calculateHandColor(height, thresholdM);
+            lut[u] = this._packRgbaToU32(r, g, b, a);
+        }
+        this._lutRebuilds++;
+        return lut;
+    }
+
     getElevationLut() {
         if (!this._elevationLut) this._elevationLut = this.buildElevationLut();
         return this._elevationLut;
@@ -222,6 +265,15 @@ class WorkerElevationRenderer {
             this._floodLutWlKey = wlKey;
         }
         return this._floodLut;
+    }
+
+    getHandLut(thresholdM) {
+        const thresholdKey = Math.round(thresholdM * 10) / 10;
+        if (!this._handLut || this._handLutThresholdKey !== thresholdKey) {
+            this._handLut = this.buildHandLut(thresholdKey);
+            this._handLutThresholdKey = thresholdKey;
+        }
+        return this._handLut;
     }
 }
 
@@ -278,9 +330,11 @@ self.onmessage = function(e) {
 
             // Fast-path: check if entire tile is NODATA
             if (renderer.isAllNoData(elevationArray)) {
-                const fillColor = (mode === 'flood')
+                const fillColor = mode === 'flood'
                     ? renderer.WATER_RGBA
-                    : renderer.OCEAN_RGBA;
+                    : mode === 'hand'
+                        ? renderer.colors.TRANSPARENT
+                        : renderer.OCEAN_RGBA;
 
                 const packed = renderer._packRgbaToU32(fillColor[0], fillColor[1], fillColor[2], fillColor[3]);
                 pixelU32.fill(packed);
@@ -300,9 +354,11 @@ self.onmessage = function(e) {
                 return;
             }
 
-            const lut = (mode === 'elevation')
+            const lut = mode === 'elevation'
                 ? renderer.getElevationLut()
-                : renderer.getFloodLut(waterLevel);
+                : mode === 'hand'
+                    ? renderer.getHandLut(waterLevel)
+                    : renderer.getFloodLut(waterLevel);
 
             // Process each pixel: rgba32 = lut[u16]
             for (let i = 0; i < elevationArray.length; i++) {

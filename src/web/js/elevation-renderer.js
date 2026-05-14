@@ -22,6 +22,7 @@ class ElevationRenderer {
 
         // Loading state tracking
         this.loadingTiles = new Map();
+        this.terrainMetadataCache = new Map();
 
         // Statistics
         this.stats = {
@@ -95,6 +96,10 @@ class ElevationRenderer {
         }));
     }
 
+    makeNoDataTile() {
+        return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);
+    }
+
     _elevVizTFromMeters(elevationM) {
         const e = Math.max(0, Math.min(this.ELEV_VIZ_MAX_M, elevationM));
         const s = this.ELEV_VIZ_ASINH_SCALE_M;
@@ -146,7 +151,7 @@ class ElevationRenderer {
                 if (elevationData.length !== this.TILE_SIZE * this.TILE_SIZE) {
                     console.warn(`⚠️ Invalid data size for tile ${key}: ${elevationData.length} bytes (expected ${this.TILE_SIZE * this.TILE_SIZE})`);
                     // Return NODATA tile for invalid data size
-                    return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);
+                    return this.makeNoDataTile();
                 }
 
                 // Debug: log tile loading (development mode only)
@@ -174,7 +179,127 @@ class ElevationRenderer {
                 console.error(`   URL was: ${url.toString()}`);
                 this.loadingTiles.delete(key);
                 // Return NODATA tile on error
-                return new Uint16Array(this.TILE_SIZE * this.TILE_SIZE).fill(this.NODATA_VALUE);
+                return this.makeNoDataTile();
+            });
+
+        this.loadingTiles.set(key, loadPromise);
+        return loadPromise;
+    }
+
+    getTerrainLayerConfig(layer) {
+        if (typeof window === 'undefined') return {};
+        const routeContext = window.FLOODMAP_ROUTE_CONTEXT;
+        const terrainLayers = routeContext && typeof routeContext === 'object'
+            ? routeContext.terrainLayers
+            : null;
+        const config = terrainLayers && typeof terrainLayers === 'object'
+            ? terrainLayers[layer]
+            : null;
+        return config && typeof config === 'object' ? config : {};
+    }
+
+    async getTerrainMetadata(layer, signal = null) {
+        if (this.terrainMetadataCache.has(layer)) {
+            return this.terrainMetadataCache.get(layer);
+        }
+
+        const url = new URL(
+            requireFloodmapApiUrl()(`/v2/terrain/${layer}/metadata`),
+            window.location.origin
+        );
+        const response = await fetch(url.toString(), { signal });
+        if (!response.ok) {
+            throw new Error(`Failed to load ${layer} terrain metadata: ${response.status}`);
+        }
+        const metadata = await response.json();
+        this.terrainMetadataCache.set(layer, metadata);
+        return metadata;
+    }
+
+    async buildTerrainTileRequestUrl(layer, z, x, y, signal = null) {
+        const config = this.getTerrainLayerConfig(layer);
+        let datasetVersion = typeof config.datasetVersion === 'string'
+            ? config.datasetVersion
+            : '';
+        if (!datasetVersion) {
+            const metadata = await this.getTerrainMetadata(layer, signal);
+            datasetVersion = metadata.dataset_version;
+        }
+        if (!datasetVersion) {
+            throw new Error(`No dataset version available for terrain layer ${layer}`);
+        }
+
+        const url = new URL(
+            requireFloodmapApiUrl()(`/v2/terrain/${layer}/${datasetVersion}/${z}/${x}/${y}.u16`),
+            window.location.origin
+        );
+        const tileVersion =
+            (typeof window !== 'undefined'
+                && (window.FLOODMAP_TILE_VERSION || window.FLOODMAP_ASSET_VERSION))
+                ? (window.FLOODMAP_TILE_VERSION || window.FLOODMAP_ASSET_VERSION)
+                : null;
+        if (tileVersion) url.searchParams.set('v', tileVersion);
+        return url;
+    }
+
+    async loadTerrainTile(layer, z, x, y, signal = null) {
+        if (layer === 'elevation') {
+            return this.loadElevationTile(z, x, y, signal);
+        }
+
+        const config = this.getTerrainLayerConfig(layer);
+        if (config.enabled === false) {
+            return this.makeNoDataTile();
+        }
+
+        const key = `${layer}:${z}/${x}/${y}`;
+        if (this.elevationCache.has(key)) {
+            this.stats.cacheHits++;
+            const cached = this.elevationCache.get(key);
+            this.elevationCache.delete(key);
+            this.elevationCache.set(key, cached);
+            return cached;
+        }
+        if (this.loadingTiles.has(key)) {
+            return this.loadingTiles.get(key);
+        }
+
+        const loadPromise = this.buildTerrainTileRequestUrl(layer, z, x, y, signal)
+            .then((url) => fetch(url.toString(), { signal }))
+            .then((response) => {
+                if (response.status === 404) {
+                    return { buffer: null, cacheable: true };
+                }
+                if (response.status === 503) {
+                    return { buffer: null, cacheable: false };
+                }
+                if (!response.ok) {
+                    throw new Error(`Failed to load ${layer} terrain tile ${key}: ${response.status}`);
+                }
+                return response.arrayBuffer().then((buffer) => ({ buffer, cacheable: true }));
+            })
+            .then(({ buffer, cacheable }) => {
+                const terrainData = buffer ? new Uint16Array(buffer) : this.makeNoDataTile();
+                if (terrainData.length !== this.TILE_SIZE * this.TILE_SIZE) {
+                    console.warn(`Invalid data size for ${layer} tile ${key}: ${terrainData.length} values`);
+                    this.loadingTiles.delete(key);
+                    return this.makeNoDataTile();
+                }
+                if (cacheable) {
+                    this.storeElevationTile(key, terrainData);
+                }
+                this.loadingTiles.delete(key);
+                this.stats.tilesLoaded++;
+                return terrainData;
+            })
+            .catch((error) => {
+                if (error?.name === 'AbortError') {
+                    this.loadingTiles.delete(key);
+                    throw error;
+                }
+                console.error(`Error loading ${layer} terrain tile ${key}:`, error);
+                this.loadingTiles.delete(key);
+                return this.makeNoDataTile();
             });
 
         this.loadingTiles.set(key, loadPromise);
@@ -336,6 +461,13 @@ class ElevationRenderer {
         return (uint16Value / 65534) * this.ELEVATION_RANGE + this.ELEVATION_MIN;
     }
 
+    decodeHandHeight(uint16Value) {
+        if (uint16Value === this.NODATA_VALUE) {
+            return Number.NaN;
+        }
+        return uint16Value / 10.0;
+    }
+
     /**
      * Calculate flood risk color based on elevation and water level
      * @param {number} elevation - Elevation in meters
@@ -400,6 +532,39 @@ class ElevationRenderer {
             }
         }
         return stops[stops.length - 1].color;
+    }
+
+    calculateHandColor(heightAboveDrainageM, thresholdM) {
+        if (!Number.isFinite(heightAboveDrainageM)) {
+            return this.colors.TRANSPARENT;
+        }
+
+        const threshold = Number.isFinite(thresholdM) ? Math.max(0, thresholdM) : 1.0;
+        if (heightAboveDrainageM > threshold) {
+            return this.colors.TRANSPARENT;
+        }
+        if (heightAboveDrainageM <= 0.5) {
+            return this.colors.FLOODED;
+        }
+        if (heightAboveDrainageM <= 2.0) {
+            const t = (heightAboveDrainageM - 0.5) / 1.5;
+            return this.interpolateColors(this.colors.FLOODED, this.colors.DANGER, t);
+        }
+        if (heightAboveDrainageM <= 5.0) {
+            const t = (heightAboveDrainageM - 2.0) / 3.0;
+            return this.interpolateColors(this.colors.DANGER, this.colors.CAUTION, t);
+        }
+        return this.colors.SAFE;
+    }
+
+    calculateTileColor(rawValue, mode, waterLevel) {
+        if (mode === 'elevation') {
+            return this.calculateElevationColor(this.decodeElevation(rawValue));
+        }
+        if (mode === 'hand') {
+            return this.calculateHandColor(this.decodeHandHeight(rawValue), waterLevel);
+        }
+        return this.calculateFloodColor(this.decodeElevation(rawValue), waterLevel);
     }
 
     /**

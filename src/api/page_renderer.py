@@ -7,6 +7,7 @@ from html import escape
 from pathlib import Path
 from typing import Final
 
+from config import BIRMINGHAM_HAND_DATASET_VERSION, TERRAIN_V2_ENABLED
 from location_catalog import (
     HOME_DEFAULT_VIEW_STATE,
     CityPage,
@@ -20,7 +21,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260513a"
+ASSET_VERSION: Final[str] = "20260514a"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )
@@ -57,6 +58,19 @@ def _render_context_script(route_context: dict[str, object]) -> str:
 def _render_json_ld(payload: dict[str, object]) -> str:
     json_ld = json.dumps(payload, separators=(",", ":"))
     return f'    <script type="application/ld+json">{json_ld}</script>'
+
+
+def _terrain_route_context() -> dict[str, object]:
+    return {
+        "terrainLayers": {
+            "hand": {
+                "enabled": TERRAIN_V2_ENABLED,
+                "datasetVersion": BIRMINGHAM_HAND_DATASET_VERSION,
+                "label": "Drainage",
+                "coverageLabel": "Birmingham prototype",
+            }
+        }
+    }
 
 
 def _build_website_node() -> dict[str, object]:
@@ -270,6 +284,7 @@ def build_home_page_html() -> str:
             "pageType": "home",
             "canonicalPath": "/floodmap",
             "defaultViewState": dict(HOME_DEFAULT_VIEW_STATE),
+            **_terrain_route_context(),
         },
         structured_data_html=_build_home_structured_data(
             "FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk",
@@ -327,6 +342,7 @@ def build_city_page_html(city_page: CityPage) -> str:
             "citySlug": city_page.city_slug,
             "locationName": full_name,
             "defaultViewState": city_page.default_view_state.as_dict(),
+            **_terrain_route_context(),
         },
         structured_data_html=_build_city_structured_data(
             city_page,
@@ -400,6 +416,7 @@ def build_zip_page_html(zip_page: ZipPage) -> str:
             "citySlug": zip_page.city_slug,
             "locationName": zip_page.full_name,
             "defaultViewState": zip_page.default_view_state.as_dict(),
+            **_terrain_route_context(),
         },
         robots_meta_html='    <meta name="robots" content="noindex,follow">',
         nearby_links_html=_build_location_link_section(

@@ -38,7 +38,7 @@ class FloodMapClient {
         this.initialViewState = requireFloodmapGlobal('FloodmapUrlState')
             .parseFloodmapUrlState(window.location.href, this.defaultViewState);
         this.currentWaterLevel = this.initialViewState.water;
-        this.viewMode = this.initialViewState.view;
+        this.viewMode = this.normalizeInitialViewMode(this.initialViewState.view);
         this.jumpPlanner = requireFloodmapGlobal('FloodmapJumpPlanner');
         this.elevationRenderer = new ElevationRenderer();
         this.modelNoteState = { nearWater: false, coastal: false };
@@ -56,6 +56,22 @@ class FloodMapClient {
         this.lastProgressiveJumpPlan = null;
         this.refinementNeighborPrefetchTimer = null;
         this.suppressViewportSync = false;
+        this.levelPresets = {
+            flood: [
+                { level: 0.5, label: 'High Tide (0.5m)' },
+                { level: 3.0, label: 'Storm Surge (3m)' },
+                { level: 6.0, label: 'Category 5 (6m)' },
+                { level: 15.0, label: 'Extreme (15m)' },
+                { level: 1.0, label: '2100 Baseline (+1m)' }
+            ],
+            hand: [
+                { level: 0.5, label: 'Creek Edge (0.5m)' },
+                { level: 1.0, label: 'Low Corridor (1m)' },
+                { level: 2.0, label: 'Urban Floodplain (2m)' },
+                { level: 5.0, label: 'Valley Floor (5m)' },
+                { level: 10.0, label: 'Broad Basin (10m)' }
+            ]
+        };
 
         // Initialize WebWorker for rendering if available
         this.initWorker();
@@ -73,6 +89,26 @@ class FloodMapClient {
         console.log('🚀 Client-side rendering initialized');
 
         this.init();
+    }
+
+    getTerrainLayerConfig(layer) {
+        const terrainLayers = this.routeContext?.terrainLayers;
+        const config = terrainLayers && typeof terrainLayers === 'object'
+            ? terrainLayers[layer]
+            : null;
+        return config && typeof config === 'object' ? config : {};
+    }
+
+    isTerrainLayerEnabled(layer) {
+        return this.getTerrainLayerConfig(layer).enabled === true;
+    }
+
+    isViewModeAvailable(mode) {
+        return mode !== 'hand' || this.isTerrainLayerEnabled('hand');
+    }
+
+    normalizeInitialViewMode(mode) {
+        return this.isViewModeAvailable(mode) ? mode : 'elevation';
     }
 
     initWorker() {
@@ -164,7 +200,7 @@ class FloodMapClient {
                 const url = params.url.replace('client://', '');
                 const parts = url.split('/');
 
-                if ((parts[0] === 'flood' || parts[0] === 'elevation') && parts.length >= 4) {
+                if ((parts[0] === 'flood' || parts[0] === 'elevation' || parts[0] === 'hand') && parts.length >= 4) {
                     const mode = parts[0];
                     const z = parseInt(parts[1]);
                     const x = parseInt(parts[2]);
@@ -196,10 +232,12 @@ class FloodMapClient {
     async generateTile(z, x, y, mode, waterLevel = null, signal = null) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-        // Load elevation data
-        let elevationData;
+        // Load terrain data. Flood and elevation modes use absolute elevation;
+        // HAND mode uses drainage-relative height encoded as uint16 decimeters.
+        const terrainLayer = mode === 'hand' ? 'hand' : 'elevation';
+        let terrainData;
         try {
-            elevationData = await this.elevationRenderer.loadElevationTile(z, x, y, signal);
+            terrainData = await this.elevationRenderer.loadTerrainTile(terrainLayer, z, x, y, signal);
         } catch (error) {
             if (error?.name === 'AbortError') {
                 if (window.DEBUG_TILES) this.tileDebug.abortedFetches++;
@@ -212,17 +250,20 @@ class FloodMapClient {
         // Debug logging (development mode only)
         if (window.DEBUG_TILES && Math.random() < 0.05) { // 5% of tiles when debugging enabled
             console.log(`🔍 Debug tile ${z}/${x}/${y}:`, {
-                dataLength: elevationData.length,
-                first10Values: Array.from(elevationData.slice(0, 10)),
-                centerValue: elevationData[128 * 256 + 128],
-                decodedCenter: this.elevationRenderer.decodeElevation(elevationData[128 * 256 + 128])
+                mode,
+                dataLength: terrainData.length,
+                first10Values: Array.from(terrainData.slice(0, 10)),
+                centerValue: terrainData[128 * 256 + 128],
+                decodedCenter: mode === 'hand'
+                    ? this.elevationRenderer.decodeHandHeight(terrainData[128 * 256 + 128])
+                    : this.elevationRenderer.decodeElevation(terrainData[128 * 256 + 128])
             });
         }
 
         // Try WebWorker rendering if available
         if (this.workerReady) {
             try {
-                const result = await this.renderTileInWorker(elevationData, mode, waterLevel, signal);
+                const result = await this.renderTileInWorker(terrainData, mode, waterLevel, signal);
                 if (result?.pngBuffer) {
                     return new Blob([result.pngBuffer], { type: 'image/png' });
                 }
@@ -235,10 +276,10 @@ class FloodMapClient {
         }
 
         // Main thread rendering (fallback or when worker not available)
-        return this.renderTileMainThread(z, x, y, elevationData, mode, waterLevel, signal);
+        return this.renderTileMainThread(z, x, y, terrainData, mode, waterLevel, signal);
     }
 
-    async renderTileInWorker(elevationData, mode, waterLevel, signal = null) {
+    async renderTileInWorker(terrainData, mode, waterLevel, signal = null) {
         return new Promise((resolve, reject) => {
             const jobId = this.workerJobId++;
 
@@ -286,10 +327,10 @@ class FloodMapClient {
 
             // Copy only the relevant region (handles non-zero byteOffset safely).
             // Note: We cannot transfer the original cached buffer because it would
-            // detach and corrupt the elevationCache entry.
-            const buffer = elevationData.buffer.slice(
-                elevationData.byteOffset,
-                elevationData.byteOffset + elevationData.byteLength
+            // detach and corrupt the shared terrain cache entry.
+            const buffer = terrainData.buffer.slice(
+                terrainData.byteOffset,
+                terrainData.byteOffset + terrainData.byteLength
             );
             this.renderWorker.postMessage({
                 type: 'render',
@@ -305,7 +346,7 @@ class FloodMapClient {
         });
     }
 
-    async renderTileMainThread(z, x, y, elevationData, mode, waterLevel, signal = null) {
+    async renderTileMainThread(z, x, y, terrainData, mode, waterLevel, signal = null) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
         // Create canvas
@@ -319,10 +360,12 @@ class FloodMapClient {
         const data = imageData.data;
 
         // Fast-path: if the entire tile is NODATA, fill with a consistent water/ocean color
-        if (this.elevationRenderer.isAllNoData(elevationData)) {
-            const fillColor = (mode === 'flood')
-                ? this.elevationRenderer.colors.FLOODED
-                : this.elevationRenderer.OCEAN_RGBA;
+        if (this.elevationRenderer.isAllNoData(terrainData)) {
+            const fillColor = mode === 'flood'
+                ? this.elevationRenderer.WATER_RGBA
+                : mode === 'hand'
+                    ? this.elevationRenderer.colors.TRANSPARENT
+                    : this.elevationRenderer.OCEAN_RGBA;
             this.elevationRenderer.fillImageData(imageData, fillColor);
             ctx.putImageData(imageData, 0, 0);
             return new Promise((resolve, reject) => {
@@ -342,17 +385,16 @@ class FloodMapClient {
 
         // Process each pixel - simple 1:1 mapping
         let debugColorSample = null;
-        for (let i = 0; i < elevationData.length; i++) {
-            const elevation = this.elevationRenderer.decodeElevation(elevationData[i]);
-            const color = mode === 'elevation'
-                ? this.elevationRenderer.calculateElevationColor(elevation)
-                : this.elevationRenderer.calculateFloodColor(elevation, waterLevel);
+        for (let i = 0; i < terrainData.length; i++) {
+            const color = this.elevationRenderer.calculateTileColor(terrainData[i], mode, waterLevel);
 
             // Debug: sample first non-transparent color
             if (!debugColorSample && color[3] > 0) {
                 debugColorSample = {
-                    raw: elevationData[i],
-                    elevation,
+                    raw: terrainData[i],
+                    decoded: mode === 'hand'
+                        ? this.elevationRenderer.decodeHandHeight(terrainData[i])
+                        : this.elevationRenderer.decodeElevation(terrainData[i]),
                     color,
                     mode
                 };
@@ -553,6 +595,9 @@ class FloodMapClient {
         if (this.viewMode === 'elevation') {
             // Client-side elevation rendering (no server requests)
             return 'client://elevation/{z}/{x}/{y}';
+        } else if (this.viewMode === 'hand') {
+            const clusteredThreshold = Math.round(this.currentWaterLevel * 10) / 10;
+            return `client://hand/{z}/{x}/{y}?threshold=${clusteredThreshold}`;
         } else {
             // Client-side flood rendering
             // Include clustered water level in URL to bust MapLibre's tile cache on level change
@@ -602,9 +647,14 @@ class FloodMapClient {
 
         // View mode radio buttons
         const viewModeRadios = document.querySelectorAll('input[name="view-mode"]');
+        this.configureViewModeAvailability();
         this.syncViewModeControls();
         viewModeRadios.forEach(radio => {
             radio.addEventListener('change', (e) => {
+                if (!this.isViewModeAvailable(e.target.value)) {
+                    this.syncViewModeControls();
+                    return;
+                }
                 this.viewMode = e.target.value;
                 this.updateViewMode();
                 this.updateModelNote(this.modelNoteState);
@@ -689,8 +739,56 @@ class FloodMapClient {
     }
 
     syncViewModeControls() {
+        this.configureViewModeAvailability();
         document.querySelectorAll('input[name="view-mode"]').forEach((radio) => {
             radio.checked = radio.value === this.viewMode;
+        });
+    }
+
+    configureViewModeAvailability() {
+        const handRadio = document.getElementById('hand-mode');
+        const handLabel = document.querySelector("label[for='hand-mode']");
+        if (!handRadio) return;
+
+        const enabled = this.isTerrainLayerEnabled('hand');
+        handRadio.disabled = !enabled;
+        if (handLabel) {
+            const config = this.getTerrainLayerConfig('hand');
+            const coverage = config.coverageLabel || 'prototype coverage';
+            handLabel.title = enabled
+                ? `Drainage-relative terrain: ${coverage}`
+                : 'Drainage mode is unavailable in this deployment.';
+        }
+
+        if (!enabled && this.viewMode === 'hand') {
+            this.viewMode = 'elevation';
+        }
+    }
+
+    getLevelControlMode() {
+        return this.viewMode === 'hand' ? 'hand' : 'flood';
+    }
+
+    syncLevelControlCopy() {
+        const label = document.getElementById('water-level-label');
+        const mode = this.getLevelControlMode();
+        if (label) {
+            label.textContent = mode === 'hand'
+                ? 'Drainage Threshold:'
+                : 'Water Level:';
+        }
+
+        const presets = this.levelPresets[mode] || this.levelPresets.flood;
+        const chips = Array.from(document.querySelectorAll('.preset-chip'));
+        chips.forEach((chip, index) => {
+            const preset = presets[index];
+            if (!preset) {
+                chip.style.display = 'none';
+                return;
+            }
+            chip.style.display = '';
+            chip.dataset.level = String(preset.level);
+            chip.textContent = preset.label;
         });
     }
 
@@ -699,6 +797,7 @@ class FloodMapClient {
         const waterLevelDisplay = document.getElementById('water-level-display');
         const waterLevelVibe = document.getElementById('water-level-vibe');
 
+        this.syncLevelControlCopy();
         if (waterLevelSlider) {
             waterLevelSlider.value = String(this.waterLevelToSlider(this.currentWaterLevel));
         }
@@ -725,6 +824,7 @@ class FloodMapClient {
         const waterLevelControls = document.getElementById('water-level-controls');
         const floodLegend = document.getElementById('flood-legend');
         const elevationLegend = document.getElementById('elevation-legend');
+        const handLegend = document.getElementById('hand-legend');
 
         this.updateModelNote(this.modelNoteState);
 
@@ -738,6 +838,7 @@ class FloodMapClient {
             // Show elevation legend, hide flood legend
             if (floodLegend) floodLegend.style.display = 'none';
             if (elevationLegend) elevationLegend.style.display = 'flex';
+            if (handLegend) handLegend.style.display = 'none';
         } else {
             waterLevelControls.style.display = 'block';
             setTimeout(() => {
@@ -745,9 +846,12 @@ class FloodMapClient {
                 waterLevelControls.style.transform = 'translateY(0)';
             }, 10);
 
-            // Show flood legend, hide elevation legend
+            this.syncWaterLevelControls();
+
+            // Show mode-specific legend
             if (elevationLegend) elevationLegend.style.display = 'none';
-            if (floodLegend) floodLegend.style.display = 'flex';
+            if (floodLegend) floodLegend.style.display = this.viewMode === 'flood' ? 'flex' : 'none';
+            if (handLegend) handLegend.style.display = this.viewMode === 'hand' ? 'flex' : 'none';
         }
 
         this.updateFloodLayer();
@@ -761,7 +865,7 @@ class FloodMapClient {
         const source = this.map.getSource('elevation-tiles');
         if (!source) return;
 
-        if (this.viewMode === 'flood') {
+        if (this.viewMode === 'flood' || this.viewMode === 'hand') {
             // Clear the renderer cache to force re-render with new water level
             if (this.elevationRenderer) {
                 this.elevationRenderer.clearRenderedCache();
@@ -1740,7 +1844,7 @@ class FloodMapClient {
                 <strong>Showing: ${name}</strong>
             </div>
             <p><strong>Location:</strong> ${label}</p>
-            <p><strong>Next step:</strong> Click any point on the map to sample elevation and flood risk there.</p>
+            <p><strong>Next step:</strong> Click any point on the map to sample the active terrain model there.</p>
         `;
     }
 
@@ -1770,6 +1874,26 @@ class FloodMapClient {
 
         let vibeText = '';
         let vibeClass = '';
+
+        if (this.viewMode === 'hand') {
+            if (waterLevel <= 0.5) {
+                vibeText = 'Tight';
+                vibeClass = 'vibe-normal';
+            } else if (waterLevel <= 2) {
+                vibeText = 'Low';
+                vibeClass = 'vibe-concerning';
+            } else if (waterLevel <= 5) {
+                vibeText = 'Broad';
+                vibeClass = 'vibe-dangerous';
+            } else {
+                vibeText = 'Very Broad';
+                vibeClass = 'vibe-extreme';
+            }
+
+            vibeElement.textContent = vibeText;
+            vibeElement.className = vibeClass;
+            return;
+        }
 
         if (waterLevel <= 2) {
             vibeText = 'Normal';
@@ -1823,8 +1947,16 @@ class FloodMapClient {
             if (lngLat && this.map) {
                 const zoom = Math.floor(this.map.getZoom());
                 const tileCoords = this.getTileCoordinates(lat, lng, zoom);
-                const tilePath = `/api/v1/tiles/elevation-data/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`;
+                const handDataset = this.getTerrainLayerConfig('hand').datasetVersion;
+                const tilePath = this.viewMode === 'hand' && handDataset
+                    ? `/api/v2/terrain/hand/${handDataset}/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`
+                    : `/api/v1/tiles/elevation-data/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`;
                 tileInfo = `🗂️ Tile: ${zoom}/${tileCoords.x}/${tileCoords.y} (${tilePath})`;
+            }
+
+            if (this.viewMode === 'hand') {
+                await this.assessDrainageHeight(lat, lng, tileInfo);
+                return;
             }
 
             // Water/coastal context detection via rendered vector tiles (simple + fast).
@@ -1896,12 +2028,141 @@ class FloodMapClient {
         }
     }
 
+    async assessDrainageHeight(lat, lng, tileInfo = '') {
+        const riskDetails = document.getElementById('risk-details');
+        try {
+            const sampleUrl = new URL(
+                requireFloodmapUrlHelper('floodmapApiUrl')('/v2/terrain/hand/sample'),
+                window.location.origin
+            );
+            sampleUrl.searchParams.set('lat', String(lat));
+            sampleUrl.searchParams.set('lng', String(lng));
+
+            const response = await fetch(sampleUrl.toString());
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                const message = response.status === 404
+                    ? 'No drainage-relative terrain is available for this point yet.'
+                    : 'Drainage-relative terrain is unavailable right now.';
+                this.updateDrainageRiskPanel({
+                    latitude: lat,
+                    longitude: lng,
+                    status: 'unknown',
+                    message,
+                    tileInfo
+                });
+                this.updateLocationInfo({
+                    latitude: lat,
+                    longitude: lng,
+                    elevation_m: null,
+                    tileInfo
+                });
+                return;
+            }
+
+            const heightM = Number(payload.height_m);
+            const thresholdM = this.currentWaterLevel;
+            const status = !Number.isFinite(heightM)
+                ? 'unknown'
+                : heightM <= 0.5
+                    ? 'very_high'
+                    : heightM <= 2
+                        ? 'high'
+                        : heightM <= thresholdM
+                            ? 'moderate'
+                            : 'low';
+
+            this.updateDrainageRiskPanel({
+                latitude: lat,
+                longitude: lng,
+                height_m: heightM,
+                height_ft: payload.height_ft,
+                threshold_m: thresholdM,
+                dataset_version: payload.dataset_version,
+                sample_source: payload.sample_source,
+                region: payload.region,
+                status,
+                tileInfo
+            });
+            this.updateLocationInfo({
+                latitude: lat,
+                longitude: lng,
+                elevation_m: null,
+                tileInfo
+            });
+            this.addDrainageMarker(lng, lat, {
+                height_m: heightM,
+                status
+            });
+        } catch (error) {
+            console.error('Drainage assessment error:', error);
+            if (riskDetails) {
+                this.updateDrainageRiskPanel({
+                    latitude: lat,
+                    longitude: lng,
+                    status: 'unknown',
+                    message: 'Drainage-relative terrain could not be sampled.',
+                    tileInfo
+                });
+            }
+        }
+    }
+
+    updateDrainageRiskPanel(data) {
+        const riskDetails = document.getElementById('risk-details');
+        if (!riskDetails) return;
+
+        const riskClass = `risk-${data.status || 'unknown'}`;
+        const heightLine = Number.isFinite(data.height_m)
+            ? `<p><strong>Height above mapped drainage:</strong> ${data.height_m.toFixed(2)}m (${this.escapeHtml(data.height_ft ?? '')} ft)</p>`
+            : '';
+        const thresholdLine = Number.isFinite(data.threshold_m)
+            ? `<p><strong>Current threshold:</strong> ${data.threshold_m.toFixed(1)}m</p>`
+            : '';
+        const sourceLine = data.sample_source
+            ? `<p><strong>Source:</strong> ${this.escapeHtml(data.region || 'terrain')} • ${this.escapeHtml(data.sample_source)}</p>`
+            : '';
+        const message = data.message
+            || (data.status === 'low'
+                ? 'This point is above the selected drainage threshold.'
+                : 'This point is inside the selected drainage-height threshold.');
+
+        riskDetails.innerHTML = `
+            <div class="risk-summary ${riskClass}">
+                <strong>Drainage: ${this.escapeHtml(String(data.status || 'unknown')).toUpperCase()}</strong>
+            </div>
+            <p><strong>Location:</strong> ${data.latitude.toFixed(4)}°, ${data.longitude.toFixed(4)}°</p>
+            ${heightLine}
+            ${thresholdLine}
+            <p><strong>Assessment:</strong> ${this.escapeHtml(message)}</p>
+            ${sourceLine}
+            ${data.tileInfo ? `<p><strong>Debug:</strong> ${this.escapeHtml(data.tileInfo)}</p>` : ''}
+        `;
+    }
+
     updateModelNote({ nearWater = false, coastal = false } = {}) {
         this.modelNoteState = { nearWater: !!nearWater, coastal: !!coastal };
         const el = document.getElementById('model-note');
         if (!el) return;
 
         // Only show in Flood Risk mode (it explains the slider’s meaning).
+        if (this.viewMode === 'hand') {
+            const config = this.getTerrainLayerConfig('hand');
+            el.style.display = 'block';
+            el.className = 'model-note model-note--warning';
+            el.innerHTML = `
+                <div class="model-note__title">Drainage-relative prototype</div>
+                <div class="model-note__body">Slider highlights land within a selected height above mapped drainage. Coverage: ${this.escapeHtml(config.coverageLabel || 'prototype region')}.</div>
+            `;
+            return;
+        }
+
         if (this.viewMode !== 'flood') {
             el.style.display = 'none';
             return;
@@ -2018,6 +2279,23 @@ class FloodMapClient {
                 // Silently ignore tracking errors
             }
         }
+    }
+
+    addDrainageMarker(lng, lat, data) {
+        this.clearMapMarkers();
+
+        const height = Number.isFinite(data.height_m)
+            ? `${data.height_m.toFixed(2)}m above drainage`
+            : 'Unknown drainage height';
+        new maplibregl.Marker({ color: '#2563eb' })
+            .setLngLat([lng, lat])
+            .setPopup(new maplibregl.Popup().setHTML(`
+                <div>
+                    <strong>Drainage: ${this.escapeHtml(data.status || 'unknown')}</strong><br>
+                    ${this.escapeHtml(height)}
+                </div>
+            `))
+            .addTo(this.map);
     }
 
     addLocationMarker(lng, lat, data) {

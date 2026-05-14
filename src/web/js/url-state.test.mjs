@@ -54,6 +54,20 @@ test("buildFloodmapShareUrl preserves unrelated params and formats state", () =>
   assert.equal(parsed.searchParams.get("water"), "6.0");
 });
 
+test("HAND drainage mode is a shareable view state", () => {
+  const url = buildFloodmapShareUrl("https://drose.io/floodmap", {
+    lat: 33.5186,
+    lng: -86.8104,
+    zoom: 10.7,
+    view: "hand",
+    water: 2.0,
+  });
+
+  const parsed = parseFloodmapUrlState(url);
+  assert.equal(parsed.view, "hand");
+  assert.equal(parsed.water, 2.0);
+});
+
 test("stripFloodmapStateParams removes only permalink keys", () => {
   const stripped = stripFloodmapStateParams(
     "https://drose.io/floodmap?debug=1&lat=27.95&lng=-82.46&zoom=8.00&view=elevation&water=1.0"

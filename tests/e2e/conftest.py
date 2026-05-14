@@ -24,6 +24,7 @@ def app_server():
     env["API_PORT"] = str(APP_PORT)
     env["ALLOW_MISSING_DATA"] = "true"
     env["ENVIRONMENT"] = "development"
+    env["TERRAIN_V2_ENABLED"] = "true"
 
     process = subprocess.Popen(
         [
