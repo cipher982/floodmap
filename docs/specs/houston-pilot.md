@@ -31,6 +31,8 @@ different story than a hilly inland creek corridor.
 
 ## Phase 0: Plan Review
 
+Status: complete (`2026-05-14`)
+
 Tasks:
 
 - Write this pilot plan.
@@ -42,7 +44,14 @@ Success criteria:
 - Memory, tile-content, drainage-name, drain-fraction, Birmingham-regression,
   manifest-routing, and rollback criteria are explicit in this file.
 
+Result:
+
+- Initial Hatch Opus review: `GO WITH FIXES`.
+- Final focused Hatch Opus review after criteria fixes: `GO`.
+
 ## Phase 1: Configurable Region Generator
+
+Status: complete (`2026-05-14`)
 
 Tasks:
 
@@ -60,7 +69,19 @@ Success criteria:
   compare back to the current source COG/static tiles within the existing
   tolerance.
 
+Result:
+
+- Added generic CLI: `tools/hand/generate_region_hand.py`.
+- Kept `tools/prototypes/generate_birmingham_drainage.py` as the underlying
+  default-Birmingham entry point.
+- Local Birmingham dynamic validation still passes against the existing COG and
+  prototype tiles.
+- Focused local checks passed: `uvx ruff check`, `uvx ruff format --check`, and
+  `uv run pytest tests/unit/test_config.py -q`.
+
 ## Phase 2: Houston Cube Build
+
+Status: complete (`2026-05-14`)
 
 Tasks:
 
@@ -90,7 +111,25 @@ Success criteria:
   the run is stopped for algorithm review before serving.
 - Cube storage paths resolve outside `/mnt/gemini`.
 
+Result:
+
+- Cube source COG:
+  `/mnt/storage/floodmap/data/terrain/hand/houston-bayou-pilot.tif`.
+- Source COG size: `46M` (`48,170,590` bytes).
+- DEM grid: `8911 x 8240`.
+- Selected flowlines: `3,083` of `6,100`.
+- Named sample includes `Buffalo Bayou`, `Greens Bayou`, `Cypress Creek`,
+  `Brays Bayou`, and `Sims Bayou`.
+- Valid HAND cells: `69,704,089`.
+- Drain-cell fraction: `1.038%`.
+- `3 ft` threshold area: `30.69%`.
+- Peak RSS: `4,477.9 MB`.
+- Wall time: `210.5 seconds`.
+- Cube path guard passed outside `/mnt/gemini`.
+
 ## Phase 3: Multi-Region Serving
+
+Status: complete (`2026-05-14`)
 
 Tasks:
 
@@ -114,7 +153,29 @@ Success criteria:
   `cp /mnt/storage/floodmap/data/terrain/manifest.pre-houston.json /mnt/storage/floodmap/data/terrain/manifest.json`
   and restart the Cube API before sharing any review URL.
 
+Result:
+
+- Wrote rollback manifest:
+  `/mnt/storage/floodmap/data/terrain/manifest.pre-houston.json`.
+- Wrote active two-region manifest:
+  `/mnt/storage/floodmap/data/terrain/manifest.json`.
+- Restarted Cube API with `TERRAIN_MANIFEST_PATH` set.
+- Metadata returns dataset `hand-houston-20260514a` with `2` regions.
+- Birmingham sample returns `8.2m` / `26.9ft`, region
+  `birmingham-prototype`.
+- Houston review sample returns `1.4m` / `4.6ft`, region
+  `houston-bayou-pilot`.
+- Houston vector tile z11 `481/846` returned `200`.
+- Houston HAND tile z11 `481/846` returned `131072` decompressed bytes,
+  `96.37%` non-NODATA pixels, and `x-terrain-source: dynamic-cog`.
+- Browser QA loaded `hand` mode with one MapLibre canvas and no blocking
+  console or page errors.
+- Screenshot showed Houston streets plus the Drainage overlay. Visual result is
+  much broader than Birmingham, consistent with the flat-terrain caveat.
+
 ## Phase 4: Review Gate
+
+Status: complete (`2026-05-14`)
 
 Tasks:
 
@@ -128,3 +189,8 @@ Success criteria:
   no storm sewer model, no pluvial rainfall model, no FEMA/return-period model,
   no subsidence model, no tidal surge model, and flat-terrain HAND can
   over-widen low corridors.
+
+Result:
+
+- Final Hatch Opus review verdict: `GO`.
+- No blockers remain for user review.
