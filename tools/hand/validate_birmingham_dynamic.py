@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import statistics
 import sys
 from collections import defaultdict
@@ -21,7 +22,8 @@ from terrain_cog import (  # noqa: E402
     sample_cog_point,
 )
 
-DEFAULT_COG = ROOT / "data" / "terrain" / "hand" / "birmingham-drainage.tif"
+DATA_ROOT = Path(os.getenv("FLOODMAP_DATA_ROOT", ROOT / "data")).expanduser()
+DEFAULT_COG = DATA_ROOT / "terrain" / "hand" / "birmingham-drainage.tif"
 DEFAULT_STATIC_TILES = (
     ROOT / "src" / "web" / "prototypes" / "birmingham-drainage" / "tiles"
 )

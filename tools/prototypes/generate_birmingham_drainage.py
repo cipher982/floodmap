@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,9 +40,10 @@ class PrototypeConfig:
 
 CONFIG = PrototypeConfig()
 ROOT = Path(__file__).resolve().parents[2]
+DATA_ROOT = Path(os.getenv("FLOODMAP_DATA_ROOT", ROOT / "data")).expanduser()
 OUT_DIR = ROOT / "src" / "web" / "prototypes" / CONFIG.name
 TILES_DIR = OUT_DIR / "tiles"
-SOURCE_DIR = ROOT / "data" / "terrain" / "hand"
+SOURCE_DIR = DATA_ROOT / "terrain" / "hand"
 SOURCE_COG_PATH = SOURCE_DIR / f"{CONFIG.name}.tif"
 MODEL_PATH = OUT_DIR / "model.npz"
 META_PATH = OUT_DIR / "metadata.json"
