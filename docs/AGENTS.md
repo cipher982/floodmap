@@ -7,4 +7,5 @@ too long. Prefer current-state checks over copied snapshots.
 - DEM data gaps / “blue polygons”: `docs/runbooks/data-gap-repair.md`
 - Cache-busting (Cloudflare + MapLibre): `docs/runbooks/cache-busting.md`
 - Rendering pipeline (worker/LUT/palette): `docs/runbooks/rendering-pipeline.md`
+- CONUS/HAND terrain architecture: `docs/specs/conus-hand-refactor.md`
 - Analytics (Umami): `docs/runbooks/analytics.md`

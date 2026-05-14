@@ -1,8 +1,8 @@
 # Floodmap (drose.io/floodmap) - Agent Quickstart
 
 FastAPI serves the public app and tile APIs for `https://drose.io/floodmap`.
-The browser owns MapLibre rendering: it fetches vector tiles plus raw elevation
-tiles and colors them client-side.
+The browser owns MapLibre rendering: it fetches vector tiles plus raw terrain
+tiles (elevation/HAND) and colors them client-side.
 
 ## Non-Negotiables
 - Never create/overwrite `.env` (ask before appending).
@@ -14,7 +14,8 @@ tiles and colors them client-side.
 
 ## Fast Checks
 - Python unit tests: `uv run pytest tests/unit -q`
-- JS unit test: `node --test src/web/js/render-worker.test.mjs`
+- JS unit tests: `node --test src/web/js/*.test.mjs`
+- Terrain/HAND focused tests: `uv run --with rasterio --with affine --extra test python -m pytest tests/unit/test_terrain_v2_endpoint.py tests/unit/test_terrain_cog.py tests/unit/test_hand_precompute_cache.py -q`
 - Prod health: `curl -s https://drose.io/floodmap/api/health | head`
 - Blank-map prod smoke: use a real browser and verify `window.floodMap`, `window.floodMap.map.loaded()`, and a non-empty `#map canvas`. If the static controls/legend show but MapLibre controls do not, suspect a stale cached client asset first.
 
