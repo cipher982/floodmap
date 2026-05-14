@@ -52,6 +52,7 @@ def test_manifest_validates_regions_and_finds_matching_region():
     region = manifest.find_region("hand", lon=-86.8025, lat=33.5207)
     assert region is not None
     assert region.id == "birmingham"
+    assert manifest.find_region("hand", lon=-86.52, lat=33.5207) is None
     assert manifest.find_region("hand", lon=-80.0, lat=25.0) is None
 
 
@@ -98,6 +99,19 @@ def test_hand_encoding_uses_decimeters_and_nodata():
     assert decoded[0, 0] == 0
     assert decoded[0, 1] == pytest.approx(1.2)
     assert math.isnan(decoded[1, 0])
+
+
+def test_decoders_accept_read_only_arrays_from_tile_bytes():
+    values = np.array([0, 10, int(U16_NODATA)], dtype=np.uint16)
+    read_only = np.frombuffer(values.tobytes(), dtype=np.uint16)
+
+    hand = decode_hand_meters(read_only)
+    elevation = decode_elevation_meters(read_only)
+
+    assert hand.tolist()[:2] == [0.0, 1.0]
+    assert math.isnan(hand[2])
+    assert elevation[0] == pytest.approx(-500.0)
+    assert math.isnan(elevation[2])
 
 
 def test_elevation_encoding_keeps_existing_v1_mapping():

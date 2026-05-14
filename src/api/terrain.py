@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 U16_NODATA = np.uint16(65535)
 U16_TILE_BYTES = TILE_SIZE * TILE_SIZE * np.dtype(np.uint16).itemsize
 TERRAIN_BATCH_MAGIC = b"FMT2"
-TERRAIN_BATCH_VERSION = 1
+TERRAIN_BATCH_VERSION = 1  # Interpret together with TERRAIN_BATCH_MAGIC.
 TERRAIN_BATCH_TILE_META_BYTES = 9  # uint8 z + uint32 x + uint32 y
 MAX_TERRAIN_BATCH_TILES = 24
 
@@ -53,7 +53,7 @@ class TerrainRegion(BaseModel):
 
     def contains(self, lon: float, lat: float) -> bool:
         west, south, east, north = self.bbox
-        return west <= lon <= east and south <= lat <= north
+        return west <= lon < east and south <= lat < north
 
 
 class TerrainLayer(BaseModel):
@@ -151,8 +151,9 @@ def encode_hand_meters(values_m: np.ndarray) -> np.ndarray:
 
 def decode_hand_meters(values_u16: np.ndarray) -> np.ndarray:
     values = np.asarray(values_u16, dtype=np.uint16)
-    decoded = values.astype(np.float32) / 10.0
-    decoded[values == U16_NODATA] = np.nan
+    valid = values != U16_NODATA
+    decoded = np.full(values.shape, np.nan, dtype=np.float32)
+    decoded[valid] = values[valid].astype(np.float32) / 10.0
     return decoded
 
 
@@ -175,8 +176,9 @@ def encode_elevation_meters(
 
 def decode_elevation_meters(values_u16: np.ndarray) -> np.ndarray:
     values = np.asarray(values_u16, dtype=np.uint16)
-    decoded = values.astype(np.float32) / 65534 * 9500 - 500
-    decoded[values == U16_NODATA] = np.nan
+    valid = values != U16_NODATA
+    decoded = np.full(values.shape, np.nan, dtype=np.float32)
+    decoded[valid] = values[valid].astype(np.float32) / 65534 * 9500 - 500
     return decoded
 
 
