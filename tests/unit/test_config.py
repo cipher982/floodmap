@@ -188,10 +188,9 @@ class TestSecurityConfiguration:
 
     def test_feature_flags_are_booleans(self):
         """Feature flags should be booleans."""
-        from config import ENABLE_DIAGNOSTICS, ENABLE_PERF_TEST_ROUTES
+        from config import ENABLE_DIAGNOSTICS
 
         assert isinstance(ENABLE_DIAGNOSTICS, bool)
-        assert isinstance(ENABLE_PERF_TEST_ROUTES, bool)
 
     def test_force_https_flag(self):
         """FORCE_HTTPS should be a boolean."""

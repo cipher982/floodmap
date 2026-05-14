@@ -1,9 +1,0 @@
-{
-  "url": "https://drose.io/floodmap?no_analytics=1",
-  "selector": "#map",
-  "width": 1440,
-  "height": 900,
-  "duration": 10000,
-  "git": "b3b8f25",
-  "ts": "2026-04-10T19:34:20.867Z"
-}

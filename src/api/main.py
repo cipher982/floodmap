@@ -162,7 +162,6 @@ validate_critical_data()
 from config import (
     ALLOWED_HOSTS,
     ENABLE_DIAGNOSTICS,
-    ENABLE_PERF_TEST_ROUTES,
     FORCE_HTTPS,
     IS_DEVELOPMENT,
     TERRAIN_V2_ENABLED,
@@ -177,7 +176,7 @@ from page_renderer import (
     build_zip_page_html,
 )
 from routers import diagnostics as diagnostics_router
-from routers import health, places, risk, terrain_v2, tiles_performance_test, tiles_v1
+from routers import health, places, risk, terrain_v2, tiles_v1
 from sitemaps import (
     build_city_sitemap_xml,
     build_pages_sitemap_xml,
@@ -257,11 +256,6 @@ if IS_DEVELOPMENT or ENABLE_DIAGNOSTICS:
 app.include_router(
     tiles_v1.router, tags=["tiles-v1"]
 )  # New v1 routes (already prefixed)
-
-if IS_DEVELOPMENT or ENABLE_PERF_TEST_ROUTES:
-    app.include_router(
-        tiles_performance_test.router, tags=["performance-testing"]
-    )  # Perf test routes
 
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 app.include_router(places.router, prefix="/api", tags=["places"])
