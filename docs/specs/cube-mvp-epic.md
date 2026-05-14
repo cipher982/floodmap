@@ -114,6 +114,8 @@ Result:
 
 ## Phase 3: End-to-End Cube Runtime
 
+Status: complete (`2026-05-14`)
+
 Tasks:
 
 - Start `tileserver-gl` against the Cube basemap on
@@ -132,7 +134,26 @@ Success criteria:
 - A HAND `.u16` tile returns `131072` bytes after decompression.
 - The app page loads with `view=hand` and the basemap configured.
 
+Result:
+
+- `tileserver-gl` container: `floodmap-cube-tileserver`.
+- Tileserver URL: `http://100.125.140.78:18080`.
+- FastAPI URL: `http://100.125.140.78:18000`.
+- Runtime env uses `FLOODMAP_DATA_ROOT=/mnt/storage/floodmap/data`,
+  `TERRAIN_V2_ENABLED=true`, `TERRAIN_CACHE_MAX_BYTES=21474836480`, and
+  `TILESERVER_URL=http://100.125.140.78:18080`.
+- `/api/health` returns JSON. Status is `critical` because original elevation
+  source tiles are intentionally absent from this MVP.
+- Vector endpoint returned `200` for Birmingham z12.
+- HAND metadata returned `hand-birmingham-20260513a`.
+- Downtown Birmingham sample returned `8.2m` / `26.9ft` from `source-cog`.
+- HAND z12 tile returned `131072` decompressed bytes with
+  `x-terrain-source: dynamic-cog`.
+- API needed `uv run --with rasterio --with affine` for dynamic COG serving.
+
 ## Phase 4: Laptop Review URL
+
+Status: complete (`2026-05-14`)
 
 Tasks:
 
@@ -147,6 +168,16 @@ Success criteria:
 - Browser console has no blocking tile or worker errors.
 - The review URL is documented in the final handoff.
 - Prod `https://drose.io/floodmap` is unaffected by the Cube MVP.
+
+Result:
+
+- Review URL:
+  `http://100.125.140.78:18000/?lat=33.5186&lng=-86.8104&zoom=12&view=hand&water=2.0`
+- Browser QA loaded `window.floodMap` in `hand` mode with one MapLibre canvas.
+- Screenshot showed vector streets plus the HAND Drainage overlay.
+- Console/page-error check found no blocking tile or worker failures. The only
+  console error was a non-blocking COOP warning caused by plain HTTP on a
+  non-localhost Tailscale origin.
 
 ## Phase 5: Pilot Region Readiness
 
