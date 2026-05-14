@@ -182,6 +182,8 @@ Result:
 
 ## Phase 5: Pilot Region Readiness
 
+Status: complete (`2026-05-14`)
+
 Tasks:
 
 - Confirm the existing Birmingham generation script can run from Cube.
@@ -194,6 +196,21 @@ Success criteria:
 - Birmingham can be regenerated or validated on Cube.
 - The same runtime can serve generated data without code changes.
 - Any second-region work gets its own follow-up plan and review gate.
+
+Result:
+
+- `tools/hand/validate_birmingham_dynamic.py` now respects
+  `FLOODMAP_DATA_ROOT`.
+- Cube validation read source COG from
+  `/mnt/storage/floodmap/data/terrain/hand/birmingham-drainage.tif`.
+- Compared all `73` Birmingham prototype tiles.
+- Valid comparison pixels: `3,499,040`.
+- Absolute difference p50/p95/max: `0.00 / 0.00 / 0.00 ft`.
+- NODATA mismatch: `994` pixels (`0.0208%`).
+- Cube cold render p50/p95: `38.0 / 93.1 ms`.
+- Cube hot render p50/p95: `0.0 / 0.0 ms`.
+- Downtown sample static/dynamic: `24.3 / 25.3 ft`.
+- Hatch Opus Phase 5 review verdict: `GO`.
 
 ## Out Of Scope For This MVP
 
