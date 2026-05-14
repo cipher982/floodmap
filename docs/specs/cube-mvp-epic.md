@@ -48,6 +48,8 @@ Success criteria:
 
 ## Phase 1: Cube Workspace
 
+Status: complete (`2026-05-14`)
+
 Tasks:
 
 - Verify live Cube storage, mounts, OS, Docker, Tailscale address, and port
@@ -68,6 +70,16 @@ Success criteria:
 - The repo on Cube reports the same commit as local.
 - No files are written under `/mnt/gemini`.
 - Ports `18000` and `18080` are free before startup.
+
+Result:
+
+- Cube Tailscale IP: `100.125.140.78`.
+- `/mnt/storage`: `7.3T` total, `3.3T` available.
+- `/mnt/gemini` is mounted live but intentionally unused.
+- Workspace root: `/mnt/storage/floodmap`.
+- Cube repo commit: `dad80fd865bc6d4c859c512a2bac376004d9a02e`.
+- `/home/drose/.local/bin/uv` is available on Cube.
+- Ports `18000` and `18080` were free before startup.
 
 ## Phase 2: Data Bootstrap
 
