@@ -1,0 +1,191 @@
+{
+  "artifact_dir": "/mnt/storage/floodmap/scratch/hand-boundary/huc4-0106-saco-buffer5km-clipped",
+  "buffer_km": 5.0,
+  "estimate": {
+    "compute_bbox": {
+      "cells": 270477735,
+      "columns": 15081,
+      "height_m": 179345.46951656137,
+      "raw_u16_bytes": 540955470,
+      "rows": 17935,
+      "width_m": 150805.15337407566
+    },
+    "compute_bbox_lonlat": [
+      -71.58521679942253,
+      42.766355692266146,
+      -69.7559295953125,
+      44.434960480306295
+    ],
+    "output_bbox": {
+      "cells": 238461735,
+      "columns": 14081,
+      "height_m": 169347.66012635082,
+      "raw_u16_bytes": 476923470,
+      "rows": 16935,
+      "width_m": 140811.22493506223
+    },
+    "output_bbox_lonlat": [
+      -71.52284640149553,
+      42.81108923547811,
+      -69.81814947423052,
+      44.39011452163321
+    ]
+  },
+  "gate_result": {
+    "area_3ft_pct": 14.38,
+    "automated_pass": false,
+    "checks": {
+      "peak_rss": false,
+      "source_cog_size": true,
+      "wall_time": true
+    },
+    "peak_rss_mb": 37530.5,
+    "source_cog_bytes": 168840015,
+    "valid_cell_pct": 51.6,
+    "wall_time_s": 1232.47
+  },
+  "metadata": {
+    "bbox_lonlat": [
+      -71.58521679942253,
+      42.766355692266146,
+      -69.7559295953125,
+      44.434960480306295
+    ],
+    "boundary_gate": {
+      "buffer_km": 5.0,
+      "compute_bbox_estimate": {
+        "cells": 270477735,
+        "columns": 15081,
+        "height_m": 179345.46951656137,
+        "raw_u16_bytes": 540955470,
+        "rows": 17935,
+        "width_m": 150805.15337407566
+      },
+      "compute_bbox_lonlat": [
+        -71.58521679942253,
+        42.766355692266146,
+        -69.7559295953125,
+        44.434960480306295
+      ],
+      "output_bbox_estimate": {
+        "cells": 238461735,
+        "columns": 14081,
+        "height_m": 169347.66012635082,
+        "raw_u16_bytes": 476923470,
+        "rows": 16935,
+        "width_m": 140811.22493506223
+      },
+      "output_bbox_lonlat": [
+        -71.52284640149553,
+        42.81108923547811,
+        -69.81814947423052,
+        44.39011452163321
+      ],
+      "polygon_clipped": true
+    },
+    "build": {
+      "peak_rss_mb": 37530.5,
+      "source_cog_bytes": 168840015,
+      "wall_time_s": 1232.47
+    },
+    "dem_crs": "EPSG:5070",
+    "dem_resolution_m": 10,
+    "dem_shape": [
+      19589,
+      16288
+    ],
+    "dem_vertical_datum": "NAVD88 via 3DEP",
+    "generated_assets": {
+      "preview": "/mnt/storage/floodmap/scratch/hand-boundary/huc4-0106-saco-buffer5km-clipped/preview.png",
+      "qa_report": "/mnt/storage/floodmap/scratch/hand-boundary/huc4-0106-saco-buffer5km-clipped/qa-report.md",
+      "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0106-saco-buffer5km-clipped.tif",
+      "tiles": "tiles/{z}/{x}/{y}.u16"
+    },
+    "model": "Prototype flow-path HAND: DEM elevation minus first downstream drain elevation along D8 flowpaths.",
+    "name": "huc4-0106-saco-buffer5km-clipped",
+    "named_stream_sample": {
+      "334": 287,
+      "460": 4016,
+      "558": 2186,
+      "Crooked River": 90,
+      "Exeter River": 110,
+      "Great Brook": 90,
+      "Lamprey River": 102,
+      "Little Ossipee River": 91,
+      "Little River": 299,
+      "Meadow Brook": 86,
+      "Mill Brook": 202,
+      "Mousam River": 82,
+      "Presumpscot River": 83,
+      "Saco River": 309,
+      "Salmon Falls River": 112,
+      "Taylor River": 92
+    },
+    "nodata_cells": 154437224,
+    "not_a_full_hand_model": true,
+    "routing": {
+      "accumulation_drain_cell_count": 306904,
+      "accumulation_drain_threshold_km2": 16.0,
+      "drain_cell_count": 1235797,
+      "drain_cell_fraction_percent": 0.736,
+      "library": "pyflwdir",
+      "mapped_drainage_cell_count": 1177339,
+      "method": "from_dem D8 flow directions plus FlwdirRaster.hand",
+      "stream_burn_depth_m": 5.0
+    },
+    "sample_zoom": 12,
+    "selected_flowline_count": 15749,
+    "stream_min_order": 2,
+    "threshold_stats_ft": {
+      "1": {
+        "cells": 19368023,
+        "meters": 0.305,
+        "percent": 11.76
+      },
+      "10": {
+        "cells": 44960864,
+        "meters": 3.048,
+        "percent": 27.31
+      },
+      "20": {
+        "cells": 58391599,
+        "meters": 6.096,
+        "percent": 35.47
+      },
+      "3": {
+        "cells": 23673192,
+        "meters": 0.914,
+        "percent": 14.38
+      },
+      "30": {
+        "cells": 70456157,
+        "meters": 9.144,
+        "percent": 42.8
+      },
+      "6": {
+        "cells": 37764567,
+        "meters": 1.829,
+        "percent": 22.94
+      }
+    },
+    "tile_counts": {},
+    "title": "Saco Buffered HUC4 HAND",
+    "valid_hand_cells": 164628408,
+    "zoom_max": 12,
+    "zoom_min": 9
+  },
+  "region": {
+    "area_km2": 12568.1,
+    "bbox": [
+      -71.52284640149551,
+      42.81108923547807,
+      -69.81814947423051,
+      44.39011452163321
+    ],
+    "huc4": "0106",
+    "name": "Saco",
+    "states": "MA,ME,NH"
+  },
+  "region_id": "huc4-0106-saco-buffer5km-clipped",
+  "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0106-saco-buffer5km-clipped.tif"
+}

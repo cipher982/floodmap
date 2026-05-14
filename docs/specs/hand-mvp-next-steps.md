@@ -175,6 +175,37 @@ Success criteria:
   explainable by nodata/coastline/true drainage differences, not synthetic
   bbox edges.
 
+Result:
+
+- Complete on `2026-05-14` for HUC4 pair `0106` Saco and `0107` Merrimack.
+- Method: 10m DEM, 5km buffered compute extent, polygon-clipped HAND output.
+- Saco run: `1232.47s`, `37530.5 MB` peak RSS, `168840015` byte COG,
+  `51.6%` valid clipped cells, `14.38%` 3ft area.
+- Merrimack run: `1636.2s`, `38321.0 MB` peak RSS, `201319226` byte COG,
+  `45.62%` valid clipped cells, `8.68%` 3ft area.
+- Seam report committed under `docs/qa/hand-boundary/pair-0106-0107-buffer5km/`.
+- Boundary seam result: pass. Shared boundary length `371539.83m`; `45900`
+  samples; `45867` valid paired samples; either-side <=3ft samples `0.466%`.
+- Compute result: fail. Both regions cleared wall time and COG size, but peak
+  RSS exceeded the 24GB budget.
+- Decision: buffered polygon clipping is directionally sound for seams, but the
+  current monolithic in-memory HUC build is not the CONUS builder.
+
+### Gate 7: Bounded-Memory Region Builder
+
+Goal: make the boundary-correct method fit a predictable memory budget.
+
+Success criteria:
+
+- Rebuild one Gate 6 HUC4 using a tiled, chunked, or banded strategy that keeps
+  peak RSS under 24GB.
+- Output remains polygon-clipped and manifest-compatible as a source COG.
+- Compare the bounded-memory output against the Gate 6 monolithic output for
+  sampled cells and threshold masks.
+- Go threshold: wall time under 3 hours, source COG under 500MB, peak RSS under
+  24GB, and sampled HAND differences are explainable by chunk boundaries or
+  numerical tolerance rather than visible seams.
+
 ## Kill Or Pivot Criteria
 
 - If external-reference overlap is very low and the disagreement is not

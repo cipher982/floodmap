@@ -1,0 +1,191 @@
+{
+  "artifact_dir": "/mnt/storage/floodmap/scratch/hand-boundary/huc4-0107-merrimack-buffer5km-clipped",
+  "buffer_km": 5.0,
+  "estimate": {
+    "compute_bbox": {
+      "cells": 316407366,
+      "columns": 13869,
+      "height_m": 228135.34847352793,
+      "raw_u16_bytes": 632814732,
+      "rows": 22814,
+      "width_m": 138685.30154560017
+    },
+    "compute_bbox_lonlat": [
+      -72.20435883148366,
+      42.15194812928101,
+      -70.74252899917154,
+      44.24525692520025
+    ],
+    "output_bbox": {
+      "cells": 280724366,
+      "columns": 12869,
+      "height_m": 218138.21915934095,
+      "raw_u16_bytes": 561448732,
+      "rows": 21814,
+      "width_m": 128689.73634366831
+    },
+    "output_bbox_lonlat": [
+      -72.14260543657879,
+      42.19665524711205,
+      -70.8039552627585,
+      44.20043493123292
+    ]
+  },
+  "gate_result": {
+    "area_3ft_pct": 8.68,
+    "automated_pass": false,
+    "checks": {
+      "peak_rss": false,
+      "source_cog_size": true,
+      "wall_time": true
+    },
+    "peak_rss_mb": 38321.0,
+    "source_cog_bytes": 201319226,
+    "valid_cell_pct": 45.62,
+    "wall_time_s": 1636.2
+  },
+  "metadata": {
+    "bbox_lonlat": [
+      -72.20435883148366,
+      42.15194812928101,
+      -70.74252899917154,
+      44.24525692520025
+    ],
+    "boundary_gate": {
+      "buffer_km": 5.0,
+      "compute_bbox_estimate": {
+        "cells": 316407366,
+        "columns": 13869,
+        "height_m": 228135.34847352793,
+        "raw_u16_bytes": 632814732,
+        "rows": 22814,
+        "width_m": 138685.30154560017
+      },
+      "compute_bbox_lonlat": [
+        -72.20435883148366,
+        42.15194812928101,
+        -70.74252899917154,
+        44.24525692520025
+      ],
+      "output_bbox_estimate": {
+        "cells": 280724366,
+        "columns": 12869,
+        "height_m": 218138.21915934095,
+        "raw_u16_bytes": 561448732,
+        "rows": 21814,
+        "width_m": 128689.73634366831
+      },
+      "output_bbox_lonlat": [
+        -72.14260543657879,
+        42.19665524711205,
+        -70.8039552627585,
+        44.20043493123292
+      ],
+      "polygon_clipped": true
+    },
+    "build": {
+      "peak_rss_mb": 38321.0,
+      "source_cog_bytes": 201319226,
+      "wall_time_s": 1636.2
+    },
+    "dem_crs": "EPSG:5070",
+    "dem_resolution_m": 10,
+    "dem_shape": [
+      24553,
+      14486
+    ],
+    "dem_vertical_datum": "NAVD88 via 3DEP",
+    "generated_assets": {
+      "preview": "/mnt/storage/floodmap/scratch/hand-boundary/huc4-0107-merrimack-buffer5km-clipped/preview.png",
+      "qa_report": "/mnt/storage/floodmap/scratch/hand-boundary/huc4-0107-merrimack-buffer5km-clipped/qa-report.md",
+      "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0107-merrimack-buffer5km-clipped.tif",
+      "tiles": "tiles/{z}/{x}/{y}.u16"
+    },
+    "model": "Prototype flow-path HAND: DEM elevation minus first downstream drain elevation along D8 flowpaths.",
+    "name": "huc4-0107-merrimack-buffer5km-clipped",
+    "named_stream_sample": {
+      "460": 5183,
+      "558": 2756,
+      "Assabet River": 183,
+      "Beaver Brook": 257,
+      "Black Brook": 128,
+      "Contoocook River": 140,
+      "Great Brook": 94,
+      "Meadow Brook": 112,
+      "Merrimack River": 248,
+      "Mill Brook": 106,
+      "Pemigewasset River": 176,
+      "Piscataquog River": 129,
+      "Powwow River": 107,
+      "Shawsheen River": 122,
+      "Sudbury River": 115,
+      "Suncook River": 121
+    },
+    "nodata_cells": 193416402,
+    "not_a_full_hand_model": true,
+    "routing": {
+      "accumulation_drain_cell_count": 290349,
+      "accumulation_drain_threshold_km2": 16.0,
+      "drain_cell_count": 1261576,
+      "drain_cell_fraction_percent": 0.768,
+      "library": "pyflwdir",
+      "mapped_drainage_cell_count": 1241945,
+      "method": "from_dem D8 flow directions plus FlwdirRaster.hand",
+      "stream_burn_depth_m": 5.0
+    },
+    "sample_zoom": 12,
+    "selected_flowline_count": 21862,
+    "stream_min_order": 2,
+    "threshold_stats_ft": {
+      "1": {
+        "cells": 10349301,
+        "meters": 0.305,
+        "percent": 6.38
+      },
+      "10": {
+        "cells": 23745137,
+        "meters": 3.048,
+        "percent": 14.63
+      },
+      "20": {
+        "cells": 35419998,
+        "meters": 6.096,
+        "percent": 21.83
+      },
+      "3": {
+        "cells": 14089470,
+        "meters": 0.914,
+        "percent": 8.68
+      },
+      "30": {
+        "cells": 45391643,
+        "meters": 9.144,
+        "percent": 27.97
+      },
+      "6": {
+        "cells": 18429819,
+        "meters": 1.829,
+        "percent": 11.36
+      }
+    },
+    "tile_counts": {},
+    "title": "Merrimack Buffered HUC4 HAND",
+    "valid_hand_cells": 162258356,
+    "zoom_max": 12,
+    "zoom_min": 9
+  },
+  "region": {
+    "area_km2": 12963.56,
+    "bbox": [
+      -72.14260543657879,
+      42.19665524711205,
+      -70.8039552627585,
+      44.20043493123295
+    ],
+    "huc4": "0107",
+    "name": "Merrimack",
+    "states": "MA,NH"
+  },
+  "region_id": "huc4-0107-merrimack-buffer5km-clipped",
+  "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0107-merrimack-buffer5km-clipped.tif"
+}
