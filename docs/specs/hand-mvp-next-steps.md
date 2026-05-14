@@ -88,6 +88,22 @@ Success criteria:
 - The result is documented plainly: where HAND agrees, where it differs, and
   why that difference is useful or concerning.
 
+Result:
+
+- Complete on `2026-05-14`.
+- `tools/hand/compare_to_reference.py` compares HAND COG thresholds against
+  FEMA NFHL Flood Hazard Zones where `SFHA_TF = 'T'`.
+- Reports and visual panels are committed under `docs/qa/hand-reference/`.
+- Birmingham 6ft result: IoU `0.379`, precision `0.536`, recall `0.563`,
+  HAND coverage `6.96%`, precision lift vs same-coverage random `8.087x`.
+- Houston 6ft result: IoU `0.235`, precision `0.282`, recall `0.585`,
+  HAND coverage `52.07%`, precision lift vs same-coverage random `1.124x`.
+- Decision: HAND is promising in relief/valley terrain and weak as a standalone
+  discriminator in very flat coastal terrain. Do not treat this as national
+  validation yet.
+- Next validation improvement: preserve or regenerate source DEM rasters so the
+  report can compare HAND against an absolute-elevation baseline.
+
 ### Gate 4: Algorithm Sensitivity
 
 Goal: avoid scaling a fragile parameter choice.
