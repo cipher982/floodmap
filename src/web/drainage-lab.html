@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Birmingham HAND Prototype</title>
+    <script>
+        window.FLOODMAP_ASSET_VERSION = "drainage-prototype-20260513a";
+        window.FLOODMAP_PUBLIC_BASE_PATH = (function () {
+            const pathname = window.location.pathname || "/";
+            return pathname === "/floodmap" || pathname.startsWith("/floodmap/") ? "/floodmap" : "";
+        })();
+        function normalizeFloodmapPath(path) {
+            return path.startsWith("/") ? path : `/${path}`;
+        }
+        window.floodmapPublicUrl = function (path) {
+            return `${window.FLOODMAP_PUBLIC_BASE_PATH}${normalizeFloodmapPath(path)}`;
+        };
+        window.floodmapApiUrl = function (path) {
+            const normalizedPath = normalizeFloodmapPath(path);
+            const apiPath = normalizedPath === "/api" || normalizedPath.startsWith("/api/")
+                ? normalizedPath
+                : `/api${normalizedPath}`;
+            return window.floodmapPublicUrl(apiPath);
+        };
+        window.floodmapAssetUrl = function (path) {
+            const normalizedPath = normalizeFloodmapPath(path);
+            const staticPath = normalizedPath === "/static" || normalizedPath.startsWith("/static/")
+                ? normalizedPath
+                : `/static${normalizedPath}`;
+            const url = new URL(window.floodmapPublicUrl(staticPath), window.location.origin);
+            url.searchParams.set("v", window.FLOODMAP_ASSET_VERSION);
+            return url.toString();
+        };
+        document.head.appendChild(Object.assign(document.createElement("link"), {
+            rel: "stylesheet",
+            href: window.floodmapAssetUrl("/vendor/maplibre-gl-4.7.1.css")
+        }));
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #172033;
+            background: #f3f4f6;
+        }
+
+        .app {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 380px;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 12px;
+            min-height: 100vh;
+            padding: 12px;
+        }
+
+        header,
+        aside,
+        .map-shell {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+        }
+
+        header {
+            grid-column: 1 / -1;
+            padding: 14px 18px;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            color: #174ea6;
+            font-size: 1.35rem;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            max-width: 980px;
+            margin: 0;
+            color: #52627a;
+            font-size: 0.95rem;
+            line-height: 1.45;
+        }
+
+        .map-shell {
+            position: relative;
+            min-height: 620px;
+            overflow: hidden;
+        }
+
+        #map {
+            position: absolute;
+            inset: 0;
+        }
+
+        aside {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            padding: 18px;
+            overflow: auto;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .label-row {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            font-weight: 700;
+        }
+
+        .value {
+            color: #174ea6;
+            font-size: 1.25rem;
+        }
+
+        input[type="range"] {
+            width: 100%;
+        }
+
+        .presets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        button {
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            padding: 7px 11px;
+            color: #334155;
+            background: #f8fafc;
+            font: inherit;
+            font-size: 0.86rem;
+            font-weight: 650;
+            cursor: pointer;
+        }
+
+        button:hover {
+            border-color: #2563eb;
+            color: #174ea6;
+        }
+
+        .sample {
+            min-height: 128px;
+            padding: 13px;
+            border: 1px solid #dbe4f0;
+            border-radius: 8px;
+            background: #f8fafc;
+        }
+
+        .sample-title {
+            margin: 0 0 8px;
+            font-size: 0.88rem;
+            font-weight: 750;
+            color: #334155;
+        }
+
+        .sample-value {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 750;
+            color: #0f172a;
+            line-height: 1.35;
+        }
+
+        .sample-meta {
+            margin: 8px 0 0;
+            color: #52627a;
+            font-size: 0.86rem;
+            line-height: 1.4;
+        }
+
+        .note {
+            margin: 0;
+            color: #52627a;
+            font-size: 0.88rem;
+            line-height: 1.45;
+        }
+
+        .legend {
+            display: grid;
+            grid-template-columns: 18px 1fr;
+            gap: 8px 10px;
+            align-items: center;
+            color: #475569;
+            font-size: 0.86rem;
+        }
+
+        .swatch {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+        }
+
+        .qa-link {
+            color: #174ea6;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .qa-link:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 980px) {
+            .app {
+                grid-template-columns: 1fr;
+            }
+
+            .map-shell {
+                min-height: 62vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header>
+            <h1>Birmingham HAND Prototype</h1>
+            <p class="subtitle">
+                This one-off layer colors land by height above downstream drainage along modeled flow paths, not height above sea level.
+                It is a terrain-screening prototype generated from public 3DEP elevation, NHDPlus HR flowlines, and flow-path HAND.
+            </p>
+        </header>
+        <main class="map-shell">
+            <div id="map"></div>
+        </main>
+        <aside>
+            <section class="control-group">
+                <div class="label-row">
+                    <span>Height Above Downstream Drainage</span>
+                    <span class="value"><span id="threshold-value">6</span> ft</span>
+                </div>
+                <input id="threshold" type="range" min="1" max="30" value="6" step="1">
+                <div class="presets" aria-label="Height presets">
+                    <button type="button" data-ft="1">1 ft</button>
+                    <button type="button" data-ft="3">3 ft</button>
+                    <button type="button" data-ft="6">6 ft</button>
+                    <button type="button" data-ft="10">10 ft</button>
+                    <button type="button" data-ft="20">20 ft</button>
+                </div>
+            </section>
+
+            <section class="sample" aria-live="polite">
+                <p class="sample-title">Clicked Point</p>
+                <p id="sample-value" class="sample-value">Click the map to sample flow-path HAND.</p>
+                <p id="sample-meta" class="sample-meta">The sample reports vertical height above downstream drainage in the generated HAND tile.</p>
+            </section>
+
+            <section class="control-group">
+                <p class="note">
+                    Blue land is within the selected vertical distance of downstream drainage.
+                    The layer is not a flood forecast, not FEMA, and not a storm-drain model.
+                </p>
+                <div class="legend">
+                    <span class="swatch" style="background: rgba(29, 78, 216, 0.92);"></span>
+                    <span>0-1 ft above drainage</span>
+                    <span class="swatch" style="background: rgba(37, 99, 235, 0.72);"></span>
+                    <span>Within selected threshold</span>
+                    <span class="swatch" style="background: rgba(14, 165, 233, 1);"></span>
+                    <span>Drainage cells</span>
+                </div>
+            </section>
+
+            <section class="control-group">
+                <p class="note">
+                    Generated QA: <a class="qa-link" href="" id="qa-link">qa-report.md</a><br>
+                    Static preview: <a class="qa-link" href="" id="preview-link">preview.png</a>
+                </p>
+            </section>
+        </aside>
+    </div>
+
+    <script>
+        document.write(`<script src="${window.floodmapAssetUrl("/vendor/maplibre-gl-csp-4.7.1.js")}"><\/script>`);
+    </script>
+    <script>
+        document.getElementById("qa-link").href = window.floodmapPublicUrl("/static/prototypes/birmingham-drainage/qa-report.md");
+        document.getElementById("preview-link").href = window.floodmapPublicUrl("/static/prototypes/birmingham-drainage/preview.png");
+
+        function bootDrainageLab() {
+            const workerUrl = window.floodmapAssetUrl("/vendor/maplibre-gl-csp-worker-4.7.1.js");
+            maplibregl.setWorkerUrl(workerUrl);
+
+            const thresholdInput = document.getElementById("threshold");
+            const thresholdValue = document.getElementById("threshold-value");
+            const sampleValue = document.getElementById("sample-value");
+            const sampleMeta = document.getElementById("sample-meta");
+
+            function drainageTileUrl() {
+                const ft = thresholdInput.value;
+                return `drainage://height/{z}/{x}/{y}?ft=${ft}`;
+            }
+
+            function tilePath(z, x, y) {
+                return window.floodmapPublicUrl(`/static/prototypes/birmingham-drainage/tiles/${z}/${x}/${y}.u16`);
+            }
+
+            function colorForHeight(heightFt, thresholdFt) {
+                if (!Number.isFinite(heightFt) || heightFt > thresholdFt) return [0, 0, 0, 0];
+                if (heightFt <= 1) return [29, 78, 216, 235];
+                const t = Math.max(0, Math.min(1, heightFt / Math.max(1, thresholdFt)));
+                const alpha = Math.round(210 - t * 95);
+                return [37, Math.round(99 + t * 80), 235, alpha];
+            }
+
+            async function renderDrainageTile(z, x, y, thresholdFt) {
+                const response = await fetch(tilePath(z, x, y));
+                if (!response.ok) {
+                    const blank = new Uint8ClampedArray(256 * 256 * 4);
+                    return encodeTile(blank);
+                }
+                const buffer = await response.arrayBuffer();
+                const values = new Uint16Array(buffer);
+                const pixels = new Uint8ClampedArray(256 * 256 * 4);
+                for (let i = 0; i < values.length; i++) {
+                    const offset = i * 4;
+                    if (values[i] === 65535) continue;
+                    const heightM = values[i] / 10.0;
+                    const heightFt = heightM * 3.28084;
+                    const color = colorForHeight(heightFt, thresholdFt);
+                    pixels[offset] = color[0];
+                    pixels[offset + 1] = color[1];
+                    pixels[offset + 2] = color[2];
+                    pixels[offset + 3] = color[3];
+                }
+                return encodeTile(pixels);
+            }
+
+            async function encodeTile(pixels) {
+                const canvas = document.createElement("canvas");
+                canvas.width = 256;
+                canvas.height = 256;
+                const ctx = canvas.getContext("2d");
+                ctx.putImageData(new ImageData(pixels, 256, 256), 0, 0);
+                const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+                return blob.arrayBuffer();
+            }
+
+            maplibregl.addProtocol("drainage", async (params) => {
+                const match = params.url.match(/height\/(\d+)\/(\d+)\/(\d+)\?ft=([\d.]+)/);
+                if (!match) throw new Error(`Invalid drainage URL: ${params.url}`);
+                const [, z, x, y, ft] = match;
+                const data = await renderDrainageTile(Number(z), Number(x), Number(y), Number(ft));
+                return { data };
+            });
+
+            const map = new maplibregl.Map({
+                container: "map",
+                center: [-86.8025, 33.5207],
+                zoom: 11.1,
+                minZoom: 9,
+                maxZoom: 15,
+                style: {
+                    version: 8,
+                    sources: {
+                        "osm-basemap": {
+                            type: "raster",
+                            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+                            tileSize: 256,
+                            attribution: "© OpenStreetMap contributors"
+                        },
+                        "drainage-height": {
+                            type: "raster",
+                            tiles: [drainageTileUrl()],
+                            tileSize: 256,
+                            minzoom: 9,
+                            maxzoom: 12
+                        }
+                    },
+                    layers: [
+                        {
+                            id: "background",
+                            type: "background",
+                            paint: { "background-color": "#eef2f7" }
+                        },
+                        {
+                            id: "osm-basemap",
+                            type: "raster",
+                            source: "osm-basemap",
+                            paint: { "raster-opacity": 1.0 }
+                        },
+                        {
+                            id: "drainage-height",
+                            type: "raster",
+                            source: "drainage-height",
+                            paint: { "raster-opacity": 0.76 }
+                        }
+                    ]
+                }
+            });
+
+            map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+            function refreshDrainageLayer() {
+                thresholdValue.textContent = thresholdInput.value;
+                const existingLayer = map.getLayer("drainage-height");
+                const existingSource = map.getSource("drainage-height");
+                if (!existingSource) return;
+                if (typeof existingSource.setTiles === "function") {
+                    existingSource.setTiles([drainageTileUrl()]);
+                    return;
+                }
+                if (existingLayer) map.removeLayer("drainage-height");
+                map.removeSource("drainage-height");
+                map.addSource("drainage-height", {
+                    type: "raster",
+                    tiles: [drainageTileUrl()],
+                    tileSize: 256,
+                    minzoom: 9,
+                    maxzoom: 12
+                });
+                map.addLayer({
+                    id: "drainage-height",
+                    type: "raster",
+                    source: "drainage-height",
+                    paint: { "raster-opacity": 0.76 }
+                });
+            }
+
+            thresholdInput.addEventListener("input", refreshDrainageLayer);
+            document.querySelectorAll("[data-ft]").forEach((button) => {
+                button.addEventListener("click", () => {
+                    thresholdInput.value = button.dataset.ft;
+                    refreshDrainageLayer();
+                });
+            });
+
+            map.on("click", async (event) => {
+                sampleValue.textContent = "Sampling...";
+                sampleMeta.textContent = "";
+                const url = new URL(window.floodmapApiUrl("/prototype/birmingham-drainage/sample"), window.location.origin);
+                url.searchParams.set("lat", event.lngLat.lat.toFixed(6));
+                url.searchParams.set("lng", event.lngLat.lng.toFixed(6));
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`Sample failed: ${response.status}`);
+                    const data = await response.json();
+                    sampleValue.textContent = `${data.height_ft} ft above ${data.nearest_stream}`;
+                    sampleMeta.textContent = `${event.lngLat.lat.toFixed(5)}, ${event.lngLat.lng.toFixed(5)}. Prototype flow-path HAND model.`;
+                    new maplibregl.Popup()
+                        .setLngLat(event.lngLat)
+                        .setHTML(`<strong>${data.height_ft} ft</strong><br>above ${data.nearest_stream}`)
+                        .addTo(map);
+                } catch (error) {
+                    sampleValue.textContent = "Outside prototype area or sample unavailable.";
+                    sampleMeta.textContent = String(error.message || error);
+                }
+            });
+        }
+        bootDrainageLab();
+    </script>
+</body>
+</html>

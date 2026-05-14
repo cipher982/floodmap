@@ -4,6 +4,7 @@ Single server architecture with clear separation of concerns.
 """
 
 import logging
+import math
 import os
 from pathlib import Path
 
@@ -19,6 +20,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 FAVICON_SVG_PATH = WEB_DIR / "favicon.svg"
+DRAINAGE_LAB_HTML_PATH = WEB_DIR / "drainage-lab.html"
+DRAINAGE_LAB_TILES_DIR = WEB_DIR / "prototypes" / "birmingham-drainage" / "tiles"
+DRAINAGE_LAB_SAMPLE_ZOOM = 12
 MAPLIBRE_CSP_JS_GZ_PATH = WEB_DIR / "vendor" / "maplibre-gl-csp-4.7.1.js.gz"
 MAPLIBRE_CSP_WORKER_GZ_PATH = WEB_DIR / "vendor" / "maplibre-gl-csp-worker-4.7.1.js.gz"
 PRECOMPRESSED_VENDOR_HEADERS = {
@@ -262,6 +266,63 @@ app.include_router(risk.router, prefix="/api", tags=["risk"])
 app.include_router(places.router, prefix="/api", tags=["places"])
 
 
+def _lonlat_to_tile_pixel(
+    lon: float, lat: float, zoom: int
+) -> tuple[int, int, int, int]:
+    clipped_lat = max(-85.05112878, min(85.05112878, lat))
+    scale = 2**zoom
+    x_float = (lon + 180.0) / 360.0 * scale
+    lat_rad = math.radians(clipped_lat)
+    y_float = (1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * scale
+    tile_x = int(math.floor(x_float))
+    tile_y = int(math.floor(y_float))
+    pixel_x = min(255, max(0, int((x_float - tile_x) * 256)))
+    pixel_y = min(255, max(0, int((y_float - tile_y) * 256)))
+    return tile_x, tile_y, pixel_x, pixel_y
+
+
+async def drainage_lab_sample_impl(lat: float, lng: float):
+    """Sample the one-off Birmingham drainage-height prototype."""
+    import numpy as np
+
+    tile_x, tile_y, pixel_x, pixel_y = _lonlat_to_tile_pixel(
+        lng, lat, DRAINAGE_LAB_SAMPLE_ZOOM
+    )
+    tile_path = (
+        DRAINAGE_LAB_TILES_DIR
+        / str(DRAINAGE_LAB_SAMPLE_ZOOM)
+        / str(tile_x)
+        / f"{tile_y}.u16"
+    )
+    if not tile_path.exists():
+        raise HTTPException(status_code=404, detail="Point outside prototype area")
+
+    values = np.frombuffer(tile_path.read_bytes(), dtype=np.uint16).reshape((256, 256))
+    value = int(values[pixel_y, pixel_x])
+    if value == 65535:
+        raise HTTPException(status_code=404, detail="Point outside prototype area")
+
+    height_m = value / 10.0
+    return {
+        "latitude": lat,
+        "longitude": lng,
+        "height_m": round(height_m, 2),
+        "height_ft": round(height_m * 3.28084, 1),
+        "nearest_stream": "downstream drainage",
+        "model": "prototype-flow-path-hand-tile-sample",
+    }
+
+
+@app.get("/api/prototype/birmingham-drainage/sample")
+async def drainage_lab_sample(lat: float, lng: float):
+    return await drainage_lab_sample_impl(lat, lng)
+
+
+@app.get("/floodmap/api/prototype/birmingham-drainage/sample")
+async def drainage_lab_sample_floodmap(lat: float, lng: float):
+    return await drainage_lab_sample_impl(lat, lng)
+
+
 def _serve_precompressed_vendor_asset(
     asset_path: Path, *, media_type: str
 ) -> FileResponse:
@@ -319,6 +380,21 @@ async def serve_frontend():
 async def serve_frontend_floodmap():
     """Serve the frontend when hosted under the /floodmap subpath."""
     return await serve_frontend()
+
+
+@app.api_route("/drainage-lab", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def serve_drainage_lab():
+    """Serve the one-off Birmingham drainage-height prototype."""
+    if not DRAINAGE_LAB_HTML_PATH.exists():
+        raise HTTPException(status_code=404, detail="Drainage lab not found")
+    return HTMLResponse(content=DRAINAGE_LAB_HTML_PATH.read_text(encoding="utf-8"))
+
+
+@app.api_route(
+    "/floodmap/drainage-lab", methods=["GET", "HEAD"], response_class=HTMLResponse
+)
+async def serve_drainage_lab_floodmap():
+    return await serve_drainage_lab()
 
 
 @app.get("/favicon.svg", include_in_schema=False)

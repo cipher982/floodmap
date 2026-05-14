@@ -1,0 +1,94 @@
+{
+  "name": "birmingham-drainage",
+  "title": "Birmingham HAND Prototype",
+  "bbox_lonlat": [
+    -87.02,
+    33.3,
+    -86.52,
+    33.75
+  ],
+  "dem_resolution_m": 10,
+  "dem_shape": [
+    5820,
+    5423
+  ],
+  "dem_crs": "EPSG:5070",
+  "dem_vertical_datum": "NAVD88 via 3DEP",
+  "model": "Prototype flow-path HAND: DEM elevation minus first downstream drain elevation along D8 flowpaths.",
+  "not_a_full_hand_model": true,
+  "routing": {
+    "library": "pyflwdir",
+    "method": "from_dem D8 flow directions plus FlwdirRaster.hand",
+    "stream_burn_depth_m": 5.0,
+    "accumulation_drain_threshold_km2": 1.0,
+    "drain_cell_count": 296195,
+    "mapped_drainage_cell_count": 208824,
+    "accumulation_drain_cell_count": 199536
+  },
+  "stream_min_order": 2,
+  "selected_flowline_count": 2184,
+  "named_stream_sample": {
+    "460": 591,
+    "558": 192,
+    "Cahaba River": 101,
+    "Shades Creek": 59,
+    "Fivemile Creek": 58,
+    "Village Creek": 53,
+    "Turkey Creek": 48,
+    "Black Creek": 43,
+    "North Fork Yellowleaf Creek": 42,
+    "Valley Creek": 38,
+    "Little Cahaba River": 35,
+    "Dry Creek": 35,
+    "Shoal Creek": 34,
+    "Cane Creek": 32,
+    "Cunningham Creek": 28,
+    "Stinking Creek": 26
+  },
+  "threshold_stats_ft": {
+    "1": {
+      "meters": 0.305,
+      "cells": 772609,
+      "percent": 2.49
+    },
+    "3": {
+      "meters": 0.914,
+      "cells": 1353355,
+      "percent": 4.37
+    },
+    "6": {
+      "meters": 1.829,
+      "cells": 2140028,
+      "percent": 6.9
+    },
+    "10": {
+      "meters": 3.048,
+      "cells": 3112299,
+      "percent": 10.04
+    },
+    "20": {
+      "meters": 6.096,
+      "cells": 5342292,
+      "percent": 17.23
+    },
+    "30": {
+      "meters": 9.144,
+      "cells": 7392504,
+      "percent": 23.85
+    }
+  },
+  "tile_counts": {
+    "9": 2,
+    "10": 6,
+    "11": 16,
+    "12": 49
+  },
+  "sample_zoom": 12,
+  "zoom_min": 9,
+  "zoom_max": 12,
+  "generated_assets": {
+    "tiles": "tiles/{z}/{x}/{y}.u16",
+    "preview": "preview.png",
+    "qa_report": "qa-report.md"
+  }
+}
