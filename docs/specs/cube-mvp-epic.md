@@ -222,7 +222,7 @@ Result:
 
 ## Post-MVP Gate: Reproducible Review Runtime
 
-Status: in progress (`2026-05-14`)
+Status: complete (`2026-05-14`)
 
 Context:
 
@@ -247,3 +247,20 @@ Success criteria:
 - Vector tile proxy returns `200` for a known Birmingham tile.
 - HAND metadata, sample, and tile endpoints return `200`.
 - Browser smoke in `hand` mode sees rendered road features and the HAND overlay.
+
+Result:
+
+- `make cube-review` runs `scripts/cube-review-up.sh` on Cube.
+- Script restarted `floodmap-cube-tileserver` and FastAPI with:
+  - `FLOODMAP_DATA_ROOT=/mnt/storage/floodmap/data`
+  - `TERRAIN_MANIFEST_PATH=/mnt/storage/floodmap/data/terrain/manifest.json`
+  - `TERRAIN_V2_ENABLED=true`
+  - `TILESERVER_URL=http://100.125.140.78:18080`
+  - `TERRAIN_CACHE_MAX_BYTES=21474836480`
+- Script smoke checks passed:
+  - Vector z10 tile: `200`
+  - HAND metadata: `200`
+  - HAND sample: `200`
+  - HAND z11 Birmingham tile: `200`
+- Browser smoke loaded the Cube review URL in `hand` mode and saw `128`
+  rendered road features plus `10` rendered waterway features.
