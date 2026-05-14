@@ -145,6 +145,36 @@ Success criteria:
 - Go threshold: under 3 hours wall time, under 24GB peak RSS, source COG under
   500MB, and no obvious boundary artifacts inside the generated region.
 
+Result:
+
+- Complete on `2026-05-14` for HUC4 `0312` Ochlockonee at 10m.
+- Cube run: `809.6s` wall time, `16506.0 MB` peak RSS, `193111309` byte
+  source COG, `95.38%` valid cells, and `17.55%` of valid cells at or below
+  3ft drainage height.
+- Report committed under `docs/qa/hand-huc-scale/huc4-0312-ochlockonee/`.
+- Decision: conditional pass. The current bbox-based generator can handle one
+  small real HUC4 on Cube, but it does not prove boundary correctness or
+  feasibility for the largest HUC4s.
+- Opus review accepted the compute gate and identified cross-HUC drainage
+  incoherence as the next dominant risk.
+
+### Gate 6: Boundary-Correct Region Tiling
+
+Goal: prove that adjacent regional outputs can mosaic without visible or
+hydrologic seams.
+
+Success criteria:
+
+- Run a neighboring HUC4 pair with buffered DEM inputs and polygon-clipped HAND
+  outputs.
+- Report per-region wall time, peak RSS, source COG bytes, and clipped valid
+  area.
+- Compare HAND values along the shared boundary and record seam disagreement
+  statistics.
+- Go threshold: no obvious seam in preview imagery and boundary disagreement is
+  explainable by nodata/coastline/true drainage differences, not synthetic
+  bbox edges.
+
 ## Kill Or Pivot Criteria
 
 - If external-reference overlap is very low and the disagreement is not
