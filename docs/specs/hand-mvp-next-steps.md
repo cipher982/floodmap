@@ -190,6 +190,10 @@ Result:
   RSS exceeded the 24GB budget.
 - Decision: buffered polygon clipping is directionally sound for seams, but the
   current monolithic in-memory HUC build is not the CONUS builder.
+- Opus review accepted Gate 6 as seam-method validation and rejected any move
+  toward CONUS until Gate 7 lands. It also flagged the high-difference seam tail
+  (`p95 62.97m`, max `518.7m`) as needing attribution rather than narrative
+  explanation.
 
 ### Gate 7: Bounded-Memory Region Builder
 
@@ -202,9 +206,15 @@ Success criteria:
 - Output remains polygon-clipped and manifest-compatible as a source COG.
 - Compare the bounded-memory output against the Gate 6 monolithic output for
   sampled cells and threshold masks.
+- First target: Merrimack (`0107`), because it was the heavier Gate 6 region.
+- Add seam-tail attribution buckets before accepting the result: coastline vs
+  inland, nodata-adjacent, drain-cell-adjacent, and band-edge-adjacent samples.
+- Produce a heatmap or equivalent raster QA artifact for cells where absolute
+  difference from the monolithic output is greater than 1m.
 - Go threshold: wall time under 3 hours, source COG under 500MB, peak RSS under
-  24GB, and sampled HAND differences are explainable by chunk boundaries or
-  numerical tolerance rather than visible seams.
+  24GB, p99 sampled HAND difference <=1m, and any larger differences are
+  explainable by drain adjacency, nodata/coastline effects, or band edges rather
+  than arbitrary interior seams.
 
 ## Kill Or Pivot Criteria
 
