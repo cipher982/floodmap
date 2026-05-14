@@ -83,6 +83,8 @@ Result:
 
 ## Phase 2: Data Bootstrap
 
+Status: complete (`2026-05-14`)
+
 Tasks:
 
 - Rsync the existing local basemap to Cube:
@@ -100,6 +102,15 @@ Success criteria:
 - Terrain cache cap is explicit, not default-unbounded.
 - If the local HAND COG is missing, stop and regenerate it on Cube before
   continuing.
+
+Result:
+
+- Cube repo commit: `136c67af00da0a308985c8e9b16c30c9c4e4df96`.
+- `data/base-maps`: `1.7G`.
+- `data/terrain/hand`: `40M`.
+- `data/terrain/tile-cache`: empty before runtime.
+- `FLOODMAP_DATA_ROOT=/mnt/storage/floodmap/data` resolves the basemap and
+  Birmingham HAND COG from the Cube API process.
 
 ## Phase 3: End-to-End Cube Runtime
 
