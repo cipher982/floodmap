@@ -60,6 +60,16 @@ class TerrainRegion(BaseModel):
         west, south, east, north = self.bbox
         return west <= lon < east and south <= lat < north
 
+    def intersects_bbox(self, bbox: tuple[float, float, float, float]) -> bool:
+        west, south, east, north = self.bbox
+        other_west, other_south, other_east, other_north = bbox
+        return (
+            west < other_east
+            and east > other_west
+            and south < other_north
+            and north > other_south
+        )
+
 
 class TerrainLayer(BaseModel):
     encoding: TerrainEncoding
@@ -93,6 +103,16 @@ class TerrainManifest(BaseModel):
             (region for region in terrain_layer.regions if region.contains(lon, lat)),
             None,
         )
+
+    def find_regions_for_bbox(
+        self, layer: str, bbox: tuple[float, float, float, float]
+    ) -> list[TerrainRegion]:
+        terrain_layer = self.layers.get(layer)
+        if terrain_layer is None:
+            return []
+        return [
+            region for region in terrain_layer.regions if region.intersects_bbox(bbox)
+        ]
 
 
 class TerrainTileRequest(BaseModel):

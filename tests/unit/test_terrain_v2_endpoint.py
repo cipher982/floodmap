@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import struct
 
 import numpy as np
@@ -12,6 +13,7 @@ from terrain import (
     TERRAIN_BATCH_TILE_META_BYTES,
     TILE_SIZE,
     U16_TILE_BYTES,
+    lonlat_to_tile_pixel,
 )
 from terrain_cog import tile_transform_mercator
 
@@ -132,6 +134,32 @@ def test_missing_source_returns_build_miss_headers(tmp_path, monkeypatch):
     assert "immutable" not in response.headers["Cache-Control"].lower()
 
 
+def test_tile_outside_manifest_coverage_is_short_cache_404(client):
+    tile_x, tile_y, _, _ = lonlat_to_tile_pixel(lon=-74.0, lat=40.7, zoom=12)
+
+    response = client.get(
+        f"/api/v2/terrain/hand/hand-test/12/{tile_x}/{tile_y}.u16",
+        headers={"Accept-Encoding": "identity"},
+    )
+
+    assert response.status_code == 404
+    assert response.headers["X-Terrain-Data-Status"] == "build-miss"
+    assert "immutable" not in response.headers["Cache-Control"].lower()
+
+
+def test_batch_rejects_tiles_outside_manifest_coverage(client):
+    tile_x, tile_y, _, _ = lonlat_to_tile_pixel(lon=-74.0, lat=40.7, zoom=12)
+
+    response = client.post(
+        "/api/v2/terrain/hand/hand-test/batch.u16",
+        headers={"Accept-Encoding": "identity"},
+        json={"tiles": [{"z": 12, "x": tile_x, "y": tile_y}]},
+    )
+
+    assert response.status_code == 404
+    assert response.headers["X-Terrain-Data-Status"] == "build-miss"
+
+
 def test_bad_xyz_returns_422_not_internal_error(client):
     response = client.get(
         "/api/v2/terrain/hand/hand-test/0/1/0.u16",
@@ -155,3 +183,9 @@ def test_renderer_runtime_error_returns_503(client, monkeypatch):
     assert response.status_code == 503
     assert response.headers["X-Terrain-Data-Status"] == "build-miss"
     assert response.json()["detail"] == "rasterio unavailable"
+
+
+def test_blocking_renderer_routes_are_sync_for_fastapi_threadpool():
+    assert not inspect.iscoroutinefunction(terrain_v2.get_terrain_tile)
+    assert not inspect.iscoroutinefunction(terrain_v2.get_terrain_tile_batch)
+    assert not inspect.iscoroutinefunction(terrain_v2.sample_terrain)

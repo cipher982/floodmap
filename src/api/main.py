@@ -165,6 +165,7 @@ from config import (
     ENABLE_PERF_TEST_ROUTES,
     FORCE_HTTPS,
     IS_DEVELOPMENT,
+    TERRAIN_V2_ENABLED,
 )
 from location_catalog import get_city_page, get_zip_page
 
@@ -264,8 +265,10 @@ if IS_DEVELOPMENT or ENABLE_PERF_TEST_ROUTES:
 
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 app.include_router(places.router, prefix="/api", tags=["places"])
-app.include_router(terrain_v2.router, tags=["terrain-v2"])
-app.include_router(terrain_v2.router, prefix="/floodmap", tags=["terrain-v2"])
+
+if TERRAIN_V2_ENABLED:
+    app.include_router(terrain_v2.router, tags=["terrain-v2"])
+    app.include_router(terrain_v2.router, prefix="/floodmap", tags=["terrain-v2"])
 
 
 def _lonlat_to_tile_pixel(

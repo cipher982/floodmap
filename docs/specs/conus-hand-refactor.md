@@ -1,6 +1,6 @@
 # CONUS HAND Refactor Spec
 
-Status: Phase 3 implementation review pending
+Status: Phase 3 follow-up review pending
 Owner: Codex
 Baseline commit: `1865fd4 Add Birmingham HAND prototype`
 
@@ -246,6 +246,8 @@ Measured Phase 3 result:
 - Downtown direct source sample returns `25.3 ft`; the old z12 static-tile sample
   returns `24.3 ft` because it samples the rendered web tile pixel, not the exact
   source raster point.
+- The route is gated by `TERRAIN_V2_ENABLED` until the serving image includes
+  the geospatial runtime dependencies needed for dynamic COG reads.
 
 ### MVP C: Second geography smoke
 
@@ -308,6 +310,12 @@ Deliverables:
 - Dynamic render fallback writes hot cache entries.
 - CLI to precompute z9-z12 for a manifest region.
 - Cache budget reporting.
+- Tile requests must route by tile/region intersection, not by the first
+  manifest region.
+- Outside-coverage tiles must remain short-cache 404/503 misses, never immutable
+  NODATA.
+- Persistent cache design should replace the in-memory per-process LRU for
+  cross-worker reuse.
 
 Opus review after commit.
 
@@ -335,6 +343,8 @@ Deliverables:
 - Download/verify stage for NHDPlus HR/3DHP inputs.
 - HAND compute stage per region.
 - Source COG output stage.
+- Overview-aware source reads or precomputed low-zoom tiles so national z9-z12
+  requests do not read native-resolution 10m windows.
 - QA metrics per region: valid cells, nodata cells, flowline counts, percentile
   HAND values, sample images.
 

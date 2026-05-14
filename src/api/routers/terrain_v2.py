@@ -19,7 +19,7 @@ from terrain import (
     serialize_terrain_batch,
     terrain_tile_headers,
 )
-from terrain_cog import render_cog_tile_with_cache, sample_cog_point
+from terrain_cog import render_cog_tile_with_cache, sample_cog_point, tile_bbox_lonlat
 
 router = APIRouter(prefix="/api/v2/terrain", tags=["terrain-v2"])
 
@@ -55,16 +55,15 @@ def require_layer(
     return terrain_layer
 
 
-def require_source_path(manifest: TerrainManifest, layer: str) -> Path:
-    terrain_layer = manifest.layers[layer]
-    if not terrain_layer.regions:
-        raise HTTPException(status_code=503, detail="Terrain layer has no regions")
-    source_url = terrain_layer.regions[0].url
+def require_region_source_path(
+    manifest: TerrainManifest, layer: str, region: TerrainRegion
+) -> Path:
+    source_url = region.url
     path = Path(source_url.removeprefix("file://"))
     if not path.exists():
         raise HTTPException(
             status_code=503,
-            detail=f"Terrain source is not built: {path}",
+            detail=f"Terrain source is not built for {region.id}: {path}",
             headers=terrain_tile_headers(
                 dataset_version=manifest.dataset_version,
                 layer=layer,
@@ -74,6 +73,30 @@ def require_source_path(manifest: TerrainManifest, layer: str) -> Path:
             ),
         )
     return path
+
+
+def outside_coverage(layer: str, dataset_version: str) -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail="Tile outside terrain coverage",
+        headers=terrain_tile_headers(
+            dataset_version=dataset_version,
+            layer=layer,
+            source="manifest",
+            cache_status="MISS",
+            data_status="build-miss",
+        ),
+    )
+
+
+def regions_for_tile(
+    manifest: TerrainManifest, layer: str, z: int, x: int, y: int
+) -> list[TerrainRegion]:
+    bbox = tile_bbox_lonlat(z, x, y)
+    regions = manifest.find_regions_for_bbox(layer, bbox)
+    if not regions:
+        raise outside_coverage(layer, manifest.dataset_version)
+    return regions
 
 
 def renderer_unavailable(
@@ -93,7 +116,7 @@ def renderer_unavailable(
 
 
 @router.get("/{layer}/{dataset_version}/{z}/{x}/{y}.u16")
-async def get_terrain_tile(
+def get_terrain_tile(
     layer: str,
     dataset_version: str,
     request: Request,
@@ -109,7 +132,8 @@ async def get_terrain_tile(
         ) from exc
     manifest = get_terrain_manifest()
     require_layer(manifest, layer, dataset_version)
-    source_path = require_source_path(manifest, layer)
+    tile_regions = regions_for_tile(manifest, layer, z, x, y)
+    source_path = require_region_source_path(manifest, layer, tile_regions[0])
 
     try:
         payload, cache_status, elapsed_ms = render_cog_tile_with_cache(
@@ -138,7 +162,7 @@ async def get_terrain_tile(
 
 
 @router.post("/{layer}/{dataset_version}/batch.u16")
-async def get_terrain_tile_batch(
+def get_terrain_tile_batch(
     layer: str,
     dataset_version: str,
     request: Request,
@@ -146,14 +170,16 @@ async def get_terrain_tile_batch(
 ):
     manifest = get_terrain_manifest()
     require_layer(manifest, layer, dataset_version)
-    source_path = require_source_path(manifest, layer)
 
     unique_tiles = batch_request.unique_tiles()
     try:
-        rendered = [
-            render_cog_tile_with_cache(source_path, tile.z, tile.x, tile.y)
-            for tile in unique_tiles
-        ]
+        rendered = []
+        for tile in unique_tiles:
+            tile_regions = regions_for_tile(manifest, layer, tile.z, tile.x, tile.y)
+            source_path = require_region_source_path(manifest, layer, tile_regions[0])
+            rendered.append(
+                render_cog_tile_with_cache(source_path, tile.z, tile.x, tile.y)
+            )
     except RuntimeError as exc:
         raise renderer_unavailable(layer, dataset_version, str(exc)) from exc
     payload = serialize_terrain_batch(
@@ -179,7 +205,7 @@ async def get_terrain_tile_batch(
 
 
 @router.get("/{layer}/metadata")
-async def get_terrain_metadata(layer: str):
+def get_terrain_metadata(layer: str):
     manifest = get_terrain_manifest()
     terrain_layer = manifest.layers.get(layer)
     if terrain_layer is None:
@@ -197,7 +223,7 @@ async def get_terrain_metadata(layer: str):
 
 
 @router.get("/{layer}/sample")
-async def sample_terrain(layer: str, lat: float, lng: float):
+def sample_terrain(layer: str, lat: float, lng: float):
     manifest = get_terrain_manifest()
     terrain_layer = manifest.layers.get(layer)
     if terrain_layer is None:
@@ -205,7 +231,7 @@ async def sample_terrain(layer: str, lat: float, lng: float):
     region = manifest.find_region(layer, lng, lat)
     if region is None:
         raise HTTPException(status_code=404, detail="Point outside terrain coverage")
-    source_path = require_source_path(manifest, layer)
+    source_path = require_region_source_path(manifest, layer, region)
     try:
         value = sample_cog_point(source_path, lon=lng, lat=lat)
     except RuntimeError as exc:

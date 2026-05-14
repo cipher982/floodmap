@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from functools import lru_cache
+from math import atan, degrees, exp, pi
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +22,19 @@ def tile_bounds_mercator(z: int, x: int, y: int) -> tuple[float, float, float, f
     maxy = WEBMERCATOR_HALF_WORLD - y * span
     miny = maxy - span
     return minx, miny, maxx, maxy
+
+
+def mercator_to_lonlat(x: float, y: float) -> tuple[float, float]:
+    lon = x / WEBMERCATOR_HALF_WORLD * 180.0
+    lat = degrees(2.0 * atan(exp(y / WEBMERCATOR_HALF_WORLD * pi)) - pi / 2.0)
+    return lon, lat
+
+
+def tile_bbox_lonlat(z: int, x: int, y: int) -> tuple[float, float, float, float]:
+    minx, miny, maxx, maxy = tile_bounds_mercator(z, x, y)
+    west, south = mercator_to_lonlat(minx, miny)
+    east, north = mercator_to_lonlat(maxx, maxy)
+    return west, south, east, north
 
 
 def tile_transform_mercator(z: int, x: int, y: int):

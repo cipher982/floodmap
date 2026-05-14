@@ -8,6 +8,7 @@ from terrain_cog import (
     render_cog_tile,
     render_cog_tile_with_cache,
     sample_cog_point,
+    tile_bbox_lonlat,
     tile_transform_mercator,
 )
 
@@ -45,6 +46,15 @@ def test_render_cog_tile_returns_exact_u16_tile_for_matching_grid(tmp_path):
     assert len(payload) == U16_TILE_BYTES
     assert elapsed_ms >= 0
     np.testing.assert_array_equal(actual, expected)
+
+
+def test_tile_bbox_lonlat_returns_expected_world_bounds():
+    west, south, east, north = tile_bbox_lonlat(0, 0, 0)
+
+    assert west == pytest.approx(-180.0)
+    assert east == pytest.approx(180.0)
+    assert south == pytest.approx(-85.05112878)
+    assert north == pytest.approx(85.05112878)
 
 
 def test_render_cog_tile_cache_marks_second_read_as_hit(tmp_path):

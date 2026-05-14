@@ -147,6 +147,11 @@ ENABLE_PERF_TEST_ROUTES = os.getenv("ENABLE_PERF_TEST_ROUTES", "false").lower() 
     "true",
     "yes",
 )
+TERRAIN_V2_ENABLED = os.getenv("TERRAIN_V2_ENABLED", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 # Enforce HTTPS redirects at the app layer (typically true behind a reverse proxy)
 FORCE_HTTPS = os.getenv(

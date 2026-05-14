@@ -54,6 +54,10 @@ def test_manifest_validates_regions_and_finds_matching_region():
     assert region.id == "birmingham"
     assert manifest.find_region("hand", lon=-86.52, lat=33.5207) is None
     assert manifest.find_region("hand", lon=-80.0, lat=25.0) is None
+    assert manifest.find_regions_for_bbox("hand", (-86.9, 33.4, -86.8, 33.5)) == [
+        region
+    ]
+    assert manifest.find_regions_for_bbox("hand", (-80.0, 25.0, -79.9, 25.1)) == []
 
 
 def test_manifest_rejects_bad_bbox_and_wrong_nodata():
