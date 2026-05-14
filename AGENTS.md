@@ -19,6 +19,7 @@ tiles (elevation/HAND) and colors them client-side.
 - Prod health: `curl -s https://drose.io/floodmap/api/health | head`
 - Blank-map prod smoke: use a real browser and verify `window.floodMap`, `window.floodMap.map.loaded()`, and a non-empty `#map canvas`. If the static controls/legend show but MapLibre controls do not, suspect a stale cached client asset first.
 - Bare `uv run` deployments can point at external data with `FLOODMAP_DATA_ROOT=/path/to/data`; dynamic HAND COG serving needs `uv run --with rasterio --with affine ...`.
+- Offline HAND generation uses the `hydrology` extra: `uv run --extra hydrology ...`. Keep large COGs and scratch output under `FLOODMAP_DATA_ROOT`/external storage, not committed in the repo.
 
 ## Where To Look Next
 - Agent docs index: `docs/AGENTS.md`

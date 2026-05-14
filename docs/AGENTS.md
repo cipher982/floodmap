@@ -8,4 +8,5 @@ too long. Prefer current-state checks over copied snapshots.
 - Cache-busting (Cloudflare + MapLibre): `docs/runbooks/cache-busting.md`
 - Rendering pipeline (worker/LUT/palette): `docs/runbooks/rendering-pipeline.md`
 - CONUS/HAND terrain architecture: `docs/specs/conus-hand-refactor.md`
+- HAND scale gates and QA: `docs/qa/hand-huc-scale/`
 - Analytics (Umami): `docs/runbooks/analytics.md`
