@@ -1,6 +1,6 @@
 # CONUS HAND Refactor Spec
 
-Status: Draft for Opus review
+Status: Phase 3 implementation review pending
 Owner: Codex
 Baseline commit: `1865fd4 Add Birmingham HAND prototype`
 
@@ -232,6 +232,20 @@ Acceptance:
 - Browser can render the dynamic layer without static prototype tile files.
 - Dynamic route reports cache/source headers clearly enough to distinguish
   source NODATA from build miss.
+
+Measured Phase 3 result:
+
+- Validation command:
+  `uv run --with rasterio --with affine python tools/hand/validate_birmingham_dynamic.py`
+- Dynamic-vs-static tile comparison across all 73 committed Birmingham prototype
+  tiles: p50/p95/max absolute difference `0.00 / 0.00 / 0.00 ft` where both
+  sources have data.
+- NODATA mismatch: `994` pixels, `0.0208%` of compared pixels.
+- Local dynamic render p50/p95: `27.0 / 60.0 ms`; hot in-memory cache p95
+  rounds to `0.0 ms`.
+- Downtown direct source sample returns `25.3 ft`; the old z12 static-tile sample
+  returns `24.3 ft` because it samples the rendered web tile pixel, not the exact
+  source raster point.
 
 ### MVP C: Second geography smoke
 

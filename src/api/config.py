@@ -32,11 +32,16 @@ DATA_ROOT = _default_data_root()
 ELEVATION_SOURCE_DIR = DATA_ROOT / "elevation-source"  # Raw SRTM files (.zst)
 ELEVATION_TILES_DIR = DATA_ROOT / "elevation-tiles"  # Precompressed tiles (.u16.br)
 BASE_MAPS_DIR = DATA_ROOT / "base-maps"  # Background maps (.mbtiles)
+TERRAIN_DATA_DIR = DATA_ROOT / "terrain"  # Source terrain rasters and manifests
 
 # Legacy compatibility - remove after updating dependent code
 ELEVATION_DATA_DIR = ELEVATION_SOURCE_DIR
 MAP_DATA_DIR = BASE_MAPS_DIR
 PRECOMPRESSED_TILES_DIR = ELEVATION_TILES_DIR
+BIRMINGHAM_HAND_COG_PATH = TERRAIN_DATA_DIR / "hand" / "birmingham-drainage.tif"
+BIRMINGHAM_HAND_DATASET_VERSION = os.getenv(
+    "BIRMINGHAM_HAND_DATASET_VERSION", "hand-birmingham-20260513a"
+)
 
 # Legacy compatibility - remove these after updating dependent code
 PROJECT_ROOT = (

@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import py3dep
 import pyflwdir
+import rasterio
 import rasterio.features
 from affine import Affine
 from PIL import Image
@@ -40,6 +41,8 @@ CONFIG = PrototypeConfig()
 ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = ROOT / "src" / "web" / "prototypes" / CONFIG.name
 TILES_DIR = OUT_DIR / "tiles"
+SOURCE_DIR = ROOT / "data" / "terrain" / "hand"
+SOURCE_COG_PATH = SOURCE_DIR / f"{CONFIG.name}.tif"
 MODEL_PATH = OUT_DIR / "model.npz"
 META_PATH = OUT_DIR / "metadata.json"
 QA_PATH = OUT_DIR / "qa-report.md"
@@ -274,6 +277,33 @@ def write_tiles(
     return tile_counts
 
 
+def write_source_cog(hand: np.ndarray, x: np.ndarray, y: np.ndarray, crs: str) -> None:
+    SOURCE_DIR.mkdir(parents=True, exist_ok=True)
+    transform = raster_transform(x, y)
+    valid = np.isfinite(hand) & (hand >= 0)
+    encoded = np.full(hand.shape, NODATA_U16, dtype=np.uint16)
+    encoded[valid] = np.clip(np.round(hand[valid] * 10.0), 0, NODATA_U16 - 1).astype(
+        np.uint16
+    )
+
+    profile = {
+        "driver": "COG",
+        "height": encoded.shape[0],
+        "width": encoded.shape[1],
+        "count": 1,
+        "dtype": "uint16",
+        "crs": crs,
+        "transform": transform,
+        "nodata": NODATA_U16,
+        "compress": "DEFLATE",
+        "predictor": 2,
+        "blocksize": 512,
+        "overview_resampling": "nearest",
+    }
+    with rasterio.open(SOURCE_COG_PATH, "w", **profile) as dst:
+        dst.write(encoded, 1)
+
+
 def make_preview(
     hand: np.ndarray, drain_mask: np.ndarray, stream_mask: np.ndarray
 ) -> None:
@@ -363,11 +393,12 @@ def write_metadata(
         "zoom_max": CONFIG.zoom_max,
         "generated_assets": {
             "tiles": "tiles/{z}/{x}/{y}.u16",
+            "source_cog": str(SOURCE_COG_PATH.relative_to(ROOT)),
             "preview": "preview.png",
             "qa_report": "qa-report.md",
         },
     }
-    META_PATH.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    META_PATH.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
     names_json = json.dumps(named_counts, indent=2)
     qa = f"""# Birmingham HAND Prototype QA
@@ -419,6 +450,7 @@ def main() -> None:
         dem, x, y, flowlines
     )
     tile_counts = write_tiles(hand, x, y, crs)
+    write_source_cog(hand, x, y, crs)
     make_preview(hand, drain_mask, stream_mask)
     write_metadata(
         dem,

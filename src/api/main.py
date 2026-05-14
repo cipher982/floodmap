@@ -176,7 +176,7 @@ from page_renderer import (
     build_zip_page_html,
 )
 from routers import diagnostics as diagnostics_router
-from routers import health, places, risk, tiles_performance_test, tiles_v1
+from routers import health, places, risk, terrain_v2, tiles_performance_test, tiles_v1
 from sitemaps import (
     build_city_sitemap_xml,
     build_pages_sitemap_xml,
@@ -264,6 +264,8 @@ if IS_DEVELOPMENT or ENABLE_PERF_TEST_ROUTES:
 
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 app.include_router(places.router, prefix="/api", tags=["places"])
+app.include_router(terrain_v2.router, tags=["terrain-v2"])
+app.include_router(terrain_v2.router, prefix="/floodmap", tags=["terrain-v2"])
 
 
 def _lonlat_to_tile_pixel(

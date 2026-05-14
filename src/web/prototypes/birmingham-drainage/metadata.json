@@ -88,6 +88,7 @@
   "zoom_max": 12,
   "generated_assets": {
     "tiles": "tiles/{z}/{x}/{y}.u16",
+    "source_cog": "data/terrain/hand/birmingham-drainage.tif",
     "preview": "preview.png",
     "qa_report": "qa-report.md"
   }

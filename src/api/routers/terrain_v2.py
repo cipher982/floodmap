@@ -1,0 +1,224 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+from config import BIRMINGHAM_HAND_COG_PATH, BIRMINGHAM_HAND_DATASET_VERSION
+from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import Path as PathParam
+from pydantic import ValidationError
+from terrain import (
+    U16_NODATA,
+    TerrainBatchRequest,
+    TerrainEncoding,
+    TerrainLayer,
+    TerrainManifest,
+    TerrainRegion,
+    TerrainTileRequest,
+    maybe_compress,
+    serialize_terrain_batch,
+    terrain_tile_headers,
+)
+from terrain_cog import render_cog_tile_with_cache, sample_cog_point
+
+router = APIRouter(prefix="/api/v2/terrain", tags=["terrain-v2"])
+
+
+def get_terrain_manifest() -> TerrainManifest:
+    return TerrainManifest(
+        schema_version=1,
+        dataset_version=BIRMINGHAM_HAND_DATASET_VERSION,
+        layers={
+            "hand": TerrainLayer(
+                encoding=TerrainEncoding.HAND_DECIMETERS,
+                regions=[
+                    TerrainRegion(
+                        id="birmingham-prototype",
+                        bbox=(-87.02, 33.30, -86.52, 33.75),
+                        crs="EPSG:5070",
+                        url=str(BIRMINGHAM_HAND_COG_PATH),
+                    )
+                ],
+            )
+        },
+    )
+
+
+def require_layer(
+    manifest: TerrainManifest, layer: str, dataset_version: str
+) -> TerrainLayer:
+    if dataset_version != manifest.dataset_version:
+        raise HTTPException(status_code=404, detail="Unknown terrain dataset version")
+    terrain_layer = manifest.layers.get(layer)
+    if terrain_layer is None:
+        raise HTTPException(status_code=404, detail="Unknown terrain layer")
+    return terrain_layer
+
+
+def require_source_path(manifest: TerrainManifest, layer: str) -> Path:
+    terrain_layer = manifest.layers[layer]
+    if not terrain_layer.regions:
+        raise HTTPException(status_code=503, detail="Terrain layer has no regions")
+    source_url = terrain_layer.regions[0].url
+    path = Path(source_url.removeprefix("file://"))
+    if not path.exists():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Terrain source is not built: {path}",
+            headers=terrain_tile_headers(
+                dataset_version=manifest.dataset_version,
+                layer=layer,
+                source="manifest",
+                cache_status="MISS",
+                data_status="build-miss",
+            ),
+        )
+    return path
+
+
+def renderer_unavailable(
+    layer: str, dataset_version: str, detail: str
+) -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail=detail,
+        headers=terrain_tile_headers(
+            dataset_version=dataset_version,
+            layer=layer,
+            source="dynamic-cog",
+            cache_status="MISS",
+            data_status="build-miss",
+        ),
+    )
+
+
+@router.get("/{layer}/{dataset_version}/{z}/{x}/{y}.u16")
+async def get_terrain_tile(
+    layer: str,
+    dataset_version: str,
+    request: Request,
+    z: int = PathParam(..., ge=0, le=22),
+    x: int = PathParam(..., ge=0),
+    y: int = PathParam(..., ge=0),
+):
+    try:
+        TerrainTileRequest(z=z, x=x, y=y)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422, detail=exc.errors(include_context=False)
+        ) from exc
+    manifest = get_terrain_manifest()
+    require_layer(manifest, layer, dataset_version)
+    source_path = require_source_path(manifest, layer)
+
+    try:
+        payload, cache_status, elapsed_ms = render_cog_tile_with_cache(
+            source_path, z, x, y
+        )
+    except RuntimeError as exc:
+        raise renderer_unavailable(layer, dataset_version, str(exc)) from exc
+    values = np.frombuffer(payload, dtype=np.uint16)
+    data_status = "source-nodata" if np.all(values == U16_NODATA) else "ok"
+    accept_encoding = request.headers.get("accept-encoding", "")
+    response_payload, content_encoding = maybe_compress(payload, accept_encoding)
+    headers = terrain_tile_headers(
+        dataset_version=dataset_version,
+        layer=layer,
+        source="dynamic-cog",
+        cache_status=cache_status,
+        data_status=data_status,
+        content_encoding=content_encoding,
+    )
+    headers["X-Terrain-Render-Ms"] = str(round(elapsed_ms, 2))
+    return Response(
+        content=response_payload,
+        media_type="application/octet-stream",
+        headers=headers,
+    )
+
+
+@router.post("/{layer}/{dataset_version}/batch.u16")
+async def get_terrain_tile_batch(
+    layer: str,
+    dataset_version: str,
+    request: Request,
+    batch_request: TerrainBatchRequest,
+):
+    manifest = get_terrain_manifest()
+    require_layer(manifest, layer, dataset_version)
+    source_path = require_source_path(manifest, layer)
+
+    unique_tiles = batch_request.unique_tiles()
+    try:
+        rendered = [
+            render_cog_tile_with_cache(source_path, tile.z, tile.x, tile.y)
+            for tile in unique_tiles
+        ]
+    except RuntimeError as exc:
+        raise renderer_unavailable(layer, dataset_version, str(exc)) from exc
+    payload = serialize_terrain_batch(
+        unique_tiles, [tile_payload for tile_payload, _, _ in rendered]
+    )
+    accept_encoding = request.headers.get("accept-encoding", "")
+    response_payload, content_encoding = maybe_compress(payload, accept_encoding)
+    headers = terrain_tile_headers(
+        dataset_version=dataset_version,
+        layer=layer,
+        source="dynamic-cog-batch",
+        cache_status=(
+            "HIT" if all(status == "HIT" for _, status, _ in rendered) else "MISS"
+        ),
+        content_encoding=content_encoding,
+    )
+    headers["X-Tile-Count"] = str(len(unique_tiles))
+    return Response(
+        content=response_payload,
+        media_type="application/octet-stream",
+        headers=headers,
+    )
+
+
+@router.get("/{layer}/metadata")
+async def get_terrain_metadata(layer: str):
+    manifest = get_terrain_manifest()
+    terrain_layer = manifest.layers.get(layer)
+    if terrain_layer is None:
+        raise HTTPException(status_code=404, detail="Unknown terrain layer")
+    return {
+        "schema_version": manifest.schema_version,
+        "dataset_version": manifest.dataset_version,
+        "layer": layer,
+        "encoding": terrain_layer.encoding,
+        "nodata": terrain_layer.nodata,
+        "regions": [region.model_dump() for region in terrain_layer.regions],
+        "tile_template": f"/api/v2/terrain/{layer}/{manifest.dataset_version}/{{z}}/{{x}}/{{y}}.u16",
+        "batch_template": f"/api/v2/terrain/{layer}/{manifest.dataset_version}/batch.u16",
+    }
+
+
+@router.get("/{layer}/sample")
+async def sample_terrain(layer: str, lat: float, lng: float):
+    manifest = get_terrain_manifest()
+    terrain_layer = manifest.layers.get(layer)
+    if terrain_layer is None:
+        raise HTTPException(status_code=404, detail="Unknown terrain layer")
+    region = manifest.find_region(layer, lng, lat)
+    if region is None:
+        raise HTTPException(status_code=404, detail="Point outside terrain coverage")
+    source_path = require_source_path(manifest, layer)
+    try:
+        value = sample_cog_point(source_path, lon=lng, lat=lat)
+    except RuntimeError as exc:
+        raise renderer_unavailable(layer, manifest.dataset_version, str(exc)) from exc
+    if value is None:
+        raise HTTPException(status_code=404, detail="Point has no terrain data")
+    height_m = value / 10.0
+    return {
+        "latitude": lat,
+        "longitude": lng,
+        "height_m": round(height_m, 2),
+        "height_ft": round(height_m * 3.28084, 1),
+        "encoding": terrain_layer.encoding,
+        "dataset_version": manifest.dataset_version,
+        "region": region.id,
+    }

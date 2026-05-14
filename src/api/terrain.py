@@ -16,6 +16,11 @@ import numpy as np
 from config import IS_DEVELOPMENT, TILE_CACHE_CONTROL, TILE_SIZE
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+try:
+    import brotli  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    brotli = None
+
 U16_NODATA = np.uint16(65535)
 U16_TILE_BYTES = TILE_SIZE * TILE_SIZE * np.dtype(np.uint16).itemsize
 TERRAIN_BATCH_MAGIC = b"FMT2"
@@ -252,3 +257,36 @@ def terrain_tile_headers(
     if content_encoding:
         headers["Content-Encoding"] = content_encoding
     return headers
+
+
+def negotiate_compression(accept_encoding: str) -> str | None:
+    accepted = accept_encoding.lower()
+    if "br" in accepted and brotli is not None:
+        return "br"
+    if "gzip" in accepted:
+        return "gzip"
+    return None
+
+
+def maybe_compress(
+    content: bytes, accept_encoding: str, min_size: int = 512
+) -> tuple[bytes, str | None]:
+    if len(content) < min_size:
+        return content, None
+
+    encoding = negotiate_compression(accept_encoding)
+    if encoding == "br":
+        try:
+            return brotli.compress(content, quality=1), "br"  # type: ignore[union-attr]
+        except Exception:
+            return content, None
+
+    if encoding == "gzip":
+        import gzip
+
+        try:
+            return gzip.compress(content, compresslevel=1), "gzip"
+        except Exception:
+            return content, None
+
+    return content, None
