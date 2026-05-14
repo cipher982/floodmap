@@ -219,3 +219,48 @@ Result:
 - GPU acceleration.
 - Rainfall, storm sewer, FEMA, or forecast modeling.
 - National z14/z15 precompute.
+
+## Post-MVP Gate: Reproducible Review Runtime
+
+Status: complete (`2026-05-14`)
+
+Context:
+
+- A manual API restart once omitted `TILESERVER_URL`, causing the app's vector
+  proxy to return `404` from Cube's local nginx instead of tileserver-gl. HAND
+  still rendered, but the street basemap disappeared.
+- Hatch Opus ranked runtime reproducibility as the first gate before basemap
+  polish, reference comparison, sensitivity analysis, or CONUS scale-out.
+
+Tasks:
+
+- Add a checked-in Cube startup script that starts tileserver-gl and FastAPI
+  with the full review env.
+- Add a `make cube-review` target that runs the script on Cube.
+- Keep all runtime data under `/mnt/storage/floodmap/data`, never
+  `/mnt/gemini`.
+
+Success criteria:
+
+- `scripts/cube-review-up.sh` starts the Cube review stack from the repo
+  checkout.
+- Vector tile proxy returns `200` for a known Birmingham tile.
+- HAND metadata, sample, and tile endpoints return `200`.
+- Browser smoke in `hand` mode sees rendered road features and the HAND overlay.
+
+Result:
+
+- `make cube-review` runs `scripts/cube-review-up.sh` on Cube.
+- Script restarted `floodmap-cube-tileserver` and FastAPI with:
+  - `FLOODMAP_DATA_ROOT=/mnt/storage/floodmap/data`
+  - `TERRAIN_MANIFEST_PATH=/mnt/storage/floodmap/data/terrain/manifest.json`
+  - `TERRAIN_V2_ENABLED=true`
+  - `TILESERVER_URL=http://100.125.140.78:18080`
+  - `TERRAIN_CACHE_MAX_BYTES=21474836480`
+- Script smoke checks passed:
+  - Vector z10 tile: `200`
+  - HAND metadata: `200`
+  - HAND sample: `200`
+  - HAND z11 Birmingham tile: `200`
+- Browser smoke loaded the Cube review URL in `hand` mode and saw `128`
+  rendered road features plus `10` rendered waterway features.

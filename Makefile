@@ -1,5 +1,5 @@
 # Flood Map - Clean Pipeline + Services
-.PHONY: help start stop test test-integration test-visual test-references test-all tileserver website clean process-maps process-elevation run
+.PHONY: help start stop test test-integration test-visual test-references test-all tileserver website clean process-maps process-elevation cube-review run
 
 # Default target
 help: ## Show this help
@@ -45,6 +45,9 @@ tileserver: ## 🔧 Start tileserver only
 		-p 8080:8080 \
 		-v $(PWD)/output:/data \
 		maptiler/tileserver-gl
+
+cube-review: ## Start the Cube Tailscale review stack
+	@ssh cube 'cd /mnt/storage/floodmap/repo && scripts/cube-review-up.sh'
 
 # Start API server only
 website: ## 🔧 Start API server only
