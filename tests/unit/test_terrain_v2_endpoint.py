@@ -42,6 +42,7 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(terrain_v2, "BIRMINGHAM_HAND_COG_PATH", source_path)
     monkeypatch.setattr(terrain_v2, "BIRMINGHAM_HAND_DATASET_VERSION", "hand-test")
+    monkeypatch.setattr(terrain_v2, "TERRAIN_MANIFEST_PATH", tmp_path / "manifest.json")
     monkeypatch.setattr(
         terrain_v2, "terrain_tile_cache", TerrainTileCache(tmp_path / "cache")
     )
@@ -251,6 +252,7 @@ def test_missing_source_returns_build_miss_headers(tmp_path, monkeypatch):
         terrain_v2, "BIRMINGHAM_HAND_COG_PATH", tmp_path / "missing.tif"
     )
     monkeypatch.setattr(terrain_v2, "BIRMINGHAM_HAND_DATASET_VERSION", "hand-missing")
+    monkeypatch.setattr(terrain_v2, "TERRAIN_MANIFEST_PATH", tmp_path / "manifest.json")
     monkeypatch.setattr(
         terrain_v2, "terrain_tile_cache", TerrainTileCache(tmp_path / "cache")
     )

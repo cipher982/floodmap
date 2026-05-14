@@ -7,6 +7,7 @@ from config import (
     BIRMINGHAM_HAND_COG_PATH,
     BIRMINGHAM_HAND_DATASET_VERSION,
     TERRAIN_CACHE_WRITE_THROUGH,
+    TERRAIN_MANIFEST_PATH,
     TERRAIN_SAMPLE_CACHE_ZOOM,
     TERRAIN_TILE_CACHE_DIR,
 )
@@ -16,10 +17,7 @@ from pydantic import ValidationError
 from terrain import (
     U16_NODATA,
     TerrainBatchRequest,
-    TerrainEncoding,
-    TerrainLayer,
     TerrainManifest,
-    TerrainRegion,
     TerrainTileRequest,
     lonlat_to_tile_pixel,
     maybe_compress,
@@ -28,28 +26,22 @@ from terrain import (
 )
 from terrain_cache import TerrainTileCache
 from terrain_cog import render_cog_tile_with_cache, sample_cog_point, tile_bbox_lonlat
+from terrain_manifest import (
+    build_builtin_hand_manifest,
+    load_terrain_manifest_from_path,
+)
 
 router = APIRouter(prefix="/api/v2/terrain", tags=["terrain-v2"])
 terrain_tile_cache = TerrainTileCache(TERRAIN_TILE_CACHE_DIR)
 
 
 def get_terrain_manifest() -> TerrainManifest:
-    return TerrainManifest(
-        schema_version=1,
+    manifest = load_terrain_manifest_from_path(TERRAIN_MANIFEST_PATH)
+    if manifest is not None:
+        return manifest
+    return build_builtin_hand_manifest(
         dataset_version=BIRMINGHAM_HAND_DATASET_VERSION,
-        layers={
-            "hand": TerrainLayer(
-                encoding=TerrainEncoding.HAND_DECIMETERS,
-                regions=[
-                    TerrainRegion(
-                        id="birmingham-prototype",
-                        bbox=(-87.02, 33.30, -86.52, 33.75),
-                        crs="EPSG:5070",
-                        url=str(BIRMINGHAM_HAND_COG_PATH),
-                    )
-                ],
-            )
-        },
+        source_path=BIRMINGHAM_HAND_COG_PATH,
     )
 
 

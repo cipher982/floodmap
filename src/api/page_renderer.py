@@ -7,7 +7,12 @@ from html import escape
 from pathlib import Path
 from typing import Final
 
-from config import BIRMINGHAM_HAND_DATASET_VERSION, TERRAIN_V2_ENABLED
+from config import (
+    BIRMINGHAM_HAND_COG_PATH,
+    BIRMINGHAM_HAND_DATASET_VERSION,
+    TERRAIN_MANIFEST_PATH,
+    TERRAIN_V2_ENABLED,
+)
 from location_catalog import (
     HOME_DEFAULT_VIEW_STATE,
     CityPage,
@@ -15,6 +20,11 @@ from location_catalog import (
     get_city_page,
     list_city_pages,
     list_related_city_pages,
+)
+from terrain_manifest import (
+    build_builtin_hand_manifest,
+    hand_route_context_from_manifest,
+    load_terrain_manifest_from_path,
 )
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
@@ -61,16 +71,13 @@ def _render_json_ld(payload: dict[str, object]) -> str:
 
 
 def _terrain_route_context() -> dict[str, object]:
-    return {
-        "terrainLayers": {
-            "hand": {
-                "enabled": TERRAIN_V2_ENABLED,
-                "datasetVersion": BIRMINGHAM_HAND_DATASET_VERSION,
-                "label": "Drainage",
-                "coverageLabel": "Birmingham prototype",
-            }
-        }
-    }
+    manifest = load_terrain_manifest_from_path(TERRAIN_MANIFEST_PATH)
+    if manifest is None:
+        manifest = build_builtin_hand_manifest(
+            dataset_version=BIRMINGHAM_HAND_DATASET_VERSION,
+            source_path=BIRMINGHAM_HAND_COG_PATH,
+        )
+    return hand_route_context_from_manifest(manifest, enabled=TERRAIN_V2_ENABLED)
 
 
 def _build_website_node() -> dict[str, object]:

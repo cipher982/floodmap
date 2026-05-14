@@ -33,6 +33,9 @@ ELEVATION_SOURCE_DIR = DATA_ROOT / "elevation-source"  # Raw SRTM files (.zst)
 ELEVATION_TILES_DIR = DATA_ROOT / "elevation-tiles"  # Precompressed tiles (.u16.br)
 BASE_MAPS_DIR = DATA_ROOT / "base-maps"  # Background maps (.mbtiles)
 TERRAIN_DATA_DIR = DATA_ROOT / "terrain"  # Source terrain rasters and manifests
+TERRAIN_MANIFEST_PATH = Path(
+    os.getenv("TERRAIN_MANIFEST_PATH", TERRAIN_DATA_DIR / "manifest.json")
+)
 TERRAIN_TILE_CACHE_DIR = TERRAIN_DATA_DIR / "tile-cache"
 
 # Legacy compatibility - remove after updating dependent code
