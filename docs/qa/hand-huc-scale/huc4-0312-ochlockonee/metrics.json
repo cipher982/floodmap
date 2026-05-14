@@ -1,0 +1,154 @@
+{
+  "artifact_dir": "/mnt/storage/floodmap/scratch/hand-huc-scale/huc4-0312-ochlockonee",
+  "bbox_estimate": {
+    "cells": 262212676,
+    "columns": 13763,
+    "height_m": 190523.5414410393,
+    "raw_u16_bytes": 524425352,
+    "rows": 19052,
+    "width_m": 137627.43723752024
+  },
+  "gate_result": {
+    "area_3ft_pct": 17.55,
+    "automated_pass": true,
+    "checks": {
+      "peak_rss": true,
+      "source_cog_size": true,
+      "wall_time": true
+    },
+    "peak_rss_mb": 16506.0,
+    "source_cog_bytes": 193111309,
+    "valid_cell_pct": 95.38,
+    "wall_time_s": 809.6
+  },
+  "gate_visual_review": {
+    "status": "pass_with_caveat",
+    "notes": [
+      "Preview shows coherent dendritic drainage and coastal lowland structure.",
+      "No obvious internal seam/fan artifact like the early prototype.",
+      "Generated COG is rectangular-bbox based, not clipped to the HUC polygon."
+    ]
+  },
+  "generator_metadata": {
+    "bbox_lonlat": [
+      -84.98580749501282,
+      29.890844392606933,
+      -83.76342334260326,
+      31.48889304914836
+    ],
+    "build": {
+      "peak_rss_mb": 16506.0,
+      "source_cog_bytes": 193111309,
+      "wall_time_s": 809.6
+    },
+    "dem_crs": "EPSG:5070",
+    "dem_resolution_m": 10,
+    "dem_shape": [
+      19706,
+      14234
+    ],
+    "dem_vertical_datum": "NAVD88 via 3DEP",
+    "generated_assets": {
+      "preview": "/mnt/storage/floodmap/scratch/hand-huc-scale/huc4-0312-ochlockonee/preview.png",
+      "qa_report": "/mnt/storage/floodmap/scratch/hand-huc-scale/huc4-0312-ochlockonee/qa-report.md",
+      "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0312-ochlockonee.tif",
+      "tiles": "tiles/{z}/{x}/{y}.u16"
+    },
+    "model": "Prototype flow-path HAND: DEM elevation minus first downstream drain elevation along D8 flowpaths.",
+    "name": "huc4-0312-ochlockonee",
+    "named_stream_sample": {
+      "336": 85,
+      "460": 4908,
+      "558": 2457,
+      "Aucilla River": 119,
+      "Big Creek": 127,
+      "Black Creek": 81,
+      "Bridge Creek": 90,
+      "Dry Creek": 153,
+      "Little Ochlockonee River": 106,
+      "Lost Creek": 100,
+      "Ochlockonee River": 426,
+      "Saint Marks River": 106,
+      "Sopchoppy River": 135,
+      "Spring Creek": 111,
+      "Telogia Creek": 140,
+      "Wacissa River": 87
+    },
+    "nodata_cells": 12960477,
+    "not_a_full_hand_model": true,
+    "routing": {
+      "accumulation_drain_cell_count": 550741,
+      "accumulation_drain_threshold_km2": 16.0,
+      "drain_cell_count": 1333291,
+      "drain_cell_fraction_percent": 0.484,
+      "library": "pyflwdir",
+      "mapped_drainage_cell_count": 1092695,
+      "method": "from_dem D8 flow directions plus FlwdirRaster.hand",
+      "stream_burn_depth_m": 5.0
+    },
+    "sample_zoom": 12,
+    "selected_flowline_count": 15363,
+    "stream_min_order": 2,
+    "threshold_stats_ft": {
+      "1": {
+        "cells": 21600520,
+        "meters": 0.305,
+        "percent": 8.07
+      },
+      "10": {
+        "cells": 99310423,
+        "meters": 3.048,
+        "percent": 37.12
+      },
+      "20": {
+        "cells": 147917599,
+        "meters": 6.096,
+        "percent": 55.29
+      },
+      "3": {
+        "cells": 46945998,
+        "meters": 0.914,
+        "percent": 17.55
+      },
+      "30": {
+        "cells": 179634139,
+        "meters": 9.144,
+        "percent": 67.14
+      },
+      "6": {
+        "cells": 72301319,
+        "meters": 1.829,
+        "percent": 27.03
+      }
+    },
+    "tile_counts": {},
+    "title": "Ochlockonee HUC4 HAND Gate",
+    "valid_hand_cells": 267534727,
+    "zoom_max": 12,
+    "zoom_min": 9
+  },
+  "params": {
+    "accumulation_threshold_km2": 16.0,
+    "dem_resolution_m": 10,
+    "stream_burn_depth_m": 5.0
+  },
+  "region": {
+    "area_km2": 9834.86,
+    "bbox": [
+      -84.98580749501282,
+      29.890844392606933,
+      -83.76342334260326,
+      31.48889304914836
+    ],
+    "huc4": "0312",
+    "name": "Ochlockonee",
+    "states": "FL,GA"
+  },
+  "region_id": "huc4-0312-ochlockonee",
+  "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0312-ochlockonee.tif",
+  "thresholds": {
+    "max_rss_mb": 24576,
+    "max_source_cog_bytes": 500000000,
+    "max_wall_s": 10800
+  }
+}
