@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
+import resource
 import shutil
+import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,6 +53,49 @@ MODEL_PATH = OUT_DIR / "model.npz"
 META_PATH = OUT_DIR / "metadata.json"
 QA_PATH = OUT_DIR / "qa-report.md"
 PREVIEW_PATH = OUT_DIR / "preview.png"
+
+
+def configure_runtime(
+    config: PrototypeConfig,
+    *,
+    output_dir: Path | None = None,
+    source_cog: Path | None = None,
+) -> None:
+    global CONFIG
+    global OUT_DIR
+    global TILES_DIR
+    global SOURCE_DIR
+    global SOURCE_COG_PATH
+    global MODEL_PATH
+    global META_PATH
+    global QA_PATH
+    global PREVIEW_PATH
+
+    CONFIG = config
+    OUT_DIR = output_dir or ROOT / "src" / "web" / "prototypes" / CONFIG.name
+    TILES_DIR = OUT_DIR / "tiles"
+    SOURCE_COG_PATH = source_cog or DATA_ROOT / "terrain" / "hand" / (
+        f"{CONFIG.name}.tif"
+    )
+    SOURCE_DIR = SOURCE_COG_PATH.parent
+    MODEL_PATH = OUT_DIR / "model.npz"
+    META_PATH = OUT_DIR / "metadata.json"
+    QA_PATH = OUT_DIR / "qa-report.md"
+    PREVIEW_PATH = OUT_DIR / "preview.png"
+
+
+def display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def peak_rss_mb() -> float:
+    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    if sys.platform == "darwin":
+        return rss / (1024 * 1024)
+    return rss / 1024
 
 
 def mercator_to_lonlat(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -341,6 +388,7 @@ def write_metadata(
     crs: str,
     flowlines,
     tile_counts: dict[str, int],
+    build_metrics: dict[str, float | int],
 ) -> None:
     west, south, east, north = CONFIG.bbox_lonlat
     named_counts = {
@@ -354,6 +402,11 @@ def write_metadata(
     thresholds_ft = [1, 3, 6, 10, 20, 30]
     threshold_stats = {}
     total = int(np.isfinite(hand).sum())
+    valid_dem_cells = int(np.count_nonzero(np.isfinite(dem)))
+    drain_cell_count = int(np.count_nonzero(drain_mask))
+    drain_fraction = (
+        drain_cell_count * 100.0 / valid_dem_cells if valid_dem_cells else 0.0
+    )
     for ft in thresholds_ft:
         m = ft * 0.3048
         threshold_stats[str(ft)] = {
@@ -377,7 +430,8 @@ def write_metadata(
             "method": "from_dem D8 flow directions plus FlwdirRaster.hand",
             "stream_burn_depth_m": CONFIG.stream_burn_depth_m,
             "accumulation_drain_threshold_km2": CONFIG.flow_accumulation_drain_threshold_km2,
-            "drain_cell_count": int(np.count_nonzero(drain_mask)),
+            "drain_cell_count": drain_cell_count,
+            "drain_cell_fraction_percent": round(drain_fraction, 3),
             "mapped_drainage_cell_count": int(np.count_nonzero(stream_mask)),
             "accumulation_drain_cell_count": int(
                 np.count_nonzero(
@@ -388,22 +442,25 @@ def write_metadata(
         "stream_min_order": CONFIG.stream_min_order,
         "selected_flowline_count": int(len(flowlines)),
         "named_stream_sample": named_counts,
+        "valid_hand_cells": total,
+        "nodata_cells": int(np.count_nonzero(~np.isfinite(hand))),
         "threshold_stats_ft": threshold_stats,
         "tile_counts": tile_counts,
         "sample_zoom": CONFIG.zoom_max,
         "zoom_min": CONFIG.zoom_min,
         "zoom_max": CONFIG.zoom_max,
+        "build": build_metrics,
         "generated_assets": {
             "tiles": "tiles/{z}/{x}/{y}.u16",
-            "source_cog": str(SOURCE_COG_PATH.relative_to(ROOT)),
-            "preview": "preview.png",
-            "qa_report": "qa-report.md",
+            "source_cog": display_path(SOURCE_COG_PATH),
+            "preview": display_path(PREVIEW_PATH),
+            "qa_report": display_path(QA_PATH),
         },
     }
     META_PATH.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
     names_json = json.dumps(named_counts, indent=2)
-    qa = f"""# Birmingham HAND Prototype QA
+    qa = f"""# {CONFIG.title} QA
 
 ## Model
 - Source DEM: USGS 3DEP via py3dep, {CONFIG.dem_resolution_m}m target resolution.
@@ -418,6 +475,10 @@ def write_metadata(
 - DEM grid: `{dem.shape[1]} x {dem.shape[0]}` cells.
 - Selected flowlines: `{len(flowlines)}`.
 - Drain cells: `{int(np.count_nonzero(drain_mask))}`.
+- Drain cell fraction: `{drain_fraction:.2f}%`.
+- Source COG bytes: `{build_metrics.get("source_cog_bytes", 0)}`.
+- Peak RSS MB: `{build_metrics.get("peak_rss_mb", 0)}`.
+- Wall time seconds: `{build_metrics.get("wall_time_s", 0)}`.
 - Tile counts: `{tile_counts}`.
 
 ## Threshold Area
@@ -444,16 +505,80 @@ def write_metadata(
         MODEL_PATH.unlink()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate a prototype HAND COG and QA assets for one region."
+    )
+    parser.add_argument("--name", default=CONFIG.name)
+    parser.add_argument("--title", default=CONFIG.title)
+    parser.add_argument(
+        "--bbox",
+        nargs=4,
+        type=float,
+        metavar=("WEST", "SOUTH", "EAST", "NORTH"),
+        default=CONFIG.bbox_lonlat,
+    )
+    parser.add_argument("--dem-resolution-m", type=int, default=CONFIG.dem_resolution_m)
+    parser.add_argument("--stream-min-order", type=int, default=CONFIG.stream_min_order)
+    parser.add_argument(
+        "--stream-burn-depth-m", type=float, default=CONFIG.stream_burn_depth_m
+    )
+    parser.add_argument(
+        "--flow-accumulation-drain-threshold-km2",
+        type=float,
+        default=CONFIG.flow_accumulation_drain_threshold_km2,
+    )
+    parser.add_argument("--zoom-min", type=int, default=CONFIG.zoom_min)
+    parser.add_argument("--zoom-max", type=int, default=CONFIG.zoom_max)
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--source-cog", type=Path)
+    parser.add_argument(
+        "--skip-static-tiles",
+        action="store_true",
+        help="Skip writing QA web tiles; source COG is still written.",
+    )
+    return parser.parse_args()
+
+
+def config_from_args(args: argparse.Namespace) -> PrototypeConfig:
+    west, south, east, north = args.bbox
+    return PrototypeConfig(
+        name=args.name,
+        title=args.title,
+        bbox_lonlat=(west, south, east, north),
+        dem_resolution_m=args.dem_resolution_m,
+        stream_min_order=args.stream_min_order,
+        stream_burn_depth_m=args.stream_burn_depth_m,
+        flow_accumulation_drain_threshold_km2=(
+            args.flow_accumulation_drain_threshold_km2
+        ),
+        zoom_min=args.zoom_min,
+        zoom_max=args.zoom_max,
+    )
+
+
 def main() -> None:
+    args = parse_args()
+    configure_runtime(
+        config_from_args(args),
+        output_dir=args.output_dir,
+        source_cog=args.source_cog,
+    )
+    start = time.perf_counter()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     dem, x, y, crs = fetch_dem()
     flowlines = fetch_flowlines(crs)
     hand, upstream_area_km2, drain_mask, stream_mask = derive_drainage_height(
         dem, x, y, flowlines
     )
-    tile_counts = write_tiles(hand, x, y, crs)
+    tile_counts = {} if args.skip_static_tiles else write_tiles(hand, x, y, crs)
     write_source_cog(hand, x, y, crs)
     make_preview(hand, drain_mask, stream_mask)
+    build_metrics = {
+        "wall_time_s": round(time.perf_counter() - start, 2),
+        "peak_rss_mb": round(peak_rss_mb(), 1),
+        "source_cog_bytes": SOURCE_COG_PATH.stat().st_size,
+    }
     write_metadata(
         dem,
         hand,
@@ -465,8 +590,11 @@ def main() -> None:
         crs,
         flowlines,
         tile_counts,
+        build_metrics,
     )
     print(f"Wrote {OUT_DIR}")
+    print(f"Wrote source COG {SOURCE_COG_PATH}")
+    print(json.dumps(build_metrics, indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":
