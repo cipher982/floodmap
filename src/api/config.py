@@ -33,6 +33,7 @@ ELEVATION_SOURCE_DIR = DATA_ROOT / "elevation-source"  # Raw SRTM files (.zst)
 ELEVATION_TILES_DIR = DATA_ROOT / "elevation-tiles"  # Precompressed tiles (.u16.br)
 BASE_MAPS_DIR = DATA_ROOT / "base-maps"  # Background maps (.mbtiles)
 TERRAIN_DATA_DIR = DATA_ROOT / "terrain"  # Source terrain rasters and manifests
+TERRAIN_TILE_CACHE_DIR = TERRAIN_DATA_DIR / "tile-cache"
 
 # Legacy compatibility - remove after updating dependent code
 ELEVATION_DATA_DIR = ELEVATION_SOURCE_DIR
@@ -152,6 +153,14 @@ TERRAIN_V2_ENABLED = os.getenv("TERRAIN_V2_ENABLED", "false").lower() in (
     "true",
     "yes",
 )
+TERRAIN_CACHE_WRITE_THROUGH = os.getenv(
+    "TERRAIN_CACHE_WRITE_THROUGH", "true"
+).lower() in (
+    "1",
+    "true",
+    "yes",
+)
+TERRAIN_SAMPLE_CACHE_ZOOM = int(os.getenv("TERRAIN_SAMPLE_CACHE_ZOOM", "12"))
 
 # Enforce HTTPS redirects at the app layer (typically true behind a reverse proxy)
 FORCE_HTTPS = os.getenv(

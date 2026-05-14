@@ -1,6 +1,6 @@
 # CONUS HAND Refactor Spec
 
-Status: Phase 3 follow-up review pending
+Status: Phase 4 implementation review pending
 Owner: Codex
 Baseline commit: `1865fd4 Add Birmingham HAND prototype`
 
@@ -316,6 +316,18 @@ Deliverables:
   NODATA.
 - Persistent cache design should replace the in-memory per-process LRU for
   cross-worker reuse.
+
+Measured Phase 4 result:
+
+- Cache layout:
+  `{data_root}/terrain/tile-cache/{layer}/{dataset_version}/{z}/{x}/{y}.u16.br`
+  plus a small `{y}.json` metadata sidecar.
+- Birmingham z9-z12 precompute wrote `73` tiles and `5.05 MB` compressed.
+- Cache-only serving smoke, with `TERRAIN_V2_ENABLED=true` and no injected
+  `rasterio`, returned the z12 Birmingham tile from `persistent-cache` and served
+  the Brotli file directly at `82,135` bytes.
+- Cache-only `/sample` falls back to the z12 cached tile and reports
+  `sample_source: persistent-cache-z12`.
 
 Opus review after commit.
 

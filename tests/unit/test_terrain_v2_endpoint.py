@@ -15,6 +15,7 @@ from terrain import (
     U16_TILE_BYTES,
     lonlat_to_tile_pixel,
 )
+from terrain_cache import TerrainTileCache
 from terrain_cog import tile_transform_mercator
 
 rasterio = pytest.importorskip("rasterio")
@@ -40,6 +41,9 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(terrain_v2, "BIRMINGHAM_HAND_COG_PATH", source_path)
     monkeypatch.setattr(terrain_v2, "BIRMINGHAM_HAND_DATASET_VERSION", "hand-test")
+    monkeypatch.setattr(
+        terrain_v2, "terrain_tile_cache", TerrainTileCache(tmp_path / "cache")
+    )
 
     app = FastAPI()
     app.include_router(terrain_v2.router)
@@ -60,6 +64,32 @@ def test_get_terrain_tile_returns_uncompressed_u16_tile(client):
     assert response.headers["X-Terrain-Data-Status"] == "ok"
     assert response.headers["X-Cache"] in {"HIT", "MISS"}
     assert np.frombuffer(response.content, dtype=np.uint16)[0] == 42
+
+
+def test_get_terrain_tile_writes_and_reads_persistent_cache(client, monkeypatch):
+    first = client.get(
+        "/api/v2/terrain/hand/hand-test/0/0/0.u16",
+        headers={"Accept-Encoding": "identity"},
+    )
+    assert first.status_code == 200
+    assert first.headers["X-Cache"] == "MISS"
+
+    cache_path = terrain_v2.terrain_tile_cache.br_path("hand", "hand-test", 0, 0, 0)
+    assert cache_path.exists()
+
+    def fail_render(*_args, **_kwargs):
+        raise RuntimeError("renderer should not be called")
+
+    monkeypatch.setattr(terrain_v2, "render_cog_tile_with_cache", fail_render)
+    second = client.get(
+        "/api/v2/terrain/hand/hand-test/0/0/0.u16",
+        headers={"Accept-Encoding": "identity"},
+    )
+
+    assert second.status_code == 200
+    assert second.headers["X-Cache"] == "HIT"
+    assert second.headers["X-Terrain-Source"] == "persistent-cache"
+    assert second.content == first.content
 
 
 def test_get_terrain_tile_can_gzip_response(client):
@@ -114,6 +144,49 @@ def test_sample_terrain_reads_cog_value(client):
     assert payload["height_m"] == 4.2
     assert payload["height_ft"] == 13.8
     assert payload["dataset_version"] == "hand-test"
+    assert payload["sample_source"] == "source-cog"
+
+
+def test_sample_terrain_falls_back_to_persistent_cache(client, monkeypatch):
+    tile_x, tile_y, _, _ = lonlat_to_tile_pixel(lon=-86.8025, lat=33.5207, zoom=12)
+    tile_response = client.get(
+        f"/api/v2/terrain/hand/hand-test/12/{tile_x}/{tile_y}.u16",
+        headers={"Accept-Encoding": "identity"},
+    )
+    assert tile_response.status_code == 200
+
+    def fail_sample(*_args, **_kwargs):
+        raise RuntimeError("rasterio unavailable")
+
+    monkeypatch.setattr(terrain_v2, "sample_cog_point", fail_sample)
+
+    response = client.get("/api/v2/terrain/hand/sample?lat=33.5207&lng=-86.8025")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["height_m"] == 4.2
+    assert payload["sample_source"] == "persistent-cache-z12"
+
+
+def test_sample_terrain_falls_back_to_cache_when_source_missing(
+    client, monkeypatch, tmp_path
+):
+    tile_x, tile_y, _, _ = lonlat_to_tile_pixel(lon=-86.8025, lat=33.5207, zoom=12)
+    tile_response = client.get(
+        f"/api/v2/terrain/hand/hand-test/12/{tile_x}/{tile_y}.u16",
+        headers={"Accept-Encoding": "identity"},
+    )
+    assert tile_response.status_code == 200
+    monkeypatch.setattr(
+        terrain_v2, "BIRMINGHAM_HAND_COG_PATH", tmp_path / "missing.tif"
+    )
+
+    response = client.get("/api/v2/terrain/hand/sample?lat=33.5207&lng=-86.8025")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["height_m"] == 4.2
+    assert payload["sample_source"] == "persistent-cache-z12"
 
 
 def test_missing_source_returns_build_miss_headers(tmp_path, monkeypatch):
@@ -121,6 +194,9 @@ def test_missing_source_returns_build_miss_headers(tmp_path, monkeypatch):
         terrain_v2, "BIRMINGHAM_HAND_COG_PATH", tmp_path / "missing.tif"
     )
     monkeypatch.setattr(terrain_v2, "BIRMINGHAM_HAND_DATASET_VERSION", "hand-missing")
+    monkeypatch.setattr(
+        terrain_v2, "terrain_tile_cache", TerrainTileCache(tmp_path / "cache")
+    )
 
     app = FastAPI()
     app.include_router(terrain_v2.router)
