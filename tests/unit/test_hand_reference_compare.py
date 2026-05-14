@@ -5,6 +5,8 @@ import pytest
 
 from tools.hand.compare_to_reference import (
     U16_NODATA,
+    HandRegion,
+    cache_path_for_region,
     compute_metrics,
     local_manifest_path,
 )
@@ -52,3 +54,31 @@ def test_compute_metrics_includes_same_coverage_random_baseline():
     assert metrics["recall"] == 0.5
     assert metrics["expected_random_precision"] == pytest.approx(0.4)
     assert metrics["precision_lift_vs_random"] == pytest.approx(2.5)
+
+
+def test_compute_metrics_handles_empty_hand_threshold():
+    hand_values = np.array([[20, 30]], dtype=np.uint16)
+    fema_mask = np.array([[True, False]], dtype=np.bool_)
+
+    metrics = compute_metrics(
+        hand_values=hand_values,
+        fema_mask=fema_mask,
+        thresholds_ft=[1.0],
+    )[0]
+
+    assert metrics["hand_cells"] == 0
+    assert metrics["expected_random_precision"] is None
+    assert metrics["precision_lift_vs_random"] is None
+
+
+def test_fema_cache_path_includes_simplification_distance():
+    region = HandRegion(
+        id="test-region",
+        bbox=(-1.0, -1.0, 1.0, 1.0),
+        url=Path("/tmp/hand.tif"),
+        crs="EPSG:5070",
+    )
+
+    path = cache_path_for_region(Path("/cache"), region, 5070, 2.5)
+
+    assert path.name == "test-region-fema-sfha-epsg5070-offset2p5m.json.gz"
