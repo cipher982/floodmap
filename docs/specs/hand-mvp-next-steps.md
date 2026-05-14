@@ -38,6 +38,15 @@ Success criteria:
 - HAND sample returns non-null height for downtown Birmingham.
 - Browser smoke sees at least one rendered road feature in `hand` mode.
 
+Result:
+
+- Complete on `2026-05-14`.
+- `make cube-review` restarts tileserver-gl and FastAPI with the required env.
+- Script smoke checks pass for vector tiles, HAND metadata, HAND sample, and a
+  Birmingham HAND tile.
+- Browser smoke in `hand` mode saw `128` rendered road features and `10`
+  rendered waterway features.
+
 ### Gate 2: Basemap Readability
 
 Goal: screenshots should look like a real street map with a HAND overlay, not a
@@ -50,6 +59,20 @@ Success criteria:
 - Road labels are visible by z11/z12 where OpenMapTiles data supports them.
 - Water/park/landuse context does not overpower the HAND overlay.
 - Browser screenshot at Birmingham z11 shows readable street-map context.
+
+Result:
+
+- Complete on `2026-05-14` for the Cube review MVP.
+- Asset version `20260514d` adds road hierarchy, place labels, road labels,
+  waterway labels, park labels, and light landcover/landuse context.
+- Browser smoke at Birmingham z11 counted:
+  - `128` road features.
+  - `17` road label features.
+  - `26` place label features.
+  - `1` waterway label feature.
+  - `2` park label features.
+- Caveat: labels currently use MapLibre's demo glyph endpoint. Self-host glyphs
+  before public production launch.
 
 ### Gate 3: External Reference Comparison
 

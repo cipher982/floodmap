@@ -466,6 +466,7 @@ class FloodMapClient {
             container: 'map',
             style: {
                 version: 8,
+                glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
                 sources: {
                     'elevation-tiles': {
                         type: 'raster',
@@ -488,7 +489,47 @@ class FloodMapClient {
                     {
                         id: 'background',
                         type: 'background',
-                        paint: { 'background-color': '#f8f9fa' }
+                        paint: { 'background-color': '#f6f4ef' }
+                    },
+                    {
+                        id: 'landcover-wood',
+                        type: 'fill',
+                        source: 'vector-tiles',
+                        'source-layer': 'landcover',
+                        filter: ['==', ['get', 'class'], 'wood'],
+                        paint: { 'fill-color': 'rgba(187, 212, 178, 0.42)' }
+                    },
+                    {
+                        id: 'landcover-grass',
+                        type: 'fill',
+                        source: 'vector-tiles',
+                        'source-layer': 'landcover',
+                        filter: ['==', ['get', 'class'], 'grass'],
+                        paint: { 'fill-color': 'rgba(204, 224, 182, 0.34)' }
+                    },
+                    {
+                        id: 'landuse-context',
+                        type: 'fill',
+                        source: 'vector-tiles',
+                        'source-layer': 'landuse',
+                        paint: {
+                            'fill-color': [
+                                'match',
+                                ['get', 'class'],
+                                'industrial', 'rgba(210, 205, 199, 0.34)',
+                                'railway', 'rgba(196, 194, 203, 0.26)',
+                                'university', 'rgba(205, 215, 194, 0.26)',
+                                'hospital', 'rgba(221, 203, 203, 0.22)',
+                                'rgba(218, 216, 208, 0.18)'
+                            ]
+                        }
+                    },
+                    {
+                        id: 'park',
+                        type: 'fill',
+                        source: 'vector-tiles',
+                        'source-layer': 'park',
+                        paint: { 'fill-color': 'rgba(170, 212, 164, 0.34)' }
                     },
                     {
                         id: 'elevation',
@@ -512,7 +553,7 @@ class FloodMapClient {
                             ['!=', ['get', 'class'], 'ocean'],
                             ['!=', ['get', 'class'], 'sea'],
                         ],
-                        paint: { 'fill-color': 'rgba(70, 130, 180, 0.85)' }
+                        paint: { 'fill-color': 'rgba(78, 151, 196, 0.82)' }
                     },
                     {
                         id: 'water-ocean-hit',
@@ -533,14 +574,220 @@ class FloodMapClient {
                         type: 'line',
                         source: 'vector-tiles',
                         'source-layer': 'waterway',
-                        paint: { 'line-color': 'rgba(70, 130, 180, 0.85)', 'line-width': 1 }
+                        layout: { 'line-cap': 'round', 'line-join': 'round' },
+                        paint: {
+                            'line-color': 'rgba(43, 131, 186, 0.82)',
+                            'line-width': [
+                                'interpolate',
+                                ['linear'],
+                                ['zoom'],
+                                7, 0.5,
+                                11, 1.3
+                            ]
+                        }
+                    },
+                    {
+                        id: 'road-casing',
+                        type: 'line',
+                        source: 'vector-tiles',
+                        'source-layer': 'transportation',
+                        filter: [
+                            'match',
+                            ['get', 'class'],
+                            ['motorway', 'trunk', 'primary', 'secondary', 'tertiary'],
+                            true,
+                            false
+                        ],
+                        layout: { 'line-cap': 'round', 'line-join': 'round' },
+                        paint: {
+                            'line-color': 'rgba(255, 255, 255, 0.72)',
+                            'line-width': [
+                                'interpolate',
+                                ['linear'],
+                                ['zoom'],
+                                7,
+                                [
+                                    'match',
+                                    ['get', 'class'],
+                                    ['motorway', 'trunk'], 2.2,
+                                    'primary', 1.8,
+                                    'secondary', 1.4,
+                                    'tertiary', 1.0,
+                                    0.8
+                                ],
+                                11,
+                                [
+                                    'match',
+                                    ['get', 'class'],
+                                    ['motorway', 'trunk'], 6.0,
+                                    'primary', 4.8,
+                                    'secondary', 3.7,
+                                    'tertiary', 2.7,
+                                    1.4
+                                ]
+                            ]
+                        }
                     },
                     {
                         id: 'roads',
                         type: 'line',
                         source: 'vector-tiles',
                         'source-layer': 'transportation',
-                        paint: { 'line-color': '#6b7280', 'line-width': 1 }
+                        layout: { 'line-cap': 'round', 'line-join': 'round' },
+                        paint: {
+                            'line-color': [
+                                'match',
+                                ['get', 'class'],
+                                ['motorway', 'trunk'], '#6f7884',
+                                'primary', '#7c8490',
+                                'secondary', '#8b929c',
+                                'tertiary', '#9ca3ad',
+                                ['minor', 'residential', 'service'], '#b6bbc3',
+                                '#a6adb7'
+                            ],
+                            'line-opacity': [
+                                'match',
+                                ['get', 'class'],
+                                ['minor', 'residential', 'service', 'track'], 0.72,
+                                0.9
+                            ],
+                            'line-width': [
+                                'interpolate',
+                                ['linear'],
+                                ['zoom'],
+                                7,
+                                [
+                                    'match',
+                                    ['get', 'class'],
+                                    ['motorway', 'trunk'], 1.3,
+                                    'primary', 1.0,
+                                    'secondary', 0.8,
+                                    'tertiary', 0.55,
+                                    0.35
+                                ],
+                                11,
+                                [
+                                    'match',
+                                    ['get', 'class'],
+                                    ['motorway', 'trunk'], 3.5,
+                                    'primary', 2.8,
+                                    'secondary', 2.0,
+                                    'tertiary', 1.45,
+                                    ['minor', 'residential', 'service'], 0.9,
+                                    0.6
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        id: 'waterway-labels',
+                        type: 'symbol',
+                        source: 'vector-tiles',
+                        'source-layer': 'waterway',
+                        minzoom: 10,
+                        filter: ['has', 'name'],
+                        layout: {
+                            'symbol-placement': 'line',
+                            'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+                            'text-font': ['Noto Sans Regular'],
+                            'text-size': 11,
+                            'text-letter-spacing': 0,
+                            'text-rotation-alignment': 'map'
+                        },
+                        paint: {
+                            'text-color': '#2b7fa8',
+                            'text-halo-color': 'rgba(255, 255, 255, 0.88)',
+                            'text-halo-width': 1.2
+                        }
+                    },
+                    {
+                        id: 'road-labels',
+                        type: 'symbol',
+                        source: 'vector-tiles',
+                        'source-layer': 'transportation_name',
+                        minzoom: 10,
+                        filter: [
+                            'any',
+                            ['has', 'name'],
+                            ['has', 'ref']
+                        ],
+                        layout: {
+                            'symbol-placement': 'line',
+                            'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name'], ['get', 'ref']],
+                            'text-font': ['Noto Sans Regular'],
+                            'text-size': [
+                                'match',
+                                ['get', 'class'],
+                                ['motorway', 'trunk'], 11,
+                                ['primary', 'secondary'], 10,
+                                9
+                            ],
+                            'text-letter-spacing': 0,
+                            'text-rotation-alignment': 'map'
+                        },
+                        paint: {
+                            'text-color': '#4b5563',
+                            'text-halo-color': 'rgba(255, 255, 255, 0.92)',
+                            'text-halo-width': 1.4
+                        }
+                    },
+                    {
+                        id: 'park-labels',
+                        type: 'symbol',
+                        source: 'vector-tiles',
+                        'source-layer': 'park',
+                        minzoom: 10,
+                        filter: ['has', 'name'],
+                        layout: {
+                            'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+                            'text-font': ['Noto Sans Italic'],
+                            'text-size': 10,
+                            'text-letter-spacing': 0
+                        },
+                        paint: {
+                            'text-color': '#4f7d54',
+                            'text-halo-color': 'rgba(255, 255, 255, 0.82)',
+                            'text-halo-width': 1.1
+                        }
+                    },
+                    {
+                        id: 'place-labels',
+                        type: 'symbol',
+                        source: 'vector-tiles',
+                        'source-layer': 'place',
+                        filter: [
+                            'match',
+                            ['get', 'class'],
+                            ['city', 'town', 'village', 'suburb', 'neighbourhood'],
+                            true,
+                            false
+                        ],
+                        layout: {
+                            'text-field': ['coalesce', ['get', 'name:en'], ['get', 'name']],
+                            'text-font': ['Noto Sans Bold'],
+                            'text-size': [
+                                'match',
+                                ['get', 'class'],
+                                'city', 15,
+                                'town', 13,
+                                'village', 12,
+                                'suburb', 11,
+                                10
+                            ],
+                            'text-letter-spacing': 0,
+                            'text-transform': [
+                                'match',
+                                ['get', 'class'],
+                                ['city', 'town'],
+                                'uppercase',
+                                'none'
+                            ]
+                        },
+                        paint: {
+                            'text-color': '#323946',
+                            'text-halo-color': 'rgba(255, 255, 255, 0.9)',
+                            'text-halo-width': 1.4
+                        }
                     }
                 ]
             },
