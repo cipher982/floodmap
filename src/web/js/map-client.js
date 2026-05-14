@@ -1948,9 +1948,10 @@ class FloodMapClient {
                 const zoom = Math.floor(this.map.getZoom());
                 const tileCoords = this.getTileCoordinates(lat, lng, zoom);
                 const handDataset = this.getTerrainLayerConfig('hand').datasetVersion;
-                const tilePath = this.viewMode === 'hand' && handDataset
+                const apiTilePath = this.viewMode === 'hand' && handDataset
                     ? `/api/v2/terrain/hand/${handDataset}/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`
                     : `/api/v1/tiles/elevation-data/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`;
+                const tilePath = requireFloodmapUrlHelper('floodmapApiUrl')(apiTilePath);
                 tileInfo = `🗂️ Tile: ${zoom}/${tileCoords.x}/${tileCoords.y} (${tilePath})`;
             }
 
