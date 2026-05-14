@@ -65,11 +65,11 @@ class FloodMapClient {
                 { level: 1.0, label: '2100 Baseline (+1m)' }
             ],
             hand: [
-                { level: 0.5, label: 'Creek Edge (0.5m)' },
-                { level: 1.0, label: 'Low Corridor (1m)' },
-                { level: 2.0, label: 'Urban Floodplain (2m)' },
-                { level: 5.0, label: 'Valley Floor (5m)' },
-                { level: 10.0, label: 'Broad Basin (10m)' }
+                { level: 0.5, label: '0.5m above drainage' },
+                { level: 1.0, label: '1m above drainage' },
+                { level: 2.0, label: '2m above drainage' },
+                { level: 5.0, label: '5m above drainage' },
+                { level: 10.0, label: '10m above drainage' }
             ]
         };
 
@@ -756,7 +756,7 @@ class FloodMapClient {
             const config = this.getTerrainLayerConfig('hand');
             const coverage = config.coverageLabel || 'prototype coverage';
             handLabel.title = enabled
-                ? `Drainage-relative terrain: ${coverage}`
+                ? `Height above nearby mapped drainage: ${coverage}`
                 : 'Drainage mode is unavailable in this deployment.';
         }
 
@@ -774,7 +774,7 @@ class FloodMapClient {
         const mode = this.getLevelControlMode();
         if (label) {
             label.textContent = mode === 'hand'
-                ? 'Drainage Threshold:'
+                ? 'Show Land Within:'
                 : 'Water Level:';
         }
 
@@ -802,7 +802,9 @@ class FloodMapClient {
             waterLevelSlider.value = String(this.waterLevelToSlider(this.currentWaterLevel));
         }
         if (waterLevelDisplay) {
-            waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
+            waterLevelDisplay.textContent = this.viewMode === 'hand'
+                ? `${this.currentWaterLevel}m above drainage`
+                : `${this.currentWaterLevel}m`;
         }
         if (waterLevelVibe) {
             this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
@@ -1877,16 +1879,16 @@ class FloodMapClient {
 
         if (this.viewMode === 'hand') {
             if (waterLevel <= 0.5) {
-                vibeText = 'Tight';
+                vibeText = 'Creek edge';
                 vibeClass = 'vibe-normal';
             } else if (waterLevel <= 2) {
-                vibeText = 'Low';
+                vibeText = 'Low ground';
                 vibeClass = 'vibe-concerning';
             } else if (waterLevel <= 5) {
-                vibeText = 'Broad';
+                vibeText = 'Wide corridor';
                 vibeClass = 'vibe-dangerous';
             } else {
-                vibeText = 'Very Broad';
+                vibeText = 'Broad basin';
                 vibeClass = 'vibe-extreme';
             }
 
@@ -2121,18 +2123,18 @@ class FloodMapClient {
 
         const riskClass = `risk-${data.status || 'unknown'}`;
         const heightLine = Number.isFinite(data.height_m)
-            ? `<p><strong>Height above mapped drainage:</strong> ${data.height_m.toFixed(2)}m (${this.escapeHtml(data.height_ft ?? '')} ft)</p>`
+            ? `<p><strong>Ground height above nearby mapped drainage:</strong> ${data.height_m.toFixed(2)}m (${this.escapeHtml(data.height_ft ?? '')} ft)</p>`
             : '';
         const thresholdLine = Number.isFinite(data.threshold_m)
-            ? `<p><strong>Current threshold:</strong> ${data.threshold_m.toFixed(1)}m</p>`
+            ? `<p><strong>Map is showing land within:</strong> ${data.threshold_m.toFixed(1)}m above drainage</p>`
             : '';
         const sourceLine = data.sample_source
             ? `<p><strong>Source:</strong> ${this.escapeHtml(data.region || 'terrain')} • ${this.escapeHtml(data.sample_source)}</p>`
             : '';
         const message = data.message
             || (data.status === 'low'
-                ? 'This point is above the selected drainage threshold.'
-                : 'This point is inside the selected drainage-height threshold.');
+                ? 'This point is higher than the selected local-drainage range.'
+                : 'This point is inside the selected local-drainage range.');
 
         riskDetails.innerHTML = `
             <div class="risk-summary ${riskClass}">
@@ -2158,8 +2160,8 @@ class FloodMapClient {
             el.style.display = 'block';
             el.className = 'model-note model-note--warning';
             el.innerHTML = `
-                <div class="model-note__title">Drainage-relative prototype</div>
-                <div class="model-note__body">Slider highlights land within a selected height above mapped drainage. Coverage: ${this.escapeHtml(config.coverageLabel || 'prototype region')}.</div>
+                <div class="model-note__title">Height above drainage</div>
+                <div class="model-note__body">Slider highlights land up to the selected ground height above nearby mapped creeks, bayous, and drainage channels. Coverage: ${this.escapeHtml(config.coverageLabel || 'prototype region')}.</div>
             `;
             return;
         }
@@ -2287,7 +2289,7 @@ class FloodMapClient {
 
         const height = Number.isFinite(data.height_m)
             ? `${data.height_m.toFixed(2)}m above drainage`
-            : 'Unknown drainage height';
+            : 'Unknown height above drainage';
         new maplibregl.Marker({ color: '#2563eb' })
             .setLngLat([lng, lat])
             .setPopup(new maplibregl.Popup().setHTML(`
