@@ -113,7 +113,6 @@ class TerrainTileCache:
         tile_dir.mkdir(parents=True, exist_ok=True)
         path = self.br_path(layer, dataset_version, z, x, y)
         compressed = brotli.compress(raw_payload, quality=1)  # type: ignore[union-attr]
-        self._atomic_write(path, compressed)
         self._atomic_write(
             self.meta_path(layer, dataset_version, z, x, y),
             (
@@ -136,11 +135,13 @@ class TerrainTileCache:
                 + "\n"
             ).encode("utf-8"),
         )
+        self._atomic_write(path, compressed)
         return path
 
     def stats(
         self, layer: str | None = None, dataset_version: str | None = None
     ) -> TerrainCacheStats:
+        # Maintenance-only scan. Do not call this from hot serving paths.
         root = self.root
         if layer is not None:
             root = root / layer

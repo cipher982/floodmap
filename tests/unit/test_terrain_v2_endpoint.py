@@ -13,6 +13,7 @@ from terrain import (
     TERRAIN_BATCH_TILE_META_BYTES,
     TILE_SIZE,
     U16_TILE_BYTES,
+    empty_u16_tile,
     lonlat_to_tile_pixel,
 )
 from terrain_cache import TerrainTileCache
@@ -90,6 +91,39 @@ def test_get_terrain_tile_writes_and_reads_persistent_cache(client, monkeypatch)
     assert second.headers["X-Cache"] == "HIT"
     assert second.headers["X-Terrain-Source"] == "persistent-cache"
     assert second.content == first.content
+
+
+def test_get_terrain_tile_respects_write_through_disabled(client, monkeypatch):
+    monkeypatch.setattr(terrain_v2, "TERRAIN_CACHE_WRITE_THROUGH", False)
+
+    response = client.get(
+        "/api/v2/terrain/hand/hand-test/0/0/0.u16",
+        headers={"Accept-Encoding": "identity"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-Cache"] == "MISS"
+    assert not terrain_v2.terrain_tile_cache.br_path(
+        "hand", "hand-test", 0, 0, 0
+    ).exists()
+
+
+def test_get_terrain_tile_does_not_write_through_source_nodata(client, monkeypatch):
+    def render_empty(*_args, **_kwargs):
+        return empty_u16_tile(), "MISS", 1.0
+
+    monkeypatch.setattr(terrain_v2, "render_cog_tile_with_cache", render_empty)
+
+    response = client.get(
+        "/api/v2/terrain/hand/hand-test/0/0/0.u16",
+        headers={"Accept-Encoding": "identity"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-Terrain-Data-Status"] == "source-nodata"
+    assert not terrain_v2.terrain_tile_cache.br_path(
+        "hand", "hand-test", 0, 0, 0
+    ).exists()
 
 
 def test_get_terrain_tile_can_gzip_response(client):
@@ -187,6 +221,29 @@ def test_sample_terrain_falls_back_to_cache_when_source_missing(
     payload = response.json()
     assert payload["height_m"] == 4.2
     assert payload["sample_source"] == "persistent-cache-z12"
+
+
+def test_sample_terrain_returns_404_for_cached_nodata_pixel(
+    client, monkeypatch, tmp_path
+):
+    tile_x, tile_y, _, _ = lonlat_to_tile_pixel(lon=-86.8025, lat=33.5207, zoom=12)
+    terrain_v2.terrain_tile_cache.write_tile(
+        "hand",
+        "hand-test",
+        12,
+        tile_x,
+        tile_y,
+        empty_u16_tile(),
+        "source-nodata",
+    )
+    monkeypatch.setattr(
+        terrain_v2, "BIRMINGHAM_HAND_COG_PATH", tmp_path / "missing.tif"
+    )
+
+    response = client.get("/api/v2/terrain/hand/sample?lat=33.5207&lng=-86.8025")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Point has no terrain data"
 
 
 def test_missing_source_returns_build_miss_headers(tmp_path, monkeypatch):

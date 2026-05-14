@@ -126,7 +126,7 @@ def renderer_unavailable(
 
 def sample_cached_tile(
     layer: str, dataset_version: str, lat: float, lng: float
-) -> int | None:
+) -> tuple[bool, int | None]:
     tile_x, tile_y, pixel_x, pixel_y = lonlat_to_tile_pixel(
         lng, lat, TERRAIN_SAMPLE_CACHE_ZOOM
     )
@@ -134,10 +134,10 @@ def sample_cached_tile(
         layer, dataset_version, TERRAIN_SAMPLE_CACHE_ZOOM, tile_x, tile_y
     )
     if cached is None:
-        return None
+        return False, None
     values = np.frombuffer(cached.payload, dtype=np.uint16).reshape((256, 256))
     value = int(values[pixel_y, pixel_x])
-    return None if value == int(U16_NODATA) else value
+    return True, None if value == int(U16_NODATA) else value
 
 
 @router.get("/{layer}/{dataset_version}/{z}/{x}/{y}.u16")
@@ -187,7 +187,7 @@ def get_terrain_tile(
         raise renderer_unavailable(layer, dataset_version, str(exc)) from exc
     values = np.frombuffer(payload, dtype=np.uint16)
     data_status = "source-nodata" if np.all(values == U16_NODATA) else "ok"
-    if TERRAIN_CACHE_WRITE_THROUGH:
+    if TERRAIN_CACHE_WRITE_THROUGH and data_status != "source-nodata":
         terrain_tile_cache.write_tile(
             layer, dataset_version, z, x, y, payload, data_status
         )
@@ -238,7 +238,7 @@ def get_terrain_tile_batch(
             )
             values = np.frombuffer(tile_payload, dtype=np.uint16)
             data_status = "source-nodata" if np.all(values == U16_NODATA) else "ok"
-            if TERRAIN_CACHE_WRITE_THROUGH:
+            if TERRAIN_CACHE_WRITE_THROUGH and data_status != "source-nodata":
                 terrain_tile_cache.write_tile(
                     layer,
                     dataset_version,
@@ -305,14 +305,18 @@ def sample_terrain(layer: str, lat: float, lng: float):
     except HTTPException as exc:
         if exc.status_code != 503:
             raise
-        value = sample_cached_tile(layer, manifest.dataset_version, lat, lng)
+        has_cached_tile, value = sample_cached_tile(
+            layer, manifest.dataset_version, lat, lng
+        )
         sample_source = f"persistent-cache-z{TERRAIN_SAMPLE_CACHE_ZOOM}"
-        if value is None:
+        if not has_cached_tile:
             raise
     except RuntimeError as exc:
-        value = sample_cached_tile(layer, manifest.dataset_version, lat, lng)
+        has_cached_tile, value = sample_cached_tile(
+            layer, manifest.dataset_version, lat, lng
+        )
         sample_source = f"persistent-cache-z{TERRAIN_SAMPLE_CACHE_ZOOM}"
-        if value is None:
+        if not has_cached_tile:
             raise renderer_unavailable(
                 layer, manifest.dataset_version, str(exc)
             ) from exc

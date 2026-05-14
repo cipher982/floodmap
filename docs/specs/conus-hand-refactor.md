@@ -350,6 +350,14 @@ Opus review after commit.
 
 Deliverables:
 
+- Cache eviction/size-cap plan before national traffic can write through dynamic
+  misses.
+- Parallel precompute design (`--concurrency` or tile-column sharding) before
+  any large region build.
+- Region mosaic rule for abutting/overlapping source COGs; client caches must
+  stay keyed by layer/dataset/tile, not by region.
+- Public/API copy for cache-backed samples must say they are approximate at
+  `TERRAIN_SAMPLE_CACHE_ZOOM`.
 - VPU/HU4 job manifest.
 - Runnable dry-run that emits a manifest for at least two representative regions.
 - Download/verify stage for NHDPlus HR/3DHP inputs.

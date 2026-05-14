@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
 from pathlib import Path
 
@@ -21,18 +20,9 @@ from routers.terrain_v2 import (  # noqa: E402
     require_region_source_path,
 )
 from storage_estimator import format_bytes  # noqa: E402
-from terrain import U16_NODATA  # noqa: E402
+from terrain import U16_NODATA, lonlat_to_tile_pixel  # noqa: E402
 from terrain_cache import TerrainTileCache  # noqa: E402
 from terrain_cog import clear_cog_tile_cache, render_cog_tile_with_cache  # noqa: E402
-
-
-def lonlat_to_tile(lon: float, lat: float, z: int) -> tuple[int, int]:
-    lat = max(min(lat, 85.05112878), -85.05112878)
-    scale = 2**z
-    x = math.floor((lon + 180.0) / 360.0 * scale)
-    lat_rad = math.radians(lat)
-    y = math.floor((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * scale)
-    return x, y
 
 
 def iter_tiles_for_bbox(
@@ -41,8 +31,8 @@ def iter_tiles_for_bbox(
     west, south, east, north = bbox
     tiles: list[tuple[int, int, int]] = []
     for z in range(min_zoom, max_zoom + 1):
-        x0, y_top = lonlat_to_tile(west, north, z)
-        x1, y_bottom = lonlat_to_tile(east, south, z)
+        x0, y_top, _, _ = lonlat_to_tile_pixel(west, north, z)
+        x1, y_bottom, _, _ = lonlat_to_tile_pixel(east, south, z)
         max_coord = (2**z) - 1
         for x in range(max(0, x0), min(max_coord, x1) + 1):
             for y in range(max(0, y_top), min(max_coord, y_bottom) + 1):
