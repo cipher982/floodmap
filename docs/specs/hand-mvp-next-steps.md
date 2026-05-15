@@ -284,6 +284,31 @@ First result:
   next benchmark should test whether a native engine or explicit
   cross-boundary drainage handling fixes the lost upstream/downstream context.
 
+Second result:
+
+- HUC8 `01070006` Merrimack River through WhiteboxTools
+  `ElevationAboveStream` completed on Cube in `167.06s`, peaked at
+  `18209.3 MB` RSS, and wrote an `11.2 MB` COG.
+- Compute result: pass. Whitebox itself runs quickly enough for this unit.
+- Coverage result: fail for a production path. Only `3.43%` of the polygon
+  footprint had valid output. Whitebox warned that the raw DEM contains interior
+  pit cells and likely needs depression/flat conditioning before this tool.
+- Correctness result: fail against the Gate 6 HUC4 pyflwdir reference where
+  extents overlap. Sampled p50/p95/p99 differences were `0.3m`, `3.5m`,
+  `9.229m`; only `78.337%` of samples were within `1m`.
+- Threshold-mask result: fail. 3ft/6ft/10ft Jaccard was
+  `0.1386` / `0.1346` / `0.1278`.
+- Report committed under
+  `docs/qa/hand-whitebox/huc8-01070006-merrimack-river-buffer5km-clipped-whitebox-eas/`.
+- Decision: this Whitebox configuration is a useful smoke rejector, not a
+  production candidate. It uses a different drain definition from the pyflwdir
+  reference: rasterized mapped streams on a raw DEM, without the accumulation
+  drain mask used by the current reference. Do not start CONUS batching from
+  this result.
+- Next benchmark: isolate the likely root cause by keeping pyflwdir, keeping
+  the HUC8 output unit, and computing with larger upstream/parent hydrologic
+  context before clipping back to the HUC8 polygon.
+
 ## Kill Or Pivot Criteria
 
 - If external-reference overlap is very low and the disagreement is not

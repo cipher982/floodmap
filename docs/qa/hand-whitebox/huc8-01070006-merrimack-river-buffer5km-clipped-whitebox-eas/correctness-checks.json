@@ -1,0 +1,12 @@
+{
+  "caveat": "This compares a mapped-flowline Whitebox stream raster against the pyflwdir HUC4 reference. A pass is not production acceptance until the drainage definition and DEM conditioning are comparable.",
+  "checks": {
+    "jaccard_10ft_gte_0_97": false,
+    "jaccard_3ft_gte_0_97": false,
+    "jaccard_6ft_gte_0_97": false,
+    "p99_abs_diff_lte_1m": false,
+    "within_1m_pct_gte_99": false
+  },
+  "gate": "whitebox-huc8-smoke",
+  "passes_gate_8_correctness": false
+}

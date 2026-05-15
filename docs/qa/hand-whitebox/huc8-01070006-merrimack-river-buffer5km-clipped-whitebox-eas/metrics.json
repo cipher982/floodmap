@@ -1,0 +1,92 @@
+{
+  "artifact_dir": "/mnt/storage/floodmap/scratch/hand-whitebox/huc8-01070006-merrimack-river-buffer5km-clipped-whitebox-eas",
+  "build": {
+    "peak_rss_mb": 18209.3,
+    "source_cog_bytes": 11207635,
+    "wall_time_s": 167.06
+  },
+  "checks": {
+    "peak_rss": true,
+    "source_cog_size": true,
+    "wall_time": true
+  },
+  "estimate": {
+    "compute_bbox": {
+      "cells": 131273862,
+      "columns": 10267,
+      "height_m": 127859.39515496744,
+      "raw_u16_bytes": 262547724,
+      "rows": 12786,
+      "width_m": 102672.09586695163
+    },
+    "compute_bbox_lonlat": [
+      -71.98066622376675,
+      42.38348031792206,
+      -70.74252899917154,
+      43.561086846125136
+    ],
+    "output_bbox": {
+      "cells": 109241916,
+      "columns": 9268,
+      "height_m": 117865.67224067217,
+      "raw_u16_bytes": 218483832,
+      "rows": 11787,
+      "width_m": 92675.13209059625
+    },
+    "output_bbox_lonlat": [
+      -71.91924552248993,
+      42.42816148724858,
+      -70.8039552627585,
+      43.51629280864014
+    ]
+  },
+  "params": {
+    "buffer_km": 5.0,
+    "dem_resolution_m": 10,
+    "engine": "WhiteboxTools ElevationAboveStream"
+  },
+  "raster": {
+    "hand_min_m": 0.0,
+    "hand_p50_m": 5.757,
+    "hand_p95_m": 53.008,
+    "hand_p99_m": 99.29,
+    "nodata_cells": 138819500,
+    "polygon_cells": 143755272,
+    "threshold_stats_ft": {
+      "10ft": {
+        "cells": 1873644,
+        "percent": 37.96
+      },
+      "3ft": {
+        "cells": 1144134,
+        "percent": 23.18
+      },
+      "6ft": {
+        "cells": 1498534,
+        "percent": 30.36
+      }
+    },
+    "valid_cell_pct": 3.43,
+    "valid_cells": 4935772,
+    "whitebox_nodata": -9999.0
+  },
+  "region_id": "huc8-01070006-merrimack-river-buffer5km-clipped-whitebox-eas",
+  "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc8-01070006-merrimack-river-buffer5km-clipped-whitebox-eas.tif",
+  "streams": {
+    "selected_flowline_count": 26168,
+    "stream_cells": 1323570
+  },
+  "unit": {
+    "area_km2": 4666.28,
+    "bbox": [
+      -71.91924552248993,
+      42.42816148724856,
+      -70.8039552627585,
+      43.51629280864011
+    ],
+    "code": "01070006",
+    "level": 8,
+    "name": "Merrimack River",
+    "states": "MA,NH"
+  }
+}
