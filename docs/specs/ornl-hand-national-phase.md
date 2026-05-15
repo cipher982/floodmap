@@ -71,8 +71,9 @@ Tasks:
 2. Convert `031601hand.tif` into a uint16-decimeter COG and manifest.
 3. Extract the paired ORNL elevation raster for low-elevation baseline metrics.
 4. Serve the Birmingham area from the ORNL manifest on the Cube review app.
-5. Run FEMA NFHL SFHA comparison at `1ft`, `3ft`, `6ft`, `10ft`, and `20ft`.
-6. Run `all_touched` and strict rasterization sensitivity.
+5. Run FEMA NFHL SFHA comparison with
+   `uv run python tools/hand/run_reference_gate.py ...`.
+6. Confirm the generated `all_touched` and strict rasterization sensitivity.
 7. Write a gate decision with metrics, screenshots, and caveats.
 
 Pass criteria:
