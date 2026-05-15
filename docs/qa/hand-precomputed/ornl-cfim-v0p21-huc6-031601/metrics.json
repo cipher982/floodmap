@@ -1,0 +1,121 @@
+{
+  "elapsed_seconds": 174.941,
+  "encoding": {
+    "meters_per_unit": 0.1,
+    "name": "uint16-decimeters",
+    "nodata": 65535
+  },
+  "output_bytes": 478064537,
+  "output_cog": "/mnt/storage/floodmap/data/terrain/hand-precomputed/ornl-cfim-v0.21/031601/031601hand-u16dm.cog.tif",
+  "output_profile": {
+    "block_shapes": [
+      [
+        512,
+        512
+      ]
+    ],
+    "bounds": [
+      -89.17203699369443,
+      32.41009257236174,
+      -86.13481476986347,
+      34.7538888698995
+    ],
+    "compression": "Compression.deflate",
+    "crs": "EPSG:4269",
+    "driver": "GTiff",
+    "dtype": "uint16",
+    "height": 25313,
+    "is_tiled": true,
+    "nodata": 65535.0,
+    "overviews": [
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "width": 32802
+  },
+  "source_archive": {
+    "archive": "/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/source-zips/031601.zip",
+    "archive_bytes": 19409281548,
+    "archive_sha256": "2e597ff6119a0fa022c446b40270f81df58a33a1394c6cfb5a530059ca456536",
+    "elevation_member": "031601/031601.tif",
+    "elevation_member_bytes": 2408038280,
+    "extracted_elevation": true,
+    "extracted_hand": true,
+    "hand_member": "031601/031601hand.tif",
+    "hand_member_bytes": 2008262074,
+    "source_elevation": "/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/031601/031601-elevation.tif",
+    "source_elevation_bytes": 2408038280,
+    "source_hand": "/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/031601/031601hand.tif",
+    "source_hand_bytes": 2008262074
+  },
+  "source_profile": {
+    "block_shapes": [
+      [
+        1,
+        32802
+      ]
+    ],
+    "bounds": [
+      -89.17203699369443,
+      32.41009257236174,
+      -86.13481476986347,
+      34.7538888698995
+    ],
+    "compression": "Compression.lzw",
+    "count": 1,
+    "crs": "EPSG:4269",
+    "driver": "GTiff",
+    "dtype": "float32",
+    "height": 25313,
+    "is_tiled": false,
+    "nodata": -3.4028234663852886e+38,
+    "overviews": [],
+    "width": 32802
+  },
+  "source_raster": "/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/031601/031601hand.tif",
+  "summary": {
+    "cells_below_threshold_ft": {
+      "1": {
+        "cells": 16225071,
+        "fraction_of_valid": 0.0359390807934866
+      },
+      "10": {
+        "cells": 82769034,
+        "fraction_of_valid": 0.18333620852104987
+      },
+      "20": {
+        "cells": 145247921,
+        "fraction_of_valid": 0.32172905547870695
+      },
+      "3": {
+        "cells": 30963239,
+        "fraction_of_valid": 0.06858462117355513
+      },
+      "30": {
+        "cells": 190957841,
+        "fraction_of_valid": 0.4229780736151335
+      },
+      "6": {
+        "cells": 53604611,
+        "fraction_of_valid": 0.11873602560090002
+      }
+    },
+    "hand_m": {
+      "max": 251.0,
+      "min": 0.0,
+      "p50": 12.0,
+      "p95": 58.7,
+      "p99": 85.5
+    },
+    "nodata_cells": 378856648,
+    "nodata_fraction": 0.45627951268820544,
+    "total_cells": 830317026,
+    "valid_cells": 451460378,
+    "valid_fraction": 0.5437204873117946
+  },
+  "temp_path": "/mnt/storage/floodmap/scratch/hand-precomputed/ornl-cfim-v0.21/031601/031601hand-u16dm.tmp.tif"
+}

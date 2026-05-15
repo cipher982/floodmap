@@ -1,0 +1,31 @@
+{
+  "dataset_version": "ornl-cfim-v0p21-031601",
+  "layers": {
+    "hand": {
+      "encoding": "uint16-decimeters",
+      "nodata": 65535,
+      "regions": [
+        {
+          "bbox": [
+            -89.17203699369443,
+            32.41009257236174,
+            -86.13481476986347,
+            34.7538888698995
+          ],
+          "crs": "EPSG:4269",
+          "id": "ornl-cfim-v0p21-huc6-031601",
+          "url": "/mnt/storage/floodmap/data/terrain/hand-precomputed/ornl-cfim-v0.21/031601/031601hand-u16dm.cog.tif"
+        }
+      ]
+    }
+  },
+  "schema_version": 1,
+  "source": {
+    "citation": "Liu, Yan; Tarboton, David G.; Maidment, David R. Height Above Nearest Drainage (HAND) and Hydraulic Property Table for CONUS - Version 0.21 (20200601). Oak Ridge National Laboratory. DOI: 10.13139/ORNLNCCS/1630903.",
+    "huc": "031601",
+    "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "name": "ORNL CFIM v0.21",
+    "retrieved_at": "2026-05-15",
+    "url": "https://doi.ccs.ornl.gov/dataset/2461aa39-236c-5c2a-b08d-5808d926d27a"
+  }
+}
