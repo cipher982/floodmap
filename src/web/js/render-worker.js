@@ -35,6 +35,19 @@ class WorkerElevationRenderer {
         // In flood mode, treat NODATA as water (not "flooded land").
         this.WATER_RGBA = [70, 130, 180, 220];
 
+        // HAND visualization mapping:
+        // Color encodes height above local drainage within the selected slider
+        // threshold. The threshold clips visibility; it does not create a flat
+        // "inside" color. This keeps high thresholds readable as terrain.
+        this.HAND_VIZ_ASINH_SCALE_M = 1.5;
+        this.HAND_VIZ_STOPS = [
+            { t: 0.0, color: [18, 97, 160, 220] },
+            { t: 0.18, color: [45, 165, 205, 205] },
+            { t: 0.38, color: [98, 190, 170, 175] },
+            { t: 0.65, color: [190, 204, 132, 125] },
+            { t: 1.0, color: [205, 170, 110, 70] }
+        ];
+
         // Elevation visualization mapping:
         // Use a stable global nonlinear mapping so lowlands retain contrast while
         // high mountains don't saturate to white.
@@ -160,18 +173,21 @@ class WorkerElevationRenderer {
         if (heightAboveDrainageM > threshold) {
             return this.colors.TRANSPARENT;
         }
-        if (heightAboveDrainageM <= 0.5) {
-            return this.colors.FLOODED;
+
+        const visibleThreshold = Math.max(0.1, threshold);
+        const scale = this.HAND_VIZ_ASINH_SCALE_M;
+        const compressed = Math.asinh(Math.max(0, heightAboveDrainageM) / scale)
+            / Math.asinh(visibleThreshold / scale);
+        const t = Math.min(1, Math.max(0, compressed));
+        for (let i = 0; i < this.HAND_VIZ_STOPS.length - 1; i++) {
+            const a = this.HAND_VIZ_STOPS[i];
+            const b = this.HAND_VIZ_STOPS[i + 1];
+            if (t <= b.t) {
+                const localT = (t - a.t) / Math.max(1e-12, b.t - a.t);
+                return this.interpolateColors(a.color, b.color, localT);
+            }
         }
-        if (heightAboveDrainageM <= 2.0) {
-            const t = (heightAboveDrainageM - 0.5) / 1.5;
-            return this.interpolateColors(this.colors.FLOODED, this.colors.DANGER, t);
-        }
-        if (heightAboveDrainageM <= 5.0) {
-            const t = (heightAboveDrainageM - 2.0) / 3.0;
-            return this.interpolateColors(this.colors.DANGER, this.colors.CAUTION, t);
-        }
-        return this.colors.SAFE;
+        return this.HAND_VIZ_STOPS[this.HAND_VIZ_STOPS.length - 1].color;
     }
 
     /**

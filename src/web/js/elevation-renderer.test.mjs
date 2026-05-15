@@ -13,12 +13,19 @@ test("HAND tiles decode uint16 decimeters separately from elevation", () => {
   assert.equal(Number.isNaN(renderer.decodeHandHeight(renderer.NODATA_VALUE)), true);
 });
 
-test("HAND coloring hides values above threshold and colors low drainage heights", () => {
+test("HAND coloring uses a scaled ramp within the selected threshold", () => {
   const renderer = new ElevationRenderer();
 
   assert.deepEqual(renderer.calculateHandColor(Number.NaN, 2), renderer.colors.TRANSPARENT);
   assert.deepEqual(renderer.calculateHandColor(3, 2), renderer.colors.TRANSPARENT);
-  assert.deepEqual(renderer.calculateHandColor(0.4, 2), renderer.colors.FLOODED);
-  assert.equal(renderer.calculateHandColor(1.2, 2)[3] > 0, true);
-  assert.equal(renderer.calculateHandColor(4, 5)[3] > 0, true);
+
+  const drainageFloor = renderer.calculateHandColor(0, 10);
+  const lowTerrace = renderer.calculateHandColor(1, 10);
+  const upperValley = renderer.calculateHandColor(8, 10);
+
+  assert.deepEqual(drainageFloor, renderer.HAND_VIZ_STOPS[0].color);
+  assert.equal(lowTerrace[3] > 0, true);
+  assert.equal(upperValley[3] > 0, true);
+  assert.notDeepEqual(lowTerrace, upperValley);
+  assert.equal(upperValley[3] < drainageFloor[3], true);
 });
