@@ -5,11 +5,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import zipfile
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.hand.convert_precomputed_hand import (
     build_single_region_manifest,
