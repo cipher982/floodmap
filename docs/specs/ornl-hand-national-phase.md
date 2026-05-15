@@ -59,11 +59,12 @@ Why:
 Birmingham is the product-risk test that exposed the original sea-level/elevation
 failure. If ORNL HAND does not tell a better story there, the pivot is weak.
 
-Blocked:
+Status:
 
-- ORNL CFIM v0.21 HUC6 `031601` currently requires interactive Globus auth.
-  The required user task is in the docket:
-  `no-date--transfer-ornl-cfim-huc6-031601-zip-to-cube.md`.
+- ORNL CFIM v0.21 HUC6 `031601` has been downloaded to Cube and converted for
+  the Birmingham review app.
+- The open blocker is no longer Birmingham access; it is scaling the same ingest
+  path across the downloaded ORNL HUC6 source ZIPs.
 
 Tasks:
 
@@ -104,6 +105,18 @@ Why:
 
 National ambition is storage-feasible only if source rasters are the product of
 record and web tiles are delivery/cache artifacts.
+
+Current inventory command:
+
+```bash
+python3 tools/hand/ornl_source_inventory.py --format text
+```
+
+On Cube, run the same script from a repo checkout or copy it to `/tmp`; it scans
+both split source ZIP roots:
+
+- `/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/source-zips/`
+- `/home/drose/floodmap-data/hand-precomputed/ornl-cfim-v0.21/source-zips/`
 
 Tasks:
 
