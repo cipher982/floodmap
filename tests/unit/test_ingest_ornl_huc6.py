@@ -6,7 +6,9 @@ import pytest
 
 from tools.hand.ingest_ornl_huc6 import (
     default_paths,
+    dry_run_result,
     extract_ornl_inputs,
+    sha256_file,
     source_metadata,
     validate_huc,
 )
@@ -57,17 +59,42 @@ def test_extract_ornl_inputs_flattens_zip_members(tmp_path) -> None:
         report_root=tmp_path / "reports",
     )
 
-    result = extract_ornl_inputs(paths, force=False)
-    second_result = extract_ornl_inputs(paths, force=False)
+    result = extract_ornl_inputs(paths, force=False, hash_archive=True)
+    second_result = extract_ornl_inputs(paths, force=False, hash_archive=False)
 
     assert paths.source_hand.read_bytes() == b"hand"
     assert paths.source_elevation.read_bytes() == b"elevation"
+    assert result["archive_sha256"] == sha256_file(archive)
     assert result["hand_member"] == "031601/031601hand.tif"
     assert result["elevation_member"] == "031601/031601.tif"
     assert result["extracted_hand"] is True
     assert result["extracted_elevation"] is True
     assert second_result["extracted_hand"] is False
     assert second_result["extracted_elevation"] is False
+    assert second_result["archive_sha256"] is None
+
+
+def test_dry_run_result_does_not_write_outputs(tmp_path) -> None:
+    archive = tmp_path / "031601.zip"
+    with zipfile.ZipFile(archive, "w") as zip_file:
+        zip_file.writestr("031601/031601hand.tif", b"hand")
+        zip_file.writestr("031601/031601.tif", b"elevation")
+
+    paths = default_paths(
+        huc="031601",
+        archive=archive,
+        data_root=tmp_path / "data",
+        scratch_root=tmp_path / "scratch",
+        report_root=tmp_path / "reports",
+    )
+
+    result = dry_run_result(paths)
+
+    assert result["dry_run"] is True
+    assert result["archive"]["hand_member"] == "031601/031601hand.tif"
+    assert result["writes"]["output_cog"].endswith("031601hand-u16dm.cog.tif")
+    assert not paths.source_hand.exists()
+    assert not paths.source_elevation.exists()
 
 
 def test_source_metadata_records_ornl_provenance() -> None:

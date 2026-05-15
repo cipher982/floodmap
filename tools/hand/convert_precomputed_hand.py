@@ -280,6 +280,7 @@ def write_reports(
     summary = metrics["summary"]
     source = metrics["source_profile"]
     output = metrics["output_profile"]
+    source_archive = metrics.get("source_archive")
     lines = [
         f"# {source_name} Precomputed HAND Ingest",
         "",
@@ -293,38 +294,50 @@ def write_reports(
         else "- Manifest: not written",
         f"- Report manifest copy: `{report_dir / 'manifest.json'}`",
         f"- Elapsed: {metrics['elapsed_seconds']} seconds",
-        "",
-        "## Source",
-        "",
-        f"- Size: {source['width']:,} x {source['height']:,}",
-        f"- CRS: `{source['crs']}`",
-        f"- Bounds: `{source['bounds']}`",
-        f"- Dtype/nodata: `{source['dtype']}` / `{source['nodata']}`",
-        f"- Tiled/blocks: `{source['is_tiled']}` / `{source['block_shapes']}`",
-        f"- Overviews: `{source['overviews']}`",
-        "",
-        "## Output",
-        "",
-        f"- Size: {output['width']:,} x {output['height']:,}",
-        f"- CRS: `{output['crs']}`",
-        f"- Dtype/nodata: `{output['dtype']}` / `{output['nodata']}`",
-        f"- Tiled/blocks: `{output['is_tiled']}` / `{output['block_shapes']}`",
-        f"- Overviews: `{output['overviews']}`",
-        "",
-        "## Encoded HAND Distribution",
-        "",
-        f"- Total cells: {summary['total_cells']:,}",
-        f"- Valid cells: {summary['valid_cells']:,} ({summary['valid_fraction']:.3%})",
-        f"- Nodata cells: {summary['nodata_cells']:,} "
-        f"({summary['nodata_fraction']:.3%})",
-        f"- HAND min/p50/p95/p99/max meters: "
-        f"{summary['hand_m']['min']} / {summary['hand_m']['p50']} / "
-        f"{summary['hand_m']['p95']} / {summary['hand_m']['p99']} / "
-        f"{summary['hand_m']['max']}",
-        "",
-        "## Low-HAND Coverage",
-        "",
     ]
+    if source_archive:
+        lines.extend(
+            [
+                f"- Source archive: `{source_archive['archive']}`",
+                f"- Source archive size: {source_archive['archive_bytes']:,} bytes",
+                f"- Source archive SHA-256: `{source_archive['archive_sha256']}`",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Source",
+            "",
+            f"- Size: {source['width']:,} x {source['height']:,}",
+            f"- CRS: `{source['crs']}`",
+            f"- Bounds: `{source['bounds']}`",
+            f"- Dtype/nodata: `{source['dtype']}` / `{source['nodata']}`",
+            f"- Tiled/blocks: `{source['is_tiled']}` / `{source['block_shapes']}`",
+            f"- Overviews: `{source['overviews']}`",
+            "",
+            "## Output",
+            "",
+            f"- Size: {output['width']:,} x {output['height']:,}",
+            f"- CRS: `{output['crs']}`",
+            f"- Dtype/nodata: `{output['dtype']}` / `{output['nodata']}`",
+            f"- Tiled/blocks: `{output['is_tiled']}` / `{output['block_shapes']}`",
+            f"- Overviews: `{output['overviews']}`",
+            "",
+            "## Encoded HAND Distribution",
+            "",
+            f"- Total cells: {summary['total_cells']:,}",
+            f"- Valid cells: {summary['valid_cells']:,} ({summary['valid_fraction']:.3%})",
+            f"- Nodata cells: {summary['nodata_cells']:,} "
+            f"({summary['nodata_fraction']:.3%})",
+            f"- HAND min/p50/p95/p99/max meters: "
+            f"{summary['hand_m']['min']} / {summary['hand_m']['p50']} / "
+            f"{summary['hand_m']['p95']} / {summary['hand_m']['p99']} / "
+            f"{summary['hand_m']['max']}",
+            "",
+            "## Low-HAND Coverage",
+            "",
+        ]
+    )
 
     for threshold_ft, item in sorted(
         summary["cells_below_threshold_ft"].items(), key=lambda value: float(value[0])

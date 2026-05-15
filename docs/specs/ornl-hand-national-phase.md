@@ -25,12 +25,45 @@ or official FEMA/regulatory status.
 - Validate against external references before scaling a region pattern.
 - Commit code/docs/reports in small phases; leave generated data outside git.
 
-## Gate 11: Birmingham Reference Validation
+## Gate 11: Region Packaging
+
+Why:
+
+One HUC6 should become a repeatable package, not a hand-built exception.
+
+Tasks:
+
+1. Ingest a HUC6 with the single command path:
+   `uv run python tools/hand/ingest_ornl_huc6.py --huc <HUC6>`.
+2. Produce a manifest, ingest report, validation report, and review URL for a
+   given HUC6.
+3. Record input bytes, source ZIP SHA-256, output COG bytes, nodata percent,
+   bounds, CRS, and wall clock conversion time.
+4. Keep the command object-storage compatible even while paths are local.
+5. Do not include Globus, FEMA validation, or review-app startup inside the
+   ingest command; those are separate workflow steps.
+
+Pass criteria:
+
+- A new ORNL HUC6 archive on disk can be ingested by changing only the HUC id
+  and optional archive path.
+- The ingest command supports a no-write dry run for checking a new archive.
+- Reports are deterministic enough to compare across regions.
+- Existing unit tests and JS tests pass.
+- No large generated artifacts are staged in git.
+
+## Gate 12: Birmingham Reference Validation
 
 Why:
 
 Birmingham is the product-risk test that exposed the original sea-level/elevation
 failure. If ORNL HAND does not tell a better story there, the pivot is weak.
+
+Blocked:
+
+- ORNL CFIM v0.21 HUC6 `031601` currently requires interactive Globus auth.
+  The required user task is in the docket:
+  `no-date--transfer-ornl-cfim-huc6-031601-zip-to-cube.md`.
 
 Tasks:
 
@@ -46,8 +79,12 @@ Pass criteria:
 
 - Cube review URL shows streets plus HAND overlay around Birmingham.
 - Dynamic HAND sample and z12 tile return from the ORNL COG without code changes.
+- The low-elevation baseline is the paired ORNL elevation raster extracted from
+  the same HUC6 archive.
 - At least one practical threshold has precision lift vs low-elevation baseline
   `>= 1.5x`.
+- FEMA-in-HAND-nodata is reported; if it exceeds `60%`, the gate can only pass
+  with a written caveat explaining why the remaining overlap is still useful.
 - Visual panels show coherent creek/valley corridors, not generic elevation
   blobs or obvious processing artifacts.
 - Strict rasterization does not reverse the qualitative result.
@@ -59,29 +96,6 @@ Fail criteria:
   product decision is possible.
 - The visual layer has discontinuities, boundary artifacts, or missing basemap
   behavior that would mislead a reviewer.
-
-## Gate 12: Region Packaging
-
-Why:
-
-One HUC6 should become a repeatable package, not a hand-built exception.
-
-Tasks:
-
-1. Add or tighten a single command path for ORNL HUC6 ingest:
-   `uv run python tools/hand/ingest_ornl_huc6.py --huc <HUC6>`.
-2. Produce a manifest, ingest report, validation report, and review URL for a
-   given HUC6.
-3. Record input bytes, output COG bytes, nodata percent, bounds, CRS, and wall
-   clock conversion time.
-4. Keep the command object-storage compatible even while paths are local.
-
-Pass criteria:
-
-- A new HUC6 can be ingested by changing only the HUC id and source archive path.
-- Reports are deterministic enough to compare across regions.
-- Existing unit tests and JS tests pass.
-- No large generated artifacts are staged in git.
 
 ## Gate 13: National Scale Plan
 
@@ -102,9 +116,12 @@ Pass criteria:
 
 - The national source and delivery storage budget is bounded with measured pilot
   ratios, not raw bbox guesses alone.
+- The first national source-raster budget is `<= 2 TB` on Cube. If measured
+  pilots extrapolate above that, stop and redesign before downloading all CONUS.
+- The first delivery/cache budget is `<= 500 GB` for the serious demo tier.
 - The build can run on Cube without laptop storage pressure.
-- Any SageMaker use has a clear reason: faster parallel ingest or memory-heavy
-  validation, not vague "more power".
+- SageMaker is only used for a named reason: faster parallel ingest or
+  memory-heavy validation, not vague "more power".
 
 ## Gate 14: Product Surface
 
@@ -119,6 +136,8 @@ Tasks:
 2. Pick threshold presets that match HAND interpretation.
 3. Add a clear "what this is / is not" explanation outside the map surface.
 4. Keep the tool-first map experience; avoid a marketing landing page.
+5. Audit the UI for claims that imply flood probability, official FEMA status,
+   insurance risk, forecasts, storm sewer capacity, or time-to-flood.
 
 Pass criteria:
 
@@ -126,3 +145,4 @@ Pass criteria:
 - A user can inspect a city and understand that the slider means height above
   local drainage.
 - The map still loads with streets, controls, legend, and shareable state.
+- Screenshot QA confirms the legend, slider, and mode labels use HAND language.

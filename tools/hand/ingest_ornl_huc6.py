@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import zipfile
@@ -131,37 +132,81 @@ def extract_member(
     return True
 
 
-def extract_ornl_inputs(paths: OrnlHuc6Paths, *, force: bool) -> dict[str, Any]:
+def sha256_file(path: Path, *, chunk_size: int = 1024 * 1024 * 8) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        while chunk := file.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def inspect_ornl_archive(paths: OrnlHuc6Paths) -> dict[str, Any]:
     if not paths.archive.exists():
         raise FileNotFoundError(paths.archive)
 
     with zipfile.ZipFile(paths.archive) as archive:
         hand_member = zip_member_name(archive, paths.huc, f"{paths.huc}hand.tif")
         elevation_member = zip_member_name(archive, paths.huc, f"{paths.huc}.tif")
+        hand_info = archive.getinfo(hand_member)
+        elevation_info = archive.getinfo(elevation_member)
+
+    return {
+        "archive": str(paths.archive),
+        "archive_bytes": paths.archive.stat().st_size,
+        "hand_member": hand_member,
+        "hand_member_bytes": hand_info.file_size,
+        "elevation_member": elevation_member,
+        "elevation_member_bytes": elevation_info.file_size,
+        "source_hand": str(paths.source_hand),
+        "source_elevation": str(paths.source_elevation),
+    }
+
+
+def extract_ornl_inputs(
+    paths: OrnlHuc6Paths, *, force: bool, hash_archive: bool
+) -> dict[str, Any]:
+    archive_info = inspect_ornl_archive(paths)
+
+    with zipfile.ZipFile(paths.archive) as archive:
         extracted_hand = extract_member(
             archive,
-            member=hand_member,
+            member=archive_info["hand_member"],
             destination=paths.source_hand,
             force=force,
         )
         extracted_elevation = extract_member(
             archive,
-            member=elevation_member,
+            member=archive_info["elevation_member"],
             destination=paths.source_elevation,
             force=force,
         )
 
+    archive_info.update(
+        {
+            "archive_sha256": sha256_file(paths.archive) if hash_archive else None,
+            "source_hand_bytes": paths.source_hand.stat().st_size,
+            "source_elevation_bytes": paths.source_elevation.stat().st_size,
+            "extracted_hand": extracted_hand,
+            "extracted_elevation": extracted_elevation,
+        }
+    )
+    return archive_info
+
+
+def dry_run_result(paths: OrnlHuc6Paths) -> dict[str, Any]:
+    serialized_paths = {key: str(value) for key, value in paths.__dict__.items()}
     return {
-        "archive": str(paths.archive),
-        "hand_member": hand_member,
-        "elevation_member": elevation_member,
-        "source_hand": str(paths.source_hand),
-        "source_elevation": str(paths.source_elevation),
-        "extracted_hand": extracted_hand,
-        "extracted_elevation": extracted_elevation,
-        "archive_bytes": paths.archive.stat().st_size,
-        "source_hand_bytes": paths.source_hand.stat().st_size,
-        "source_elevation_bytes": paths.source_elevation.stat().st_size,
+        "dry_run": True,
+        "paths": serialized_paths,
+        "archive": inspect_ornl_archive(paths),
+        "writes": {
+            "source_hand": str(paths.source_hand),
+            "source_elevation": str(paths.source_elevation),
+            "output_cog": str(paths.output_cog),
+            "temp_path": str(paths.temp_path),
+            "manifest_path": str(paths.manifest_path),
+            "report_dir": str(paths.report_root / paths.region_id),
+        },
     }
 
 
@@ -182,12 +227,19 @@ def ingest_ornl_huc6(
     retrieved_at: str,
     chunk_rows: int,
     force_extract: bool,
+    hash_archive: bool,
     keep_temp: bool,
     quiet: bool,
     extract_only: bool,
+    dry_run: bool,
 ) -> dict[str, Any]:
-    extraction = extract_ornl_inputs(paths, force=force_extract)
     serialized_paths = {key: str(value) for key, value in paths.__dict__.items()}
+    if dry_run:
+        return dry_run_result(paths)
+
+    extraction = extract_ornl_inputs(
+        paths, force=force_extract, hash_archive=hash_archive
+    )
     if extract_only:
         return {"paths": serialized_paths, "extraction": extraction}
 
@@ -198,6 +250,7 @@ def ingest_ornl_huc6(
         chunk_rows=chunk_rows,
         quiet=quiet,
     )
+    metrics["source_archive"] = extraction
     source_profile = metrics["source_profile"]
     manifest = build_single_region_manifest(
         dataset_version=paths.dataset_version,
@@ -256,12 +309,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--chunk-rows", type=int, default=512)
     parser.add_argument("--force-extract", action="store_true")
+    parser.add_argument(
+        "--skip-archive-hash",
+        action="store_true",
+        help="Do not compute source ZIP SHA-256. Use only for quick smoke checks.",
+    )
     parser.add_argument("--keep-temp", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument(
         "--extract-only",
         action="store_true",
         help="Extract HAND/elevation rasters but do not convert to COG.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Inspect archive members and target paths without writing files.",
     )
     return parser.parse_args()
 
@@ -280,9 +343,11 @@ def main() -> None:
         retrieved_at=args.retrieved_at,
         chunk_rows=args.chunk_rows,
         force_extract=args.force_extract,
+        hash_archive=not args.skip_archive_hash,
         keep_temp=args.keep_temp,
         quiet=args.quiet,
         extract_only=args.extract_only,
+        dry_run=args.dry_run,
     )
     print(json.dumps(result, indent=2, sort_keys=True), flush=True)
 
