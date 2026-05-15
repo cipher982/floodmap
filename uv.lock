@@ -949,6 +949,7 @@ hydrology = [
     { name = "pygeohydro" },
     { name = "pynhd" },
     { name = "rioxarray" },
+    { name = "whitebox" },
 ]
 processing = [
     { name = "gdal" },
@@ -1016,6 +1017,7 @@ requires-dist = [
     { name = "tqdm", marker = "extra == 'processing'", specifier = ">=4.66.5" },
     { name = "uvicorn", specifier = ">=0.30.0" },
     { name = "wheel", marker = "extra == 'dev'", specifier = ">=0.43.0" },
+    { name = "whitebox", marker = "extra == 'hydrology'", specifier = ">=2.3.6" },
     { name = "zstandard", specifier = ">=0.23.0" },
 ]
 provides-extras = ["processing", "dev", "test", "hydrology"]
@@ -3710,6 +3712,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/8a/98/2d9906746cdc6a6ef809ae6338005b3f21bb568bea3165cfc6a243fdc25c/wheel-0.45.1.tar.gz", hash = "sha256:661e1abd9198507b1409a20c02106d9670b2576e916d58f520316666abca6729", size = 107545, upload-time = "2024-11-23T00:18:23.513Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/2c/87f3254fd8ffd29e4c02732eee68a83a1d3c346ae39bc6822dcbcb697f2b/wheel-0.45.1-py3-none-any.whl", hash = "sha256:708e7481cc80179af0e556bbf0cc00b8444c7321e2700b8d8580231d13017248", size = 72494, upload-time = "2024-11-23T00:18:21.207Z" },
+]
+
+[[package]]
+name = "whitebox"
+version = "2.3.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ac/87/c628340efbf9f819a1e8b241967857b5cf69c197b998eae89a98c3c00dbd/whitebox-2.3.6.tar.gz", hash = "sha256:69571640a778253e27a05c63b08aed670457803798a0b8f233761eabcd39188b", size = 78177, upload-time = "2025-02-23T01:22:48.762Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/44/9bd2ca55e07ee3d63a0d3b46c77ca75e3089e38cc7260e46fc597a632a5a/whitebox-2.3.6-py2.py3-none-any.whl", hash = "sha256:16b780134cabb9b9d067078f42265da692963d466747cbe655f573fab0f3f60e", size = 74005, upload-time = "2025-02-23T01:22:46.745Z" },
 ]
 
 [[package]]

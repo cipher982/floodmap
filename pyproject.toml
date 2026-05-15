@@ -73,6 +73,7 @@ hydrology = [
     "pygeohydro>=0.19.4",
     "pynhd>=0.19.4",
     "rioxarray>=0.22.0",
+    "whitebox>=2.3.6",
 ]
 
 [tool.setuptools]
