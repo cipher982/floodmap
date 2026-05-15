@@ -246,11 +246,11 @@ def write_report(report_root: Path, result: dict[str, Any]) -> None:
     )
     build = result["build"]
     metadata = result["metadata"]
-    valid_cells = int(metadata["valid_cells"])
+    valid_cells = int(metadata["valid_hand_cells"])
     nodata_cells = int(metadata["nodata_cells"])
     total_cells = valid_cells + nodata_cells
     valid_pct = round(valid_cells * 100.0 / total_cells, 2) if total_cells else None
-    threshold = metadata["threshold_stats_ft"]["3"]["area_pct"]
+    threshold = metadata["threshold_stats_ft"]["3"]["percent"]
     lines = [
         f"# HUC{result['unit']['level']} HAND Unit: {result['unit']['code']} {result['unit']['name']}",
         "",
@@ -263,6 +263,54 @@ def write_report(report_root: Path, result: dict[str, Any]) -> None:
         f"- Output bbox cells before polygon mask: `{result['estimate']['output_bbox']['cells']:,}`.",
     ]
     (report_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def report_existing(
+    *,
+    metadata_path: Path,
+    report_root: Path,
+) -> dict[str, Any]:
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    gate = metadata["huc_unit_gate"]
+    unit = HucUnit(
+        level=int(gate["level"]),
+        code=str(gate["code"]),
+        name=str(metadata["title"]).removesuffix(f" HUC{gate['level']} HAND"),
+        states="",
+        area_km2=0.0,
+        bbox=tuple(float(value) for value in metadata["bbox_lonlat"]),
+    )
+    region_id = str(metadata["name"])
+    result = {
+        "unit": asdict(unit),
+        "region_id": region_id,
+        "source_cog": str(metadata["generated_assets"]["source_cog"]),
+        "artifact_dir": str(metadata_path.parent),
+        "params": {
+            "buffer_km": gate["buffer_km"],
+            "dem_resolution_m": metadata["dem_resolution_m"],
+            "stream_burn_depth_m": metadata["routing"]["stream_burn_depth_m"],
+            "accumulation_threshold_km2": metadata["routing"][
+                "accumulation_drain_threshold_km2"
+            ],
+        },
+        "estimate": {
+            "compute_bbox": gate["compute_bbox_estimate"],
+            "output_bbox": gate["output_bbox_estimate"],
+            "compute_bbox_lonlat": gate["compute_bbox_lonlat"],
+            "output_bbox_lonlat": gate["output_bbox_lonlat"],
+        },
+        "metadata": metadata,
+        "checks": {
+            "wall_time": metadata["build"]["wall_time_s"] <= DEFAULT_MAX_WALL_S,
+            "peak_rss": metadata["build"]["peak_rss_mb"] <= DEFAULT_MAX_RSS_MB,
+            "source_cog_size": metadata["build"]["source_cog_bytes"]
+            <= DEFAULT_MAX_SOURCE_COG_BYTES,
+        },
+        "build": metadata["build"],
+    }
+    write_report(report_root, result)
+    return result
 
 
 def percentile(values: np.ndarray, q: float) -> float | None:
@@ -437,6 +485,10 @@ def parse_args() -> argparse.Namespace:
     diff.add_argument("--report-root", type=Path, default=Path("docs/qa/hand-unit"))
     diff.add_argument("--sample-count", type=int, default=DEFAULT_SAMPLE_COUNT)
     diff.add_argument("--seed", type=int, default=11)
+
+    report = subparsers.add_parser("report-existing")
+    report.add_argument("--metadata-path", type=Path, required=True)
+    report.add_argument("--report-root", type=Path, default=Path("docs/qa/hand-unit"))
     return parser.parse_args()
 
 
@@ -465,6 +517,12 @@ def main() -> None:
             seed=args.seed,
         )
         print(json.dumps(result["abs_diff_m"], indent=2, sort_keys=True))
+    elif args.command == "report-existing":
+        result = report_existing(
+            metadata_path=args.metadata_path,
+            report_root=args.report_root,
+        )
+        print(json.dumps(result["build"], indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

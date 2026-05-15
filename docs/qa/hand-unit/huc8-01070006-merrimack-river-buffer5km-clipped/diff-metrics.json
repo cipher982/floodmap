@@ -1,0 +1,46 @@
+{
+  "abs_diff_m": {
+    "max_sampled": 143.3,
+    "mean": 0.77,
+    "p50": 0.2,
+    "p90": 1.4,
+    "p95": 2.4,
+    "p99": 10.7,
+    "within_1m_pct": 85.19
+  },
+  "candidate_cog": "/mnt/storage/floodmap/data/terrain/hand/huc8-01070006-merrimack-river-buffer5km-clipped.tif",
+  "counts": {
+    "candidate_cells": 143755272,
+    "candidate_valid_cells": 60605780,
+    "gt_1m_cells": 8885006,
+    "reference_valid_cells_on_candidate_grid": 89902602,
+    "valid_pair_cells": 60322892
+  },
+  "reference_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0107-merrimack-buffer5km-clipped.tif",
+  "sample_count": 105215,
+  "sample_seed": 11,
+  "sample_target": 250000,
+  "thresholds": {
+    "10ft": {
+      "candidate_cells": 9203074,
+      "intersection_cells": 8589320,
+      "jaccard": 0.6204,
+      "reference_cells": 13230915,
+      "union_cells": 13844669
+    },
+    "3ft": {
+      "candidate_cells": 4974073,
+      "intersection_cells": 4443818,
+      "jaccard": 0.5785,
+      "reference_cells": 7150956,
+      "union_cells": 7681211
+    },
+    "6ft": {
+      "candidate_cells": 6830162,
+      "intersection_cells": 6240280,
+      "jaccard": 0.5976,
+      "reference_cells": 9851612,
+      "union_cells": 10441494
+    }
+  }
+}

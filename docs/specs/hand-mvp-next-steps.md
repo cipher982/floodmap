@@ -266,6 +266,24 @@ Success criteria:
   hydrologic correctness. If HUC8/HUC10 monolithic pyflwdir passes, avoid
   native-engine churn until a larger-region benchmark proves it is needed.
 
+First result:
+
+- HUC8 `01070006` Merrimack River monolithic pyflwdir completed on Cube in
+  `637.51s`, peaked at `18209.4 MB` RSS, and wrote a `72.3 MB` COG.
+- Compute result: pass. Smaller hydrologic units fit the memory and wall-clock
+  budget much better than HUC4 bands or HUC4 monolithic runs.
+- Correctness result: fail against the HUC4 `0107` monolithic reference where
+  extents overlap. Sampled p50/p95/p99 differences were `0.2m`, `2.4m`,
+  `10.7m`; only `85.19%` of samples were within `1m`.
+- Threshold-mask result: fail. 3ft/6ft/10ft Jaccard was
+  `0.5785` / `0.5976` / `0.6204`.
+- Report committed under
+  `docs/qa/hand-unit/huc8-01070006-merrimack-river-buffer5km-clipped/`.
+- Decision: HUC8 monolithic pyflwdir improves resource use but does not match
+  the larger HUC4 reference well enough on this downstream Merrimack unit. The
+  next benchmark should test whether a native engine or explicit
+  cross-boundary drainage handling fixes the lost upstream/downstream context.
+
 ## Kill Or Pivot Criteria
 
 - If external-reference overlap is very low and the disagreement is not
