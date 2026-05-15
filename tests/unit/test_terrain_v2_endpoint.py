@@ -236,6 +236,50 @@ def test_sample_terrain_reads_cog_value(client):
     assert payload["sample_source"] == "source-cog"
 
 
+def test_sample_terrain_tries_later_overlapping_regions(tmp_path, monkeypatch):
+    region_a_path = tmp_path / "a.tif"
+    region_b_path = tmp_path / "b.tif"
+    region_a_path.write_bytes(b"a")
+    region_b_path.write_bytes(b"b")
+    manifest = TerrainManifest(
+        dataset_version="hand-test",
+        layers={
+            "hand": TerrainLayer(
+                encoding=TerrainEncoding.HAND_DECIMETERS,
+                regions=[
+                    TerrainRegion(
+                        id="region-a",
+                        bbox=(-87, 33, -86, 34),
+                        crs="EPSG:4269",
+                        url=str(region_a_path),
+                    ),
+                    TerrainRegion(
+                        id="region-b",
+                        bbox=(-87, 33, -86, 34),
+                        crs="EPSG:4269",
+                        url=str(region_b_path),
+                    ),
+                ],
+            )
+        },
+    )
+    monkeypatch.setattr(terrain_v2, "get_terrain_manifest", lambda: manifest)
+
+    def fake_sample(path, *_args, **_kwargs):
+        return None if Path(path) == region_a_path else 77
+
+    monkeypatch.setattr(terrain_v2, "sample_cog_point", fake_sample)
+
+    app = FastAPI()
+    app.include_router(terrain_v2.router)
+    response = TestClient(app).get("/api/v2/terrain/hand/sample?lat=33.5&lng=-86.5")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["region"] == "region-b"
+    assert payload["height_m"] == 7.7
+
+
 def test_sample_terrain_falls_back_to_persistent_cache(client, monkeypatch):
     tile_x, tile_y, _, _ = lonlat_to_tile_pixel(lon=-86.8025, lat=33.5207, zoom=12)
     tile_response = client.get(

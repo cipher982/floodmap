@@ -117,6 +117,15 @@ def regions_for_tile(
     return regions
 
 
+def regions_for_point(
+    manifest: TerrainManifest, layer: str, lon: float, lat: float
+) -> list[TerrainRegion]:
+    terrain_layer = manifest.layers.get(layer)
+    if terrain_layer is None:
+        return []
+    return [region for region in terrain_layer.regions if region.contains(lon, lat)]
+
+
 def render_regions_tile(
     manifest: TerrainManifest,
     layer: str,
@@ -343,41 +352,64 @@ def sample_terrain(layer: str, lat: float, lng: float):
     terrain_layer = manifest.layers.get(layer)
     if terrain_layer is None:
         raise HTTPException(status_code=404, detail="Unknown terrain layer")
-    region = manifest.find_region(layer, lng, lat)
-    if region is None:
+    regions = regions_for_point(manifest, layer, lng, lat)
+    if not regions:
         raise HTTPException(status_code=404, detail="Point outside terrain coverage")
-    sample_source = "source-cog"
-    try:
-        source_path = require_region_source_path(manifest, layer, region)
-        value = sample_cog_point(source_path, lon=lng, lat=lat)
-    except HTTPException as exc:
-        if exc.status_code != 503:
-            raise
+
+    source_errors: list[Exception] = []
+    for region in regions:
+        try:
+            source_path = require_region_source_path(manifest, layer, region)
+            value = sample_cog_point(source_path, lon=lng, lat=lat)
+        except HTTPException as exc:
+            if exc.status_code != 503:
+                raise
+            source_errors.append(exc)
+            continue
+        except RuntimeError as exc:
+            source_errors.append(exc)
+            continue
+
+        if value is None:
+            continue
+
+        height_m = value / 10.0
+        return {
+            "latitude": lat,
+            "longitude": lng,
+            "height_m": round(height_m, 2),
+            "height_ft": round(height_m * 3.28084, 1),
+            "encoding": terrain_layer.encoding,
+            "dataset_version": manifest.dataset_version,
+            "region": region.id,
+            "sample_source": "source-cog",
+        }
+
+    if source_errors:
         has_cached_tile, value = sample_cached_tile(
             layer, manifest.dataset_version, lat, lng
         )
-        sample_source = f"persistent-cache-z{TERRAIN_SAMPLE_CACHE_ZOOM}"
-        if not has_cached_tile:
-            raise
-    except RuntimeError as exc:
-        has_cached_tile, value = sample_cached_tile(
-            layer, manifest.dataset_version, lat, lng
+        if has_cached_tile and value is not None:
+            height_m = value / 10.0
+            return {
+                "latitude": lat,
+                "longitude": lng,
+                "height_m": round(height_m, 2),
+                "height_ft": round(height_m * 3.28084, 1),
+                "encoding": terrain_layer.encoding,
+                "dataset_version": manifest.dataset_version,
+                "region": regions[0].id,
+                "sample_source": f"persistent-cache-z{TERRAIN_SAMPLE_CACHE_ZOOM}",
+            }
+        if has_cached_tile:
+            raise HTTPException(status_code=404, detail="Point has no terrain data")
+        runtime_error = next(
+            (error for error in source_errors if isinstance(error, RuntimeError)), None
         )
-        sample_source = f"persistent-cache-z{TERRAIN_SAMPLE_CACHE_ZOOM}"
-        if not has_cached_tile:
+        if runtime_error is not None:
             raise renderer_unavailable(
-                layer, manifest.dataset_version, str(exc)
-            ) from exc
-    if value is None:
-        raise HTTPException(status_code=404, detail="Point has no terrain data")
-    height_m = value / 10.0
-    return {
-        "latitude": lat,
-        "longitude": lng,
-        "height_m": round(height_m, 2),
-        "height_ft": round(height_m * 3.28084, 1),
-        "encoding": terrain_layer.encoding,
-        "dataset_version": manifest.dataset_version,
-        "region": region.id,
-        "sample_source": sample_source,
-    }
+                layer, manifest.dataset_version, str(runtime_error)
+            ) from runtime_error
+        raise source_errors[0]
+
+    raise HTTPException(status_code=404, detail="Point has no terrain data")
