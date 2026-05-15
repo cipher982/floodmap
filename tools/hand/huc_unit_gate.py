@@ -327,6 +327,7 @@ def diff_against_reference(
     region_id: str,
     sample_count: int,
     seed: int,
+    reference_note: str | None = None,
 ) -> dict[str, Any]:
     rng = np.random.default_rng(seed)
     sampled_diffs: list[np.ndarray] = []
@@ -352,6 +353,16 @@ def diff_against_reference(
             "reference": str(ref.crs),
             "candidate": str(cand.crs),
             "match": str(ref.crs) == str(cand.crs),
+        }
+        reprojection = {
+            "performed": not crs_info["match"],
+            "resampling": Resampling.nearest.name,
+            "note": (
+                "Reference was reprojected onto the candidate grid before diffing; "
+                "cross-CRS diffs are approximate smoke metrics."
+                if not crs_info["match"]
+                else "No CRS reprojection was required."
+            ),
         }
         sample_rate = sample_count / max(1, cand.width * cand.height)
         for row_start in range(0, cand.height, 512):
@@ -424,6 +435,8 @@ def diff_against_reference(
         "reference_cog": str(reference_cog),
         "candidate_cog": str(candidate_cog),
         "crs": crs_info,
+        "reprojection": reprojection,
+        "reference_note": reference_note,
         "sample_seed": seed,
         "sample_target": sample_count,
         "sample_count": int(diffs_dm.size),
@@ -450,12 +463,15 @@ def diff_against_reference(
         "# HAND Candidate vs Reference Diff",
         "",
         f"- Reference CRS / candidate CRS: `{crs_info['reference']}` / `{crs_info['candidate']}`.",
-        f"- Samples: `{result['sample_count']}`.",
+        f"- Reprojection: `{reprojection['performed']}` with `{reprojection['resampling']}` resampling.",
+        f"- Samples: `{result['sample_count']}` of target `{result['sample_target']}`.",
         f"- Abs diff p50/p95/p99/max sampled: `{result['abs_diff_m']['p50']}` / `{result['abs_diff_m']['p95']}` / `{result['abs_diff_m']['p99']}` / `{result['abs_diff_m']['max_sampled']}` m.",
         f"- Within 1m: `{result['abs_diff_m']['within_1m_pct']}%`.",
         f"- Cells with >1m diff: `{counts['gt_1m_cells']}`.",
         f"- 3ft/6ft/10ft Jaccard: `{threshold_stats['3ft']['jaccard']}` / `{threshold_stats['6ft']['jaccard']}` / `{threshold_stats['10ft']['jaccard']}`.",
     ]
+    if reference_note:
+        lines.insert(2, f"- Reference note: {reference_note}")
     (report_dir / "diff-summary.md").write_text(
         "\n".join(lines) + "\n", encoding="utf-8"
     )
@@ -490,6 +506,7 @@ def parse_args() -> argparse.Namespace:
     diff.add_argument("--report-root", type=Path, default=Path("docs/qa/hand-unit"))
     diff.add_argument("--sample-count", type=int, default=DEFAULT_SAMPLE_COUNT)
     diff.add_argument("--seed", type=int, default=11)
+    diff.add_argument("--reference-note")
 
     report = subparsers.add_parser("report-existing")
     report.add_argument("--metadata-path", type=Path, required=True)
@@ -520,6 +537,7 @@ def main() -> None:
             region_id=args.region_id,
             sample_count=args.sample_count,
             seed=args.seed,
+            reference_note=args.reference_note,
         )
         print(json.dumps(result["abs_diff_m"], indent=2, sort_keys=True))
     elif args.command == "report-existing":

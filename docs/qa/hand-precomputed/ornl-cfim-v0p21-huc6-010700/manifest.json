@@ -19,5 +19,13 @@
       ]
     }
   },
-  "schema_version": 1
+  "schema_version": 1,
+  "source": {
+    "citation": "Liu, Yan; Tarboton, David G.; Maidment, David R. Height Above Nearest Drainage (HAND) and Hydraulic Property Table for CONUS - Version 0.21 (20200601). Oak Ridge National Laboratory. DOI: 10.13139/ORNLNCCS/1630903.",
+    "huc": "010700",
+    "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+    "name": "ORNL CFIM v0.21",
+    "retrieved_at": "2026-05-15",
+    "url": "https://doi.ccs.ornl.gov/dataset/2461aa39-236c-5c2a-b08d-5808d926d27a"
+  }
 }

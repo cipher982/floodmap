@@ -22,6 +22,12 @@
     "reference": "EPSG:5070"
   },
   "reference_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0107-merrimack-buffer5km-clipped.tif",
+  "reference_note": "Gate 6 pyflwdir is a failed prototype reference, not ground truth; use this only as a difference smoke.",
+  "reprojection": {
+    "note": "Reference was reprojected onto the candidate grid before diffing; cross-CRS diffs are approximate smoke metrics.",
+    "performed": true,
+    "resampling": "nearest"
+  },
   "sample_count": 132060,
   "sample_seed": 11,
   "sample_target": 250000,

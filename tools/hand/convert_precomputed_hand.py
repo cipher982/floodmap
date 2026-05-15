@@ -108,8 +108,9 @@ def build_single_region_manifest(
     output_cog: Path,
     crs: str,
     bounds: tuple[float, float, float, float],
+    source_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    manifest: dict[str, Any] = {
         "schema_version": 1,
         "dataset_version": dataset_version,
         "layers": {
@@ -127,6 +128,9 @@ def build_single_region_manifest(
             }
         },
     }
+    if source_metadata:
+        manifest["source"] = source_metadata
+    return manifest
 
 
 def convert_precomputed_hand(
@@ -345,6 +349,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-version", required=True)
     parser.add_argument("--region-id", required=True)
     parser.add_argument("--source-name", default="Precomputed HAND")
+    parser.add_argument("--source-url")
+    parser.add_argument("--license")
+    parser.add_argument("--citation")
+    parser.add_argument("--retrieved-at")
     parser.add_argument("--huc")
     parser.add_argument("--chunk-rows", type=int, default=512)
     parser.add_argument("--keep-temp", action="store_true")
@@ -363,12 +371,25 @@ def main() -> None:
     )
 
     source_profile = metrics["source_profile"]
+    source_metadata = {
+        key: value
+        for key, value in {
+            "name": args.source_name,
+            "url": args.source_url,
+            "license": args.license,
+            "citation": args.citation,
+            "retrieved_at": args.retrieved_at,
+            "huc": args.huc,
+        }.items()
+        if value
+    }
     manifest = build_single_region_manifest(
         dataset_version=args.dataset_version,
         region_id=args.region_id,
         output_cog=args.output_cog,
         crs=source_profile["crs"],
         bounds=tuple(source_profile["bounds"]),
+        source_metadata=source_metadata,
     )
 
     write_reports(

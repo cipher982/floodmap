@@ -392,6 +392,31 @@ Decision:
   self-built CONUS hydrology engine unless a later gate proves the external data
   is unavailable or unsuitable at national coverage.
 
+### Gate 10: External Reference Validation
+
+Goal: validate the ORNL precomputed HAND layer against an independent reference
+instead of using our failed pyflwdir prototype as truth.
+
+Success criteria:
+
+- Compare ORNL HUC6 `010700` against FEMA/NFHL special flood hazard polygons or
+  another external floodplain/drainage reference with source provenance.
+- Report precision, recall, IoU/Jaccard, random-baseline lift, and threshold
+  sensitivity at 1ft/3ft/6ft/10ft.
+- Render at least one browser review view with the basemap, ORNL HAND threshold,
+  and reference overlay aligned at the same coordinates.
+- Record whether ORNL meaningfully improves on the prior Birmingham/Houston
+  HAND-vs-FEMA baselines, and whether the product should be pitched as
+  "drainage-relative terrain" rather than "flood map."
+
+Go threshold:
+
+- ORNL low-HAND threshold masks should beat the random coverage baseline by at
+  least `2x` precision lift in the pilot region, or the product copy must remain
+  explicitly non-floodplain.
+- Visual review must show coherent drainage corridors without obvious tile,
+  HUC-boundary, or bbox artifacts.
+
 ## Kill Or Pivot Criteria
 
 Current state: triggered.

@@ -69,12 +69,20 @@ def test_build_single_region_manifest_shape(tmp_path) -> None:
         output_cog=cog,
         crs="EPSG:4269",
         bounds=(-72.1, 42.1, -70.8, 44.2),
+        source_metadata={
+            "name": "ORNL CFIM v0.21",
+            "license": "CC BY 4.0",
+        },
     )
 
     region = manifest["layers"]["hand"]["regions"][0]
     assert manifest["dataset_version"] == "ornl-cfim-v0p21-010700"
     assert manifest["layers"]["hand"]["encoding"] == "uint16-decimeters"
     assert manifest["layers"]["hand"]["nodata"] == U16_NODATA
+    assert manifest["source"] == {
+        "name": "ORNL CFIM v0.21",
+        "license": "CC BY 4.0",
+    }
     assert region["id"] == "huc6-010700"
     assert region["url"] == str(cog)
 
