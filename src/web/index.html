@@ -373,6 +373,7 @@ __FLOODMAP_NEARBY_LINKS_SECTION__
             const us = window.floodmapAssetUrl('/js/url-state.js');
             const jp = window.floodmapAssetUrl('/js/jump-planner.js');
             const er = window.floodmapAssetUrl('/js/elevation-renderer.js');
+            const hgl = window.floodmapAssetUrl('/js/hand-gpu-layer.js');
             const mc = window.floodmapAssetUrl('/js/map-client.js');
 
             function configureMapLibreWorker() {
@@ -389,6 +390,7 @@ __FLOODMAP_NEARBY_LINKS_SECTION__
                 })
                 .then(() => loadScript(jp))
                 .then(() => loadScript(er))
+                .then(() => loadScript(hgl))
                 .then(() => loadScript(mc))
                 .then(() => {
                     if (typeof window.floodmapInit === 'function') window.floodmapInit();

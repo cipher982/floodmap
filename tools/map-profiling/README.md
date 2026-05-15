@@ -2,6 +2,7 @@ Map Profiling Harness
 
 What it does
 - Captures HARs for consistent scenarios (cold, pan, zoom-out, warm reload).
+- Profiles slider runtime costs (worker jobs, long tasks, frame gaps, CDP metrics).
 - Analyzes totals, by host/type, and largest resources.
 - Emits machine-readable metrics (JSON) and a Markdown summary per run.
 
@@ -13,6 +14,7 @@ Quick start
 - Single capture: node capture-har.mjs https://your.url --width=1440 --height=900 --duration=10000 --selector='CSS'
 - Analyze: node analyze-har.mjs har.json
 - Suite (recommended): URL=https://your.url SELECTOR='CSS' npm run suite
+- Slider profiler: URL=https://your.url npm run slider -- --scenario=both
 - City-jump profiler: URL=https://your.url npm run city-jumps
 - Explicit city pair: URL=https://your.url npm run city-jumps -- --pair='ny/new-york:tx/houston'
 
@@ -33,6 +35,7 @@ Outputs
 - results/<timestamp>/*.metrics.json – metrics per HAR
 - results/<timestamp>/summary.(json|md) – summary across scenarios
 - results/<timestamp>/meta.json – URL, viewport, commit hash
+- results/<timestamp>-slider/*.json – slider runtime metrics
 
 Notes
 - All runs use a fresh browser context (no prior cache) except the warm scenario (reload within the same context).

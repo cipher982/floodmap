@@ -8,6 +8,7 @@
     "capture": "node capture-har.mjs",
     "analyze": "node analyze-har.mjs har.json",
     "metrics": "node metrics.mjs har.json",
+    "slider": "node slider-profile.mjs $URL",
     "city-jumps": "node city-jump-profile.mjs $URL",
     "suite": "node profile-suite.mjs $URL --selector=\"$SELECTOR\"",
     "install:playwright": "npx playwright install chromium --with-deps"

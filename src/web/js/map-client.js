@@ -41,6 +41,19 @@ class FloodMapClient {
         this.viewMode = this.normalizeInitialViewMode(this.initialViewState.view);
         this.jumpPlanner = requireFloodmapGlobal('FloodmapJumpPlanner');
         this.elevationRenderer = new ElevationRenderer();
+        this.activeTileUrl = null;
+        this.transparentTileBufferPromise = null;
+        this.handGpuRequested = this.isHandGpuRequested();
+        this.handGpuDisabledReason = '';
+        this.handGpuLayer = this.createHandGpuLayer();
+        this.handGpuStats = this.handGpuLayer
+            ? this.handGpuLayer.getStats()
+            : {
+                requested: this.handGpuRequested,
+                supported: false,
+                fallbackReason: this.handGpuRequested ? 'HAND GPU layer script was not loaded' : 'disabled',
+                active: false
+            };
         this.modelNoteState = { nearWater: false, coastal: false };
         this.locationSearchAbortController = null;
         this.locationSearchDebounceTimer = null;
@@ -109,6 +122,110 @@ class FloodMapClient {
 
     normalizeInitialViewMode(mode) {
         return this.isViewModeAvailable(mode) ? mode : 'elevation';
+    }
+
+    isHandGpuRequested() {
+        if (typeof window === 'undefined') return false;
+        const params = new URLSearchParams(window.location.search);
+        const queryValue = params.get('handGpu') || params.get('hand_gpu');
+        if (queryValue != null) {
+            const enabled = queryValue === '1' || queryValue === 'true' || queryValue === 'yes';
+            if (!enabled) {
+                try {
+                    window.localStorage?.removeItem('FLOODMAP_HAND_GPU');
+                } catch {}
+            }
+            return enabled;
+        }
+        if (this.routeContext?.handGpu === true) return true;
+        try {
+            const storedValue = window.localStorage?.getItem('FLOODMAP_HAND_GPU');
+            return storedValue === '1' || storedValue === 'true' || storedValue === 'yes';
+        } catch {
+            return false;
+        }
+    }
+
+    createHandGpuLayer() {
+        if (!this.handGpuRequested) return null;
+        const LayerClass = typeof window !== 'undefined' ? window.FloodmapHandGpuLayer : null;
+        if (typeof LayerClass !== 'function') {
+            this.handGpuDisabledReason = 'HAND GPU layer script was not loaded';
+            return null;
+        }
+        return new LayerClass({
+            client: this,
+            renderer: this.elevationRenderer
+        });
+    }
+
+    isHandGpuAvailableForRouting() {
+        return this.handGpuRequested && this.handGpuLayer && !this.handGpuDisabledReason;
+    }
+
+    isHandGpuActive() {
+        return this.viewMode === 'hand' && this.isHandGpuAvailableForRouting();
+    }
+
+    disableHandGpu(reason) {
+        this.handGpuDisabledReason = reason || 'HAND GPU layer disabled';
+        if (this.handGpuLayer) {
+            this.handGpuLayer.setActive(false);
+            this.handGpuStats = this.handGpuLayer.getStats();
+        } else {
+            this.handGpuStats = {
+                requested: this.handGpuRequested,
+                supported: false,
+                fallbackReason: this.handGpuDisabledReason,
+                active: false
+            };
+        }
+        if (this.viewMode === 'hand' && this.map) {
+            const restoreFallbackTiles = () => {
+                const source = this.map?.getSource?.('elevation-tiles');
+                if (!source) return;
+                this.elevationRenderer?.clearRenderedCache?.();
+                const nextTileUrl = this.getTileUrl();
+                source.setTiles([nextTileUrl]);
+                this.activeTileUrl = nextTileUrl;
+            };
+            if (this.map.loaded()) restoreFallbackTiles();
+            else this.map.once('load', restoreFallbackTiles);
+        }
+    }
+
+    installHandGpuLayer() {
+        if (!this.handGpuLayer || !this.map || this.map.getLayer(this.handGpuLayer.id)) return;
+        try {
+            this.map.addLayer(this.handGpuLayer, 'water');
+            this.updateHandGpuState();
+        } catch (error) {
+            this.disableHandGpu(error?.message || 'HAND GPU layer installation failed');
+        }
+    }
+
+    updateHandGpuState() {
+        if (!this.handGpuLayer) return;
+        this.handGpuLayer.setThresholdMeters(this.currentWaterLevel);
+        this.handGpuLayer.setActive(this.isHandGpuActive());
+        this.handGpuStats = this.handGpuLayer.getStats();
+    }
+
+    async getTransparentTileBuffer() {
+        if (this.transparentTileBufferPromise) return this.transparentTileBufferPromise;
+        this.transparentTileBufferPromise = new Promise((resolve, reject) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1;
+            canvas.height = 1;
+            canvas.toBlob(async (blob) => {
+                if (!blob) {
+                    reject(new Error('Failed to generate transparent tile placeholder'));
+                    return;
+                }
+                resolve(await blob.arrayBuffer());
+            }, 'image/png');
+        });
+        return this.transparentTileBufferPromise;
     }
 
     initWorker() {
@@ -206,7 +323,13 @@ class FloodMapClient {
                     const x = parseInt(parts[2]);
                     const y = parseInt(parts[3].split('?')[0]);
 
-                    // Generate tile (logging in production can be removed)
+                    if (mode === 'hand' && self.isHandGpuActive()) {
+                        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+                        void self.handGpuLayer.requestTile(z, x, y, signal);
+                        const transparentTile = await self.getTransparentTileBuffer();
+                        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+                        return { data: transparentTile.slice(0) };
+                    }
 
                     // Generate tile based on mode
                     const blob = await self.generateTile(z, x, y, mode, self.currentWaterLevel, signal);
@@ -478,6 +601,7 @@ class FloodMapClient {
 
         // Determine tile URL based on mode
         const tileUrl = this.getTileUrl();
+        this.activeTileUrl = tileUrl;
 
         this.map = new maplibregl.Map({
             container: 'map',
@@ -809,7 +933,8 @@ class FloodMapClient {
             center: [this.initialViewState.lng, this.initialViewState.lat],
             zoom: this.initialViewState.zoom,
             minZoom: config.minZoom,
-            maxZoom: config.maxZoom
+            maxZoom: config.maxZoom,
+            antialias: false
         });
 
         // Defensive: ensure runtime maxZoom cannot drift beyond intended cap.
@@ -846,6 +971,8 @@ class FloodMapClient {
 
         // Track initial viewport on load
         this.map.on('load', () => {
+            this.installHandGpuLayer();
+            this.updateHandGpuState();
             if (this.initialViewState.hasExplicitState) {
                 this.syncPermalinkWithMap();
             }
@@ -858,6 +985,9 @@ class FloodMapClient {
             // Client-side elevation rendering (no server requests)
             return 'client://elevation/{z}/{x}/{y}';
         } else if (this.viewMode === 'hand') {
+            if (this.isHandGpuAvailableForRouting()) {
+                return 'client://hand/{z}/{x}/{y}';
+            }
             const clusteredThreshold = Math.round(this.currentWaterLevel * 10) / 10;
             return `client://hand/{z}/{x}/{y}?threshold=${clusteredThreshold}`;
         } else {
@@ -1119,6 +1249,7 @@ class FloodMapClient {
             if (handLegend) handLegend.style.display = this.viewMode === 'hand' ? 'flex' : 'none';
         }
 
+        this.updateHandGpuState();
         this.updateFloodLayer();
     }
 
@@ -1130,6 +1261,22 @@ class FloodMapClient {
         const source = this.map.getSource('elevation-tiles');
         if (!source) return;
 
+        if (this.viewMode === 'hand' && this.isHandGpuAvailableForRouting()) {
+            this.updateHandGpuState();
+            const nextTileUrl = this.getTileUrl();
+            if (this.activeTileUrl !== nextTileUrl) {
+                source.setTiles([nextTileUrl]);
+                this.activeTileUrl = nextTileUrl;
+            }
+            return;
+        }
+
+        if (this.handGpuLayer) {
+            this.handGpuLayer.setActive(false);
+            this.handGpuStats = this.handGpuLayer.getStats();
+        }
+
+        const nextTileUrl = this.getTileUrl();
         if (this.viewMode === 'flood' || this.viewMode === 'hand') {
             // Clear the renderer cache to force re-render with new water level
             if (this.elevationRenderer) {
@@ -1137,10 +1284,11 @@ class FloodMapClient {
             }
 
             // Use getTileUrl() to include water level in URL, busting MapLibre's cache
-            source.setTiles([this.getTileUrl()]);
+            source.setTiles([nextTileUrl]);
         } else {
-            source.setTiles([this.getTileUrl()]);
+            source.setTiles([nextTileUrl]);
         }
+        this.activeTileUrl = nextTileUrl;
     }
 
     sliderToWaterLevel(sliderValue) {
