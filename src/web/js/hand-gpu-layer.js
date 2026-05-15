@@ -175,7 +175,7 @@ class FloodmapHandGpuLayer {
             })
             .catch((error) => {
                 if (error?.name === 'AbortError') {
-                    this.tiles.delete(key);
+                    this.tiles.delete(tile.key);
                     return null;
                 }
                 tile.state = 'error';

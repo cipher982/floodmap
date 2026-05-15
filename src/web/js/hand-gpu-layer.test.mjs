@@ -66,6 +66,23 @@ test("HAND GPU eviction drops stale tile entries", () => {
   assert.deepEqual(deleted, [{ id: "old" }]);
 });
 
+test("HAND GPU aborted tile load removes pending tile without throwing", async () => {
+  const layer = new FloodmapHandGpuLayer({
+    client: null,
+    renderer: {
+      loadTerrainTile() {
+        return Promise.reject(new DOMException("Aborted", "AbortError"));
+      }
+    }
+  });
+
+  const result = await layer.requestTile(12, 1061, 1642);
+
+  assert.equal(result, null);
+  assert.equal(layer.tiles.has("12/1061/1642"), false);
+  assert.equal(layer.stats.tileLoadErrors, 0);
+});
+
 function createUploadGlStub() {
   const state = new Map();
   const gl = {
