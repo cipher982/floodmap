@@ -27,6 +27,7 @@ class FloodmapHandGpuLayer {
         this.supported = false;
         this.fallbackReason = '';
         this.thresholdDm = 10;
+        this.showNoData = false;
         this.sequence = 0;
 
         this.attribs = {};
@@ -61,6 +62,14 @@ class FloodmapHandGpuLayer {
         return true;
     }
 
+    setShowNoData(showNoData) {
+        const nextShowNoData = !!showNoData;
+        if (this.showNoData === nextShowNoData) return false;
+        this.showNoData = nextShowNoData;
+        if (this.map && this.active) this.map.triggerRepaint();
+        return true;
+    }
+
     getStats() {
         return {
             ...this.stats,
@@ -68,7 +77,8 @@ class FloodmapHandGpuLayer {
             fallbackReason: this.fallbackReason,
             tileTextureCount: Array.from(this.tiles.values()).filter((tile) => tile.texture).length,
             trackedTiles: this.tiles.size,
-            active: this.active
+            active: this.active,
+            showNoData: this.showNoData
         };
     }
 
@@ -96,6 +106,7 @@ class FloodmapHandGpuLayer {
             this.uniforms.uHand = gl.getUniformLocation(this.program, 'u_hand');
             this.uniforms.uTileBounds = gl.getUniformLocation(this.program, 'u_tileBounds');
             this.uniforms.uThresholdDm = gl.getUniformLocation(this.program, 'u_thresholdDm');
+            this.uniforms.uShowNoData = gl.getUniformLocation(this.program, 'u_showNoData');
             this.configureGeometry(gl);
             this.supported = true;
             this.fallbackReason = '';
@@ -268,6 +279,7 @@ class FloodmapHandGpuLayer {
         gl.bindVertexArray(this.vertexArray);
         gl.uniformMatrix4fv(this.uniforms.uMatrix, false, matrix);
         gl.uniform1ui(this.uniforms.uThresholdDm, this.thresholdDm);
+        gl.uniform1i(this.uniforms.uShowNoData, this.showNoData ? 1 : 0);
         gl.uniform1i(this.uniforms.uHand, 0);
 
         gl.enable(gl.BLEND);
@@ -429,6 +441,7 @@ class FloodmapHandGpuLayer {
             precision highp usampler2D;
             uniform highp usampler2D u_hand;
             uniform uint u_thresholdDm;
+            uniform bool u_showNoData;
             in vec2 v_uv;
             out vec4 fragColor;
 
@@ -454,7 +467,13 @@ class FloodmapHandGpuLayer {
 
             void main() {
                 uint raw = texture(u_hand, v_uv).r;
-                if (raw == 65535u) discard;
+                if (raw == 65535u) {
+                    if (u_showNoData) {
+                        fragColor = vec4(0.74, 0.0, 1.0, 0.42);
+                        return;
+                    }
+                    discard;
+                }
 
                 if (raw > u_thresholdDm) discard;
 

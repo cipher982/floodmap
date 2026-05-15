@@ -29,3 +29,16 @@ test("HAND coloring uses a scaled ramp within the selected threshold", () => {
   assert.notDeepEqual(lowTerrace, upperValley);
   assert.equal(upperValley[3] < drainageFloor[3], true);
 });
+
+test("HAND nodata debug color is opt-in", () => {
+  const renderer = new ElevationRenderer();
+
+  assert.deepEqual(
+    renderer.calculateTileColor(renderer.NODATA_VALUE, "hand", 1000),
+    renderer.colors.TRANSPARENT
+  );
+  assert.deepEqual(
+    renderer.calculateTileColor(renderer.NODATA_VALUE, "hand", 1000, true),
+    renderer.HAND_NODATA_RGBA
+  );
+});

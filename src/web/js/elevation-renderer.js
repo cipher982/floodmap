@@ -77,6 +77,7 @@ class ElevationRenderer {
             { t: 0.65, color: [190, 204, 132, 125] }, // upper valley
             { t: 1.0, color: [205, 170, 110, 70] }    // selected edge
         ];
+        this.HAND_NODATA_RGBA = [189, 0, 255, 107];
 
         // Elevation visualization mapping:
         // Use a stable global nonlinear mapping so lowlands retain contrast while
@@ -573,11 +574,14 @@ class ElevationRenderer {
         return this.HAND_VIZ_STOPS[this.HAND_VIZ_STOPS.length - 1].color;
     }
 
-    calculateTileColor(rawValue, mode, waterLevel) {
+    calculateTileColor(rawValue, mode, waterLevel, showHandNoData = false) {
         if (mode === 'elevation') {
             return this.calculateElevationColor(this.decodeElevation(rawValue));
         }
         if (mode === 'hand') {
+            if (rawValue === this.NODATA_VALUE && showHandNoData) {
+                return this.HAND_NODATA_RGBA;
+            }
             return this.calculateHandColor(this.decodeHandHeight(rawValue), waterLevel);
         }
         return this.calculateFloodColor(this.decodeElevation(rawValue), waterLevel);

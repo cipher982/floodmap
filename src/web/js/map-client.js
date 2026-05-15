@@ -45,6 +45,7 @@ class FloodMapClient {
         this.transparentTileBufferPromise = null;
         this.handGpuRequested = this.isHandGpuRequested();
         this.handGpuDisabledReason = '';
+        this.handNoDataDebug = this.isHandNoDataDebugRequested();
         this.handGpuLayer = this.createHandGpuLayer();
         this.handGpuStats = this.handGpuLayer
             ? this.handGpuLayer.getStats()
@@ -146,6 +147,21 @@ class FloodMapClient {
         }
     }
 
+    isHandNoDataDebugRequested() {
+        if (typeof window === 'undefined') return false;
+        const params = new URLSearchParams(window.location.search);
+        const queryValue = params.get('handNoData') || params.get('hand_nodata') || params.get('debugNodata');
+        if (queryValue != null) {
+            return queryValue === '1' || queryValue === 'true' || queryValue === 'yes';
+        }
+        try {
+            const storedValue = window.localStorage?.getItem('FLOODMAP_HAND_NODATA');
+            return storedValue === '1' || storedValue === 'true' || storedValue === 'yes';
+        } catch {
+            return false;
+        }
+    }
+
     createHandGpuLayer() {
         if (!this.handGpuRequested) return null;
         const LayerClass = typeof window !== 'undefined' ? window.FloodmapHandGpuLayer : null;
@@ -207,6 +223,7 @@ class FloodMapClient {
     updateHandGpuState() {
         if (!this.handGpuLayer) return;
         this.handGpuLayer.setThresholdMeters(this.currentWaterLevel);
+        this.handGpuLayer.setShowNoData(this.handNoDataDebug);
         this.handGpuLayer.setActive(this.isHandGpuActive());
         this.handGpuStats = this.handGpuLayer.getStats();
     }
@@ -462,6 +479,7 @@ class FloodMapClient {
                     elevationData: buffer,
                     mode,
                     waterLevel,
+                    showHandNoData: this.handNoDataDebug,
                     width: 256,
                     height: 256
                 }
@@ -487,7 +505,9 @@ class FloodMapClient {
             const fillColor = mode === 'flood'
                 ? this.elevationRenderer.WATER_RGBA
                 : mode === 'hand'
-                    ? this.elevationRenderer.colors.TRANSPARENT
+                    ? this.handNoDataDebug
+                        ? this.elevationRenderer.HAND_NODATA_RGBA
+                        : this.elevationRenderer.colors.TRANSPARENT
                     : this.elevationRenderer.OCEAN_RGBA;
             this.elevationRenderer.fillImageData(imageData, fillColor);
             ctx.putImageData(imageData, 0, 0);
@@ -509,7 +529,12 @@ class FloodMapClient {
         // Process each pixel - simple 1:1 mapping
         let debugColorSample = null;
         for (let i = 0; i < terrainData.length; i++) {
-            const color = this.elevationRenderer.calculateTileColor(terrainData[i], mode, waterLevel);
+            const color = this.elevationRenderer.calculateTileColor(
+                terrainData[i],
+                mode,
+                waterLevel,
+                this.handNoDataDebug
+            );
 
             // Debug: sample first non-transparent color
             if (!debugColorSample && color[3] > 0) {
@@ -1065,7 +1090,9 @@ class FloodMapClient {
                 const oldWaterLevel = this.currentWaterLevel;
                 this.currentWaterLevel = this.sliderToWaterLevel(sliderValue);
 
-                waterLevelDisplay.textContent = `${this.currentWaterLevel}m`;
+                waterLevelDisplay.textContent = this.viewMode === 'hand'
+                    ? `${this.currentWaterLevel}m above drainage`
+                    : `${this.currentWaterLevel}m`;
                 this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
                 this.updateActivePresetChip();
 

@@ -66,6 +66,15 @@ test("HAND GPU eviction drops stale tile entries", () => {
   assert.deepEqual(deleted, [{ id: "old" }]);
 });
 
+test("HAND GPU nodata debug state is reflected in stats", () => {
+  const layer = new FloodmapHandGpuLayer({ client: null, renderer: null });
+
+  assert.equal(layer.getStats().showNoData, false);
+  assert.equal(layer.setShowNoData(true), true);
+  assert.equal(layer.getStats().showNoData, true);
+  assert.equal(layer.setShowNoData(true), false);
+});
+
 test("HAND GPU aborted tile load removes pending tile without throwing", async () => {
   const layer = new FloodmapHandGpuLayer({
     client: null,

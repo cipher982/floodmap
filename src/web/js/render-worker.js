@@ -47,6 +47,7 @@ class WorkerElevationRenderer {
             { t: 0.65, color: [190, 204, 132, 125] },
             { t: 1.0, color: [205, 170, 110, 70] }
         ];
+        this.HAND_NODATA_RGBA = [189, 0, 255, 107];
 
         // Elevation visualization mapping:
         // Use a stable global nonlinear mapping so lowlands retain contrast while
@@ -258,11 +259,12 @@ class WorkerElevationRenderer {
         return lut;
     }
 
-    buildHandLut(thresholdM) {
+    buildHandLut(thresholdM, showNoData = false) {
         const lut = new Uint32Array(65536);
         for (let u = 0; u < 65536; u++) {
-            const height = this.decodeHandHeight(u);
-            const [r, g, b, a] = this.calculateHandColor(height, thresholdM);
+            const [r, g, b, a] = u === this.NODATA_VALUE && showNoData
+                ? this.HAND_NODATA_RGBA
+                : this.calculateHandColor(this.decodeHandHeight(u), thresholdM);
             lut[u] = this._packRgbaToU32(r, g, b, a);
         }
         this._lutRebuilds++;
@@ -283,11 +285,12 @@ class WorkerElevationRenderer {
         return this._floodLut;
     }
 
-    getHandLut(thresholdM) {
+    getHandLut(thresholdM, showNoData = false) {
         const thresholdKey = Math.round(thresholdM * 10) / 10;
-        if (!this._handLut || this._handLutThresholdKey !== thresholdKey) {
-            this._handLut = this.buildHandLut(thresholdKey);
-            this._handLutThresholdKey = thresholdKey;
+        const cacheKey = `${thresholdKey}:${showNoData ? 'nodata' : 'default'}`;
+        if (!this._handLut || this._handLutThresholdKey !== cacheKey) {
+            this._handLut = this.buildHandLut(thresholdKey, showNoData);
+            this._handLutThresholdKey = cacheKey;
         }
         return this._handLut;
     }
@@ -329,7 +332,7 @@ self.onmessage = function(e) {
 
     if (type === 'render') {
         try {
-            const { elevationData, mode, waterLevel, width, height } = data;
+            const { elevationData, mode, waterLevel, width, height, showHandNoData } = data;
 
             // Fast check before doing any work
             if (self._cancelledJobIds?.has(jobId)) {
@@ -349,7 +352,9 @@ self.onmessage = function(e) {
                 const fillColor = mode === 'flood'
                     ? renderer.WATER_RGBA
                     : mode === 'hand'
-                        ? renderer.colors.TRANSPARENT
+                        ? showHandNoData
+                            ? renderer.HAND_NODATA_RGBA
+                            : renderer.colors.TRANSPARENT
                         : renderer.OCEAN_RGBA;
 
                 const packed = renderer._packRgbaToU32(fillColor[0], fillColor[1], fillColor[2], fillColor[3]);
@@ -373,7 +378,7 @@ self.onmessage = function(e) {
             const lut = mode === 'elevation'
                 ? renderer.getElevationLut()
                 : mode === 'hand'
-                    ? renderer.getHandLut(waterLevel)
+                    ? renderer.getHandLut(waterLevel, !!showHandNoData)
                     : renderer.getFloodLut(waterLevel);
 
             // Process each pixel: rgba32 = lut[u16]
