@@ -68,6 +68,13 @@ test("HAND drainage mode is a shareable view state", () => {
   assert.equal(parsed.water, 2.0);
 });
 
+test("HAND diagnostic water levels can exceed legacy 1000m ceiling", () => {
+  const state = parseFloodmapUrlState("https://drose.io/floodmap?view=hand&water=5000");
+
+  assert.equal(state.view, "hand");
+  assert.equal(state.water, 5000);
+});
+
 test("stripFloodmapStateParams removes only permalink keys", () => {
   const stripped = stripFloodmapStateParams(
     "https://drose.io/floodmap?debug=1&lat=27.95&lng=-82.46&zoom=8.00&view=elevation&water=1.0"

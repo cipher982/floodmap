@@ -40,7 +40,7 @@ class TestConfigConstants:
         from config import MAX_WATER_LEVEL, MIN_WATER_LEVEL
 
         assert MIN_WATER_LEVEL == -10.0
-        assert MAX_WATER_LEVEL == 1000.0
+        assert MAX_WATER_LEVEL == 10000.0
         assert MIN_WATER_LEVEL < MAX_WATER_LEVEL
 
 

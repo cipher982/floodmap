@@ -109,7 +109,7 @@ MIN_ZOOM = 0
 
 # Water level configuration
 MIN_WATER_LEVEL = -10.0
-MAX_WATER_LEVEL = 1000.0
+MAX_WATER_LEVEL = 10000.0
 
 # Geocoding / place search (defaults are safe for public Nominatim usage)
 GEOCODER_BASE_URL = os.getenv(

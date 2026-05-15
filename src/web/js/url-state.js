@@ -23,7 +23,7 @@ const FLOODMAP_MAX_LATITUDE = 85.051129;
 const FLOODMAP_MIN_ZOOM = 0;
 const FLOODMAP_MAX_ZOOM = 14;
 const FLOODMAP_MIN_WATER_LEVEL = 0.1;
-const FLOODMAP_MAX_WATER_LEVEL = 1000;
+const FLOODMAP_MAX_WATER_LEVEL = 10000;
 
 function parseFiniteNumber(value) {
     const parsed = Number.parseFloat(value);
