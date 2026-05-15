@@ -206,6 +206,27 @@ def cache_path_for_region(
     )
 
 
+def arcgis_generalization_params(
+    *, target_epsg: int, simplify_m: float
+) -> dict[str, Any]:
+    import rasterio
+
+    crs = rasterio.crs.CRS.from_epsg(target_epsg)
+    if crs.is_geographic:
+        return {
+            "max_allowable_offset": simplify_m / 111_320.0,
+            "offset_units": "degrees",
+            "geometry_precision": 6,
+            "source_simplify_m": simplify_m,
+        }
+    return {
+        "max_allowable_offset": simplify_m,
+        "offset_units": "crs_units",
+        "geometry_precision": 2,
+        "source_simplify_m": simplify_m,
+    }
+
+
 def request_json(
     session: Any,
     method: str,
@@ -248,6 +269,9 @@ def fetch_fema_sfha_features(
     simplify_m: float,
 ) -> list[dict[str, Any]]:
     cache_path = cache_path_for_region(cache_dir, region, target_epsg, simplify_m)
+    generalization = arcgis_generalization_params(
+        target_epsg=target_epsg, simplify_m=simplify_m
+    )
     if cache_path.exists():
         with gzip.open(cache_path, "rt", encoding="utf-8") as fh:
             cached = json.load(fh)
@@ -256,6 +280,8 @@ def fetch_fema_sfha_features(
             raise ValueError(f"FEMA cache filter mismatch in {cache_path}")
         if cached.get("simplify_m") != simplify_m:
             raise ValueError(f"FEMA cache simplify_m mismatch in {cache_path}")
+        if cached.get("max_allowable_offset") != generalization["max_allowable_offset"]:
+            raise ValueError(f"FEMA cache maxAllowableOffset mismatch in {cache_path}")
         return cached["features"]
 
     west, south, east, north = region.bbox
@@ -301,8 +327,8 @@ def fetch_fema_sfha_features(
                 "outFields": "OBJECTID,FLD_ZONE,SFHA_TF,ZONE_SUBTY",
                 "returnGeometry": "true",
                 "outSR": target_epsg,
-                "maxAllowableOffset": simplify_m,
-                "geometryPrecision": 2,
+                "maxAllowableOffset": generalization["max_allowable_offset"],
+                "geometryPrecision": generalization["geometry_precision"],
             },
         )
         validate_spatial_reference(payload.get("spatialReference"), target_epsg)
@@ -317,6 +343,9 @@ def fetch_fema_sfha_features(
                 "target_epsg": target_epsg,
                 "spatial_reference": {"wkid": target_epsg},
                 "simplify_m": simplify_m,
+                "max_allowable_offset": generalization["max_allowable_offset"],
+                "offset_units": generalization["offset_units"],
+                "geometry_precision": generalization["geometry_precision"],
                 "feature_count": len(features),
                 "features": features,
             },
@@ -609,6 +638,8 @@ def write_summary(
     fema_feature_count: int,
     all_touched: bool,
     simplify_m: float,
+    max_allowable_offset: float,
+    offset_units: str,
     metrics: list[dict[str, Any]],
     images: dict[str, str],
 ) -> None:
@@ -620,7 +651,9 @@ def write_summary(
         f"- FEMA source: `{FEMA_NFHL_FLOOD_HAZARD_ZONES_QUERY_URL}`",
         f"- FEMA filter: `{FEMA_SFHA_FILTER}` (Special Flood Hazard Area, 1% annual chance flood hazard)",
         f"- FEMA feature count fetched: `{fema_feature_count}`",
-        f"- Rasterization: `all_touched={str(all_touched).lower()}`, `maxAllowableOffset={simplify_m}m`",
+        f"- Rasterization: `all_touched={str(all_touched).lower()}`, "
+        f"`maxAllowableOffset={max_allowable_offset:g} {offset_units}` "
+        f"(requested ~`{simplify_m:g}m`)",
         f"- Bbox: `{region.bbox}`",
         "",
         "| HAND threshold | IoU | Precision | Recall | Precision lift vs random | HAND coverage | FEMA coverage | Image |",
@@ -688,6 +721,9 @@ def compare_region(
         chunk_size=chunk_size,
         simplify_m=simplify_m,
     )
+    generalization = arcgis_generalization_params(
+        target_epsg=target_epsg, simplify_m=simplify_m
+    )
     fema_mask = rasterize_fema_mask(
         features=features,
         out_shape=out_shape,
@@ -724,6 +760,9 @@ def compare_region(
         "fema_feature_count": len(features),
         "all_touched": all_touched,
         "simplify_m": simplify_m,
+        "max_allowable_offset": generalization["max_allowable_offset"],
+        "offset_units": generalization["offset_units"],
+        "geometry_precision": generalization["geometry_precision"],
         "thresholds": metrics,
         "images": images,
     }
@@ -739,6 +778,8 @@ def compare_region(
         fema_feature_count=len(features),
         all_touched=all_touched,
         simplify_m=simplify_m,
+        max_allowable_offset=generalization["max_allowable_offset"],
+        offset_units=generalization["offset_units"],
         metrics=metrics,
         images=images,
     )

@@ -6,6 +6,7 @@ import pytest
 from tools.hand.compare_to_reference import (
     U16_NODATA,
     HandRegion,
+    arcgis_generalization_params,
     cache_path_for_region,
     compute_metrics,
     local_manifest_path,
@@ -82,3 +83,19 @@ def test_fema_cache_path_includes_simplification_distance():
     path = cache_path_for_region(Path("/cache"), region, 5070, 2.5)
 
     assert path.name == "test-region-fema-sfha-epsg5070-offset2p5m.json.gz"
+
+
+def test_arcgis_generalization_converts_meter_offset_for_geographic_crs():
+    params = arcgis_generalization_params(target_epsg=4269, simplify_m=5.0)
+
+    assert params["offset_units"] == "degrees"
+    assert params["geometry_precision"] == 6
+    assert params["max_allowable_offset"] == pytest.approx(5.0 / 111_320.0)
+
+
+def test_arcgis_generalization_keeps_projected_meter_offset():
+    params = arcgis_generalization_params(target_epsg=5070, simplify_m=5.0)
+
+    assert params["offset_units"] == "crs_units"
+    assert params["geometry_precision"] == 2
+    assert params["max_allowable_offset"] == 5.0
