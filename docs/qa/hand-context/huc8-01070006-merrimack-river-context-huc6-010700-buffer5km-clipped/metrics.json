@@ -1,0 +1,211 @@
+{
+  "artifact_dir": "/mnt/storage/floodmap/scratch/hand-context/huc8-01070006-merrimack-river-context-huc6-010700-buffer5km-clipped",
+  "build": {
+    "peak_rss_mb": 38325.7,
+    "source_cog_bytes": 70109756,
+    "wall_time_s": 1435.86
+  },
+  "checks": {
+    "peak_rss": false,
+    "source_cog_size": true,
+    "wall_time": true
+  },
+  "compute_unit": {
+    "area_km2": 12963.56,
+    "bbox": [
+      -72.14260543657879,
+      42.19665524711205,
+      -70.8041409364429,
+      44.20040828930126
+    ],
+    "code": "010700",
+    "level": 6,
+    "name": "Merrimack",
+    "states": "MA,NH"
+  },
+  "estimate": {
+    "compute_bbox": {
+      "cells": 316334004,
+      "columns": 13867,
+      "height_m": 228119.6437627063,
+      "raw_u16_bytes": 632668008,
+      "rows": 22812,
+      "width_m": 138666.42971313372
+    },
+    "compute_bbox_lonlat": [
+      -72.20434608326691,
+      42.15195167425472,
+      -70.74269720540721,
+      44.24522100657262
+    ]
+  },
+  "metadata": {
+    "bbox_lonlat": [
+      -72.20434608326691,
+      42.15195167425472,
+      -70.74269720540721,
+      44.24522100657262
+    ],
+    "build": {
+      "peak_rss_mb": 38325.7,
+      "source_cog_bytes": 70109756,
+      "wall_time_s": 1435.86
+    },
+    "dem_crs": "EPSG:5070",
+    "dem_resolution_m": 10,
+    "dem_shape": [
+      13267,
+      10432
+    ],
+    "dem_vertical_datum": "NAVD88 via 3DEP",
+    "generated_assets": {
+      "preview": "/mnt/storage/floodmap/scratch/hand-context/huc8-01070006-merrimack-river-context-huc6-010700-buffer5km-clipped/preview.png",
+      "qa_report": "/mnt/storage/floodmap/scratch/hand-context/huc8-01070006-merrimack-river-context-huc6-010700-buffer5km-clipped/qa-report.md",
+      "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc8-01070006-merrimack-river-context-huc6-010700-buffer5km-clipped.tif",
+      "tiles": "tiles/{z}/{x}/{y}.u16"
+    },
+    "huc_context_gate": {
+      "buffer_km": 5.0,
+      "compute_bbox_estimate": {
+        "cells": 316334004,
+        "columns": 13867,
+        "height_m": 228119.6437627063,
+        "raw_u16_bytes": 632668008,
+        "rows": 22812,
+        "width_m": 138666.42971313372
+      },
+      "compute_bbox_lonlat": [
+        -72.20434608326691,
+        42.15195167425472,
+        -70.74269720540721,
+        44.24522100657262
+      ],
+      "compute_unit": {
+        "area_km2": 12963.56,
+        "bbox": [
+          -72.14260543657879,
+          42.19665524711205,
+          -70.8041409364429,
+          44.20040828930126
+        ],
+        "code": "010700",
+        "level": 6,
+        "name": "Merrimack",
+        "states": "MA,NH"
+      },
+      "output_huc_bbox_lonlat": [
+        -71.91924552248993,
+        42.42816148724856,
+        -70.8039552627585,
+        43.51629280864011
+      ],
+      "output_unit": {
+        "area_km2": 4666.28,
+        "bbox": [
+          -71.91924552248993,
+          42.42816148724856,
+          -70.8039552627585,
+          43.51629280864011
+        ],
+        "code": "01070006",
+        "level": 8,
+        "name": "Merrimack River",
+        "states": "MA,NH"
+      },
+      "polygon_clipped_to_output_huc": true
+    },
+    "model": "Prototype flow-path HAND: DEM elevation minus first downstream drain elevation along D8 flowpaths.",
+    "name": "huc8-01070006-merrimack-river-context-huc6-010700-buffer5km-clipped",
+    "named_stream_sample": {
+      "460": 2309,
+      "558": 1308,
+      "Beaver Brook": 203,
+      "Black Brook": 99,
+      "Cohas Brook": 78,
+      "Joe English Brook": 65,
+      "Little River": 69,
+      "Meadow Brook": 74,
+      "Merrimack River": 248,
+      "Piscataquog River": 129,
+      "Powwow River": 107,
+      "Purgatory Brook": 64,
+      "Shawsheen River": 122,
+      "Souhegan River": 79,
+      "Stony Brook": 69,
+      "Suncook River": 121
+    },
+    "nodata_cells": 80056920,
+    "not_a_full_hand_model": true,
+    "routing": {
+      "accumulation_drain_cell_count": 106972,
+      "accumulation_drain_threshold_km2": 16.0,
+      "drain_cell_count": 481785,
+      "drain_cell_fraction_percent": 0.814,
+      "library": "pyflwdir",
+      "mapped_drainage_cell_count": 473811,
+      "method": "from_dem D8 flow directions plus FlwdirRaster.hand",
+      "stream_burn_depth_m": 5.0
+    },
+    "sample_zoom": 12,
+    "selected_flowline_count": 9739,
+    "stream_min_order": 2,
+    "threshold_stats_ft": {
+      "1": {
+        "cells": 3139426,
+        "meters": 0.305,
+        "percent": 5.38
+      },
+      "10": {
+        "cells": 8865409,
+        "meters": 3.048,
+        "percent": 15.19
+      },
+      "20": {
+        "cells": 14090082,
+        "meters": 6.096,
+        "percent": 24.15
+      },
+      "3": {
+        "cells": 4712842,
+        "meters": 0.914,
+        "percent": 8.08
+      },
+      "30": {
+        "cells": 18592020,
+        "meters": 9.144,
+        "percent": 31.87
+      },
+      "6": {
+        "cells": 6537781,
+        "meters": 1.829,
+        "percent": 11.21
+      }
+    },
+    "tile_counts": {},
+    "title": "Merrimack River HUC8 HAND with HUC6 context",
+    "valid_hand_cells": 58344424,
+    "zoom_max": 12,
+    "zoom_min": 9
+  },
+  "output_unit": {
+    "area_km2": 4666.28,
+    "bbox": [
+      -71.91924552248993,
+      42.42816148724856,
+      -70.8039552627585,
+      43.51629280864011
+    ],
+    "code": "01070006",
+    "level": 8,
+    "name": "Merrimack River",
+    "states": "MA,NH"
+  },
+  "params": {
+    "accumulation_threshold_km2": 16.0,
+    "buffer_km": 5.0,
+    "dem_resolution_m": 10,
+    "stream_burn_depth_m": 5.0
+  },
+  "region_id": "huc8-01070006-merrimack-river-context-huc6-010700-buffer5km-clipped",
+  "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc8-01070006-merrimack-river-context-huc6-010700-buffer5km-clipped.tif"
+}

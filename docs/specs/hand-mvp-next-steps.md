@@ -309,6 +309,27 @@ Second result:
   the HUC8 output unit, and computing with larger upstream/parent hydrologic
   context before clipping back to the HUC8 polygon.
 
+Third result:
+
+- HUC8 `01070006` output computed with parent HUC6 `010700` context completed
+  on Cube in `1435.86s`, peaked at `38325.7 MB` RSS, and wrote a `70.1 MB`
+  COG.
+- Compute result: fail for the production budget. The run finished under the
+  wall-clock target, but parent-context monolithic pyflwdir exceeded the
+  `24 GB` peak RSS target.
+- Correctness result: fail against the Gate 6 HUC4 pyflwdir reference where
+  extents overlap. Sampled p50/p95/p99 differences were `0.3m`, `2.8m`,
+  `16.2m`; only `80.875%` of samples were within `1m`.
+- Threshold-mask result: fail. 3ft/6ft/10ft Jaccard was
+  `0.5547` / `0.5784` / `0.6044`.
+- Report written under
+  `docs/qa/hand-context/huc8-01070006-merrimack-river-context-huc6-010700-buffer5km-clipped/`.
+- Decision: naive parent-context compute does not rescue the HUC8 work-unit
+  result, and it loses the memory advantage that made HUC8 attractive. The
+  likely issue is not just missing immediate parent context; it is that
+  region-local pyflwdir outputs are not equivalent enough to the larger
+  reference without a more principled hydrologic production method.
+
 ## Kill Or Pivot Criteria
 
 - If external-reference overlap is very low and the disagreement is not
