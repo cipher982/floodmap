@@ -29,7 +29,7 @@ test("parseFloodmapUrlState normalizes and clamps invalid values", () => {
 
   assert.ok(Math.abs(state.lat - 85.05113) < 0.00001);
   assert.equal(state.lng, -180);
-  assert.equal(state.zoom, 11);
+  assert.equal(state.zoom, 14);
   assert.equal(state.view, DEFAULT_VIEW_STATE.view);
   assert.equal(state.water, DEFAULT_VIEW_STATE.water);
   assert.equal(state.hasExplicitState, true);

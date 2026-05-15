@@ -268,21 +268,21 @@ class TestFrontendBackendConsistency:
     # Precompressed tiles only exist for zoom 0-11
     PRECOMPRESSED_MAX_ZOOM = 11
 
-    def test_frontend_maxzoom_matches_precompressed_tiles(self):
-        """Frontend maxZoom must not exceed precompressed tile availability.
+    def test_frontend_zoom_caps_match_tile_sources(self):
+        """Frontend zoom caps must match each tile source.
 
-        This catches the bug where zooming beyond precompressed tiles
-        causes all tiles to appear as water/NODATA.
+        Elevation/flood views stay capped to precompressed tile availability.
+        HAND can use the dynamic terrain source at higher zooms.
         """
         js_file = Path(__file__).parent.parent.parent / "src/web/js/map-client.js"
         content = js_file.read_text()
 
-        # Find maxZoom in the config object
-        match = re.search(r"maxZoom:\s*(\d+)", content)
-        assert match, "Could not find maxZoom setting in map-client.js"
+        assert "return viewMode === 'hand' && handLayer?.enabled ? 14 : 11;" in content
 
-        frontend_max_zoom = int(match.group(1))
-        assert frontend_max_zoom <= self.PRECOMPRESSED_MAX_ZOOM, (
-            f"Frontend maxZoom ({frontend_max_zoom}) exceeds precompressed tile limit "
-            f"({self.PRECOMPRESSED_MAX_ZOOM}). Users will see broken tiles at high zoom."
-        )
+        vector_match = re.search(r"vectorMaxZoom:\s*(\d+)", content)
+        assert vector_match, "Could not find vectorMaxZoom setting in map-client.js"
+        assert int(vector_match.group(1)) <= self.PRECOMPRESSED_MAX_ZOOM
+
+        raster_match = re.search(r"rasterMaxZoom:\s*(\d+)", content)
+        assert raster_match, "Could not find rasterMaxZoom setting in map-client.js"
+        assert int(raster_match.group(1)) == 14

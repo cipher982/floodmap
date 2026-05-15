@@ -452,11 +452,28 @@ class FloodMapClient {
         this.setupEventListeners();
     }
 
+    maxZoomForViewMode(viewMode) {
+        const handLayer = this.routeContext.terrainLayers?.hand;
+        return viewMode === 'hand' && handLayer?.enabled ? 14 : 11;
+    }
+
+    applyModeZoomCap() {
+        if (!this.map) return;
+
+        const maxZoom = this.maxZoomForViewMode(this.viewMode);
+        this.map.setMaxZoom(maxZoom);
+        if (this.map.getZoom() > maxZoom) {
+            this.map.setZoom(maxZoom);
+        }
+    }
+
     async initializeMap() {
         const config = {
             zoom: 8,
             minZoom: 0,
-            maxZoom: 11  // Capped to match precompressed tile availability
+            maxZoom: this.maxZoomForViewMode(this.viewMode),
+            rasterMaxZoom: 14,
+            vectorMaxZoom: 11
         };
 
         // Determine tile URL based on mode
@@ -473,16 +490,14 @@ class FloodMapClient {
                         tiles: [tileUrl],
                         tileSize: 256,
                         scheme: 'xyz',
-                        // Critical: prevent MapLibre from requesting overscaled tiles
-                        // beyond our precompressed pyramid (tiles stop at z=11).
-                        maxzoom: config.maxZoom
+                        maxzoom: config.rasterMaxZoom
                     },
                     'vector-tiles': {
                         type: 'vector',
                         tiles: [
                             requireFloodmapUrlHelper('floodmapApiUrl')('/v1/tiles/vector/usa/{z}/{x}/{y}.pbf')
                         ],
-                        maxzoom: config.maxZoom
+                        maxzoom: config.vectorMaxZoom
                     }
                 },
                 layers: [
@@ -1075,6 +1090,7 @@ class FloodMapClient {
         const elevationLegend = document.getElementById('elevation-legend');
         const handLegend = document.getElementById('hand-legend');
 
+        this.applyModeZoomCap();
         this.updateModelNote(this.modelNoteState);
 
         if (this.viewMode === 'elevation') {
