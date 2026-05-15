@@ -29,7 +29,7 @@ FEMA_NFHL_FLOOD_HAZARD_ZONES_QUERY_URL = (
     "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query"
 )
 FEMA_SFHA_FILTER = "SFHA_TF = 'T'"
-DEFAULT_THRESHOLDS_FT = (3.0, 6.0, 10.0)
+DEFAULT_THRESHOLDS_FT = (1.0, 3.0, 6.0, 10.0, 20.0)
 U16_NODATA = 65535
 
 
@@ -79,7 +79,7 @@ def parse_args() -> argparse.Namespace:
         type=float,
         action="append",
         default=None,
-        help="HAND threshold in feet. Repeatable. Defaults to 3, 6, and 10 ft.",
+        help="HAND threshold in feet. Repeatable. Defaults to 1, 3, 6, 10, and 20 ft.",
     )
     parser.add_argument(
         "--chunk-size",
@@ -104,6 +104,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=1800,
         help="Maximum output PNG width/height for each panel image.",
+    )
+    parser.add_argument(
+        "--baseline-raster",
+        type=Path,
+        default=None,
+        help="Optional absolute-elevation raster for same-coverage lowland baseline.",
     )
     return parser.parse_args()
 
@@ -410,12 +416,16 @@ def compute_metrics(
     hand_values: np.ndarray,
     fema_mask: np.ndarray,
     thresholds_ft: list[float],
+    baseline_values: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     valid = hand_values != U16_NODATA
     valid_count = int(valid.sum())
     fema_valid = fema_mask & valid
     fema_count = int(fema_valid.sum())
     hand_float = hand_values.astype(np.float32)
+    baseline_valid = (
+        np.isfinite(baseline_values) & valid if baseline_values is not None else None
+    )
     metrics = []
     for threshold_ft in thresholds_ft:
         threshold_m = threshold_ft * 0.3048
@@ -449,6 +459,13 @@ def compute_metrics(
         iou = tp / union if union else None
         precision = tp / (tp + fp) if (tp + fp) else None
         recall = tp / (tp + fn) if (tp + fn) else None
+        baseline = same_coverage_baseline_metrics(
+            baseline_values=baseline_values,
+            baseline_valid=baseline_valid,
+            fema_valid=fema_valid,
+            valid_count=valid_count,
+            target_cell_count=hand_count,
+        )
         metrics.append(
             {
                 "threshold_ft": threshold_ft,
@@ -484,9 +501,106 @@ def compute_metrics(
                 and expected_random_iou is not None
                 and expected_random_iou > 0
                 else None,
+                "low_elevation_baseline": baseline,
+                "precision_lift_vs_low_elevation": precision / baseline["precision"]
+                if precision is not None
+                and baseline["precision"] is not None
+                and baseline["precision"] > 0
+                else None,
+                "iou_lift_vs_low_elevation": iou / baseline["iou"]
+                if iou is not None
+                and baseline["iou"] is not None
+                and baseline["iou"] > 0
+                else None,
             }
         )
     return metrics
+
+
+def same_coverage_baseline_metrics(
+    *,
+    baseline_values: np.ndarray | None,
+    baseline_valid: np.ndarray | None,
+    fema_valid: np.ndarray,
+    valid_count: int,
+    target_cell_count: int,
+) -> dict[str, Any]:
+    empty = {
+        "enabled": False,
+        "cells": None,
+        "cutoff": None,
+        "precision": None,
+        "recall": None,
+        "iou": None,
+        "coverage_pct": None,
+    }
+    if (
+        baseline_values is None
+        or baseline_valid is None
+        or valid_count == 0
+        or target_cell_count == 0
+    ):
+        return empty
+
+    candidate_values = baseline_values[baseline_valid]
+    if candidate_values.size == 0:
+        return empty
+
+    rank = min(target_cell_count, candidate_values.size)
+    cutoff = float(np.partition(candidate_values, rank - 1)[rank - 1])
+    baseline_mask = baseline_valid & (baseline_values <= cutoff)
+    baseline_cells = int(baseline_mask.sum())
+    tp = int((baseline_mask & fema_valid).sum())
+    fp = int((baseline_mask & ~fema_valid).sum())
+    fn = int((~baseline_mask & fema_valid).sum())
+    union = tp + fp + fn
+    return {
+        "enabled": True,
+        "cells": baseline_cells,
+        "cutoff": cutoff,
+        "precision": tp / (tp + fp) if (tp + fp) else None,
+        "recall": tp / (tp + fn) if (tp + fn) else None,
+        "iou": tp / union if union else None,
+        "coverage_pct": baseline_cells / valid_count * 100,
+    }
+
+
+def read_baseline_raster(
+    *,
+    path: Path,
+    out_shape: tuple[int, int],
+    dst_transform: Any,
+    dst_crs: Any,
+) -> np.ndarray:
+    import rasterio
+    from rasterio.warp import Resampling, reproject
+
+    baseline = np.full(out_shape, np.nan, dtype=np.float32)
+    with rasterio.open(path) as src:
+        nodata = src.nodata
+        same_grid = (
+            src.shape == out_shape
+            and src.transform == dst_transform
+            and src.crs == dst_crs
+        )
+        if same_grid:
+            baseline = src.read(1).astype(np.float32)
+        else:
+            reproject(
+                source=rasterio.band(src, 1),
+                destination=baseline,
+                src_transform=src.transform,
+                src_crs=src.crs,
+                src_nodata=nodata,
+                dst_transform=dst_transform,
+                dst_crs=dst_crs,
+                dst_nodata=np.nan,
+                resampling=Resampling.bilinear,
+            )
+    if nodata is not None and np.isfinite(nodata):
+        baseline[baseline == nodata] = np.nan
+    baseline[~np.isfinite(baseline)] = np.nan
+    return baseline
 
 
 def downsample_mask(mask: np.ndarray, max_dim: int):
@@ -636,10 +750,13 @@ def write_summary(
     dataset_version: str,
     hand_path: Path,
     fema_feature_count: int,
+    fema_total_cells: int,
+    fema_in_nodata_cells: int,
     all_touched: bool,
     simplify_m: float,
     max_allowable_offset: float,
     offset_units: str,
+    baseline_raster: Path | None,
     metrics: list[dict[str, Any]],
     images: dict[str, str],
 ) -> None:
@@ -651,13 +768,17 @@ def write_summary(
         f"- FEMA source: `{FEMA_NFHL_FLOOD_HAZARD_ZONES_QUERY_URL}`",
         f"- FEMA filter: `{FEMA_SFHA_FILTER}` (Special Flood Hazard Area, 1% annual chance flood hazard)",
         f"- FEMA feature count fetched: `{fema_feature_count}`",
+        f"- FEMA raster cells: `{fema_total_cells}`; in HAND nodata: `{fema_in_nodata_cells}`",
         f"- Rasterization: `all_touched={str(all_touched).lower()}`, "
         f"`maxAllowableOffset={max_allowable_offset:g} {offset_units}` "
         f"(requested ~`{simplify_m:g}m`)",
+        f"- Low-elevation baseline raster: `{baseline_raster}`"
+        if baseline_raster
+        else "- Low-elevation baseline raster: not provided",
         f"- Bbox: `{region.bbox}`",
         "",
-        "| HAND threshold | IoU | Precision | Recall | Precision lift vs random | HAND coverage | FEMA coverage | Image |",
-        "|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| HAND threshold | IoU | Precision | Recall | Lift vs random | Lift vs low elev | HAND coverage | FEMA coverage | Image |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in metrics:
         key = f"{row['threshold_ft']:g}ft"
@@ -668,6 +789,7 @@ def write_summary(
             f"{fmt_num(row['precision'])} | "
             f"{fmt_num(row['recall'])} | "
             f"{fmt_num(row['precision_lift_vs_random'])}x | "
+            f"{fmt_num(row['precision_lift_vs_low_elevation'])}x | "
             f"{fmt_pct(row['hand_coverage_pct'])} | "
             f"{fmt_pct(row['fema_coverage_pct'])} | "
             f"[{images[key]}]({images[key]}) |"
@@ -677,9 +799,11 @@ def write_summary(
             "",
             "Interpretation notes:",
             "",
+            "- `maxAllowableOffset` is requested as meters and converted to CRS units for the FEMA service.",
             "- High precision means HAND-highlighted cells usually fall inside FEMA SFHA.",
             "- High recall means HAND captures most FEMA SFHA cells.",
             "- Precision lift compares HAND to a same-coverage random mask; near 1.0x means the threshold is barely more selective than chance.",
+            "- Low-elevation lift, when present, compares HAND to the same number of lowest absolute-elevation cells.",
             "- HAND and FEMA are not expected to match perfectly: FEMA is regulatory floodplain mapping; HAND is a terrain-derived height-above-drainage screen.",
             "- FEMA-negative cells are not proof of no flooding; these metrics compare against mapped effective SFHA polygons only.",
         ]
@@ -698,6 +822,7 @@ def compare_region(
     simplify_m: float,
     all_touched: bool,
     max_image_dim: int,
+    baseline_raster: Path | None,
 ) -> dict[str, Any]:
     hand_path = region.url
     if not hand_path.exists():
@@ -711,8 +836,19 @@ def compare_region(
         if target_epsg is None:
             raise ValueError(f"Could not determine EPSG code for {hand_path}: {ds.crs}")
         transform = ds.transform
+        crs = ds.crs
         out_shape = (ds.height, ds.width)
         raster_bounds = tuple(float(v) for v in ds.bounds)
+    baseline_values = (
+        read_baseline_raster(
+            path=baseline_raster,
+            out_shape=out_shape,
+            dst_transform=transform,
+            dst_crs=crs,
+        )
+        if baseline_raster is not None
+        else None
+    )
 
     features = fetch_fema_sfha_features(
         region=region,
@@ -734,7 +870,11 @@ def compare_region(
         hand_values=hand_values,
         fema_mask=fema_mask,
         thresholds_ft=thresholds_ft,
+        baseline_values=baseline_values,
     )
+    valid = hand_values != U16_NODATA
+    fema_total_cells = int(fema_mask.sum())
+    fema_in_nodata_cells = int((fema_mask & ~valid).sum())
 
     output_dir = output_root / region.id
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -758,11 +898,17 @@ def compare_region(
         "fema_source": FEMA_NFHL_FLOOD_HAZARD_ZONES_QUERY_URL,
         "fema_filter": "SFHA_TF = 'T'",
         "fema_feature_count": len(features),
+        "fema_total_cells": fema_total_cells,
+        "fema_in_hand_nodata_cells": fema_in_nodata_cells,
+        "fema_in_hand_nodata_pct": fema_in_nodata_cells / fema_total_cells * 100
+        if fema_total_cells
+        else None,
         "all_touched": all_touched,
         "simplify_m": simplify_m,
         "max_allowable_offset": generalization["max_allowable_offset"],
         "offset_units": generalization["offset_units"],
         "geometry_precision": generalization["geometry_precision"],
+        "baseline_raster": str(baseline_raster) if baseline_raster else None,
         "thresholds": metrics,
         "images": images,
     }
@@ -776,10 +922,13 @@ def compare_region(
         dataset_version=dataset_version,
         hand_path=hand_path,
         fema_feature_count=len(features),
+        fema_total_cells=fema_total_cells,
+        fema_in_nodata_cells=fema_in_nodata_cells,
         all_touched=all_touched,
         simplify_m=simplify_m,
         max_allowable_offset=generalization["max_allowable_offset"],
         offset_units=generalization["offset_units"],
+        baseline_raster=baseline_raster,
         metrics=metrics,
         images=images,
     )
@@ -816,6 +965,7 @@ def main() -> int:
                 simplify_m=args.simplify_m,
                 all_touched=args.all_touched,
                 max_image_dim=args.max_image_dim,
+                baseline_raster=args.baseline_raster,
             )
         )
     args.output_dir.mkdir(parents=True, exist_ok=True)

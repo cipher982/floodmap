@@ -55,6 +55,7 @@ def test_compute_metrics_includes_same_coverage_random_baseline():
     assert metrics["recall"] == 0.5
     assert metrics["expected_random_precision"] == pytest.approx(0.4)
     assert metrics["precision_lift_vs_random"] == pytest.approx(2.5)
+    assert metrics["low_elevation_baseline"]["enabled"] is False
 
 
 def test_compute_metrics_handles_empty_hand_threshold():
@@ -70,6 +71,44 @@ def test_compute_metrics_handles_empty_hand_threshold():
     assert metrics["hand_cells"] == 0
     assert metrics["expected_random_precision"] is None
     assert metrics["precision_lift_vs_random"] is None
+
+
+def test_compute_metrics_includes_same_coverage_low_elevation_baseline():
+    hand_values = np.array(
+        [
+            [0, 5, 20],
+            [U16_NODATA, 5, 20],
+        ],
+        dtype=np.uint16,
+    )
+    fema_mask = np.array(
+        [
+            [False, True, False],
+            [False, True, False],
+        ],
+        dtype=np.bool_,
+    )
+    elevation_values = np.array(
+        [
+            [100, 0, 200],
+            [np.nan, 1, 300],
+        ],
+        dtype=np.float32,
+    )
+
+    metrics = compute_metrics(
+        hand_values=hand_values,
+        fema_mask=fema_mask,
+        thresholds_ft=[1.0],
+        baseline_values=elevation_values,
+    )[0]
+
+    baseline = metrics["low_elevation_baseline"]
+    assert baseline["enabled"] is True
+    assert baseline["cells"] == 1
+    assert baseline["cutoff"] == 0
+    assert baseline["precision"] == 1.0
+    assert metrics["precision_lift_vs_low_elevation"] == 0.0
 
 
 def test_fema_cache_path_includes_simplification_distance():
