@@ -28,7 +28,9 @@ drainage. The product must be national, inspectable, and honest:
 
 Primary national input target:
 
-- NHDPlus HR / successor 3DHP hydrography and raster products.
+- Precomputed national HAND products when licensing/access/coverage is workable.
+- NHDPlus HR / successor 3DHP hydrography and raster products when we must
+  compute or validate the HAND source ourselves.
 - 10m 3DEP-derived terrain where available.
 
 USGS describes NHDPlus HR as built from high-resolution NHD, 10m 3DEP, and WBD.
@@ -41,6 +43,16 @@ Reference URLs:
 - `https://www.usgs.gov/national-hydrography/nhdplus-high-resolution`
 - `https://pubs.usgs.gov/publication/sir20255031/full`
 - `https://gdal.org/en/stable/drivers/raster/cog.html`
+
+Measured precomputed ingest pilot:
+
+- ORNL CFIM v0.21 HUC6 `010700` source archive: `7.7 GB` ZIP on Cube.
+- Source HAND raster: `742 MB` float32 GeoTIFF, `14,427 x 21,615`,
+  `EPSG:4269`, scanline LZW, no overviews.
+- Floodmap COG output: `172.6 MB` uint16-decimeter COG with 512px tiles and
+  overviews.
+- Conversion wall time on Cube: `51.054s`.
+- Report: `docs/qa/hand-precomputed/ornl-cfim-v0p21-huc6-010700/`.
 
 ## Storage Reality
 
@@ -394,9 +406,11 @@ Measured Phase 6 result:
 
 Deliverables:
 
-- Run 2-3 representative regions, not just one city.
+- Run 2-3 representative external HAND regions, not just one city.
 - Measure runtime, disk, COG compression, z12/z14 tile latency.
 - Revise storage budget from measured data.
+- Compare at least one pilot against an external reference layer; do not use the
+  failed pyflwdir prototype as ground truth.
 
 Opus review after pilot.
 

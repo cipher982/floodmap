@@ -1,0 +1,106 @@
+{
+  "elapsed_seconds": 51.054,
+  "encoding": {
+    "meters_per_unit": 0.1,
+    "name": "uint16-decimeters",
+    "nodata": 65535
+  },
+  "output_bytes": 172578583,
+  "output_cog": "/mnt/storage/floodmap/data/terrain/hand-precomputed/ornl-cfim-v0.21/010700/010700hand-u16dm.cog.tif",
+  "output_profile": {
+    "block_shapes": [
+      [
+        512,
+        512
+      ]
+    ],
+    "bounds": [
+      -72.1425925402299,
+      42.19759257754596,
+      -70.806759206189,
+      44.19898146749495
+    ],
+    "compression": "Compression.deflate",
+    "crs": "EPSG:4269",
+    "driver": "GTiff",
+    "dtype": "uint16",
+    "height": 21615,
+    "is_tiled": true,
+    "nodata": 65535.0,
+    "overviews": [
+      2,
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "width": 14427
+  },
+  "source_profile": {
+    "block_shapes": [
+      [
+        1,
+        14427
+      ]
+    ],
+    "bounds": [
+      -72.1425925402299,
+      42.19759257754596,
+      -70.806759206189,
+      44.19898146749495
+    ],
+    "compression": "Compression.lzw",
+    "count": 1,
+    "crs": "EPSG:4269",
+    "driver": "GTiff",
+    "dtype": "float32",
+    "height": 21615,
+    "is_tiled": false,
+    "nodata": -3.4028234663852886e+38,
+    "overviews": [],
+    "width": 14427
+  },
+  "source_raster": "/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/010700/010700hand.tif",
+  "summary": {
+    "cells_below_threshold_ft": {
+      "1": {
+        "cells": 10664110,
+        "fraction_of_valid": 0.06373121243974537
+      },
+      "10": {
+        "cells": 25248319,
+        "fraction_of_valid": 0.1508898522179028
+      },
+      "20": {
+        "cells": 38303314,
+        "fraction_of_valid": 0.2289095519157504
+      },
+      "3": {
+        "cells": 14650515,
+        "fraction_of_valid": 0.08755489992288866
+      },
+      "30": {
+        "cells": 49163075,
+        "fraction_of_valid": 0.2938100204345355
+      },
+      "6": {
+        "cells": 19448562,
+        "fraction_of_valid": 0.11622914959331432
+      }
+    },
+    "hand_m": {
+      "max": 1033.9,
+      "min": 0.0,
+      "p50": 22.2,
+      "p95": 161.8,
+      "p99": 342.0
+    },
+    "nodata_cells": 144510135,
+    "nodata_fraction": 0.4634117433544081,
+    "total_cells": 311839605,
+    "valid_cells": 167329470,
+    "valid_fraction": 0.5365882566455918
+  },
+  "temp_path": "/mnt/storage/floodmap/scratch/hand-precomputed/ornl-cfim-v0.21/010700/010700hand-u16dm.tmp.tif"
+}

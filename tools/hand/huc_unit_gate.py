@@ -348,8 +348,11 @@ def diff_against_reference(
     }
 
     with rasterio.open(reference_cog) as ref, rasterio.open(candidate_cog) as cand:
-        if str(ref.crs) != str(cand.crs):
-            raise RuntimeError(f"CRS mismatch: {ref.crs} vs {cand.crs}")
+        crs_info = {
+            "reference": str(ref.crs),
+            "candidate": str(cand.crs),
+            "match": str(ref.crs) == str(cand.crs),
+        }
         sample_rate = sample_count / max(1, cand.width * cand.height)
         for row_start in range(0, cand.height, 512):
             row_count = min(512, cand.height - row_start)
@@ -420,6 +423,7 @@ def diff_against_reference(
     result = {
         "reference_cog": str(reference_cog),
         "candidate_cog": str(candidate_cog),
+        "crs": crs_info,
         "sample_seed": seed,
         "sample_target": sample_count,
         "sample_count": int(diffs_dm.size),
@@ -443,8 +447,9 @@ def diff_against_reference(
         json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     lines = [
-        "# HUC Unit vs HUC4 Reference Diff",
+        "# HAND Candidate vs Reference Diff",
         "",
+        f"- Reference CRS / candidate CRS: `{crs_info['reference']}` / `{crs_info['candidate']}`.",
         f"- Samples: `{result['sample_count']}`.",
         f"- Abs diff p50/p95/p99/max sampled: `{result['abs_diff_m']['p50']}` / `{result['abs_diff_m']['p95']}` / `{result['abs_diff_m']['p99']}` / `{result['abs_diff_m']['max_sampled']}` m.",
         f"- Within 1m: `{result['abs_diff_m']['within_1m_pct']}%`.",

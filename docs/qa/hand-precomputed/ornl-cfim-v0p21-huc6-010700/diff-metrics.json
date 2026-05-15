@@ -1,0 +1,51 @@
+{
+  "abs_diff_m": {
+    "max_sampled": 614.8,
+    "mean": 12.565,
+    "p50": 1.7,
+    "p90": 34.0,
+    "p95": 64.205,
+    "p99": 176.766,
+    "within_1m_pct": 40.576
+  },
+  "candidate_cog": "/mnt/storage/floodmap/data/terrain/hand-precomputed/ornl-cfim-v0.21/010700/010700hand-u16dm.cog.tif",
+  "counts": {
+    "candidate_cells": 311839605,
+    "candidate_valid_cells": 167329470,
+    "gt_1m_cells": 98214105,
+    "reference_valid_cells_on_candidate_grid": 165327507,
+    "valid_pair_cells": 165172580
+  },
+  "crs": {
+    "candidate": "EPSG:4269",
+    "match": false,
+    "reference": "EPSG:5070"
+  },
+  "reference_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0107-merrimack-buffer5km-clipped.tif",
+  "sample_count": 132060,
+  "sample_seed": 11,
+  "sample_target": 250000,
+  "thresholds": {
+    "10ft": {
+      "candidate_cells": 25248319,
+      "intersection_cells": 19124010,
+      "jaccard": 0.6314,
+      "reference_cells": 24164024,
+      "union_cells": 30288333
+    },
+    "3ft": {
+      "candidate_cells": 14650515,
+      "intersection_cells": 10641519,
+      "jaccard": 0.5739,
+      "reference_cells": 14531895,
+      "union_cells": 18540891
+    },
+    "6ft": {
+      "candidate_cells": 19448562,
+      "intersection_cells": 14358027,
+      "jaccard": 0.5997,
+      "reference_cells": 18852771,
+      "union_cells": 23943306
+    }
+  }
+}

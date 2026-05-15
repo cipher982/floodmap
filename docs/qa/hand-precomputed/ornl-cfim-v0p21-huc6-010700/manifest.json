@@ -1,0 +1,23 @@
+{
+  "dataset_version": "ornl-cfim-v0p21-010700",
+  "layers": {
+    "hand": {
+      "encoding": "uint16-decimeters",
+      "nodata": 65535,
+      "regions": [
+        {
+          "bbox": [
+            -72.1425925402299,
+            42.19759257754596,
+            -70.806759206189,
+            44.19898146749495
+          ],
+          "crs": "EPSG:4269",
+          "id": "ornl-cfim-v0p21-huc6-010700",
+          "url": "/mnt/storage/floodmap/data/terrain/hand-precomputed/ornl-cfim-v0.21/010700/010700hand-u16dm.cog.tif"
+        }
+      ]
+    }
+  },
+  "schema_version": 1
+}

@@ -1,0 +1,262 @@
+{
+  "cog": "/mnt/storage/floodmap/data/terrain/hand-precomputed/ornl-cfim-v0.21/010700/010700hand-u16dm.cog.tif",
+  "samples": {
+    "concord_nh": {
+      "hand_m": 15.4,
+      "hand_raw_decimeters": 154,
+      "lat": 43.2081,
+      "lon": -71.5376
+    },
+    "haverhill_ma": {
+      "hand_m": 13.3,
+      "hand_raw_decimeters": 133,
+      "lat": 42.7762,
+      "lon": -71.0773
+    },
+    "lowell_ma": {
+      "hand_m": 6.8,
+      "hand_raw_decimeters": 68,
+      "lat": 42.6334,
+      "lon": -71.3162
+    },
+    "manchester_nh": {
+      "hand_m": 43.0,
+      "hand_raw_decimeters": 430,
+      "lat": 42.9956,
+      "lon": -71.4548
+    },
+    "nashua_nh": {
+      "hand_m": 17.0,
+      "hand_raw_decimeters": 170,
+      "lat": 42.7654,
+      "lon": -71.4676
+    }
+  },
+  "tiles": [
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 310.5,
+        "min": 0.0,
+        "p50": 17.6,
+        "p95": 75.5
+      },
+      "point": "manchester_nh",
+      "render_ms": 152.28,
+      "valid_fraction": 1.0,
+      "x": 308,
+      "y": 376,
+      "z": 10
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 125.2,
+        "min": 0.0,
+        "p50": 10.0,
+        "p95": 61.0
+      },
+      "point": "manchester_nh",
+      "render_ms": 26.554,
+      "valid_fraction": 1.0,
+      "x": 1235,
+      "y": 1505,
+      "z": 12
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 125.3,
+        "min": 6.2,
+        "p50": 60.1,
+        "p95": 98.225
+      },
+      "point": "manchester_nh",
+      "render_ms": 17.41,
+      "valid_fraction": 1.0,
+      "x": 4940,
+      "y": 6020,
+      "z": 14
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 140.1,
+        "min": 0.0,
+        "p50": 12.1,
+        "p95": 52.9
+      },
+      "point": "nashua_nh",
+      "render_ms": 112.654,
+      "valid_fraction": 1.0,
+      "x": 308,
+      "y": 377,
+      "z": 10
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 77.9,
+        "min": 0.0,
+        "p50": 12.2,
+        "p95": 39.6
+      },
+      "point": "nashua_nh",
+      "render_ms": 28.574,
+      "valid_fraction": 1.0,
+      "x": 1234,
+      "y": 1508,
+      "z": 12
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 47.8,
+        "min": 0.0,
+        "p50": 18.6,
+        "p95": 33.4
+      },
+      "point": "nashua_nh",
+      "render_ms": 19.51,
+      "valid_fraction": 1.0,
+      "x": 4939,
+      "y": 6034,
+      "z": 14
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 196.9,
+        "min": 0.0,
+        "p50": 19.1,
+        "p95": 78.3
+      },
+      "point": "concord_nh",
+      "render_ms": 115.759,
+      "valid_fraction": 1.0,
+      "x": 308,
+      "y": 375,
+      "z": 10
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 95.4,
+        "min": 0.0,
+        "p50": 14.3,
+        "p95": 61.3
+      },
+      "point": "concord_nh",
+      "render_ms": 33.587,
+      "valid_fraction": 1.0,
+      "x": 1234,
+      "y": 1501,
+      "z": 12
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 37.9,
+        "min": 0.0,
+        "p50": 4.6,
+        "p95": 21.0
+      },
+      "point": "concord_nh",
+      "render_ms": 24.687,
+      "valid_fraction": 1.0,
+      "x": 4936,
+      "y": 6007,
+      "z": 14
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 130.8,
+        "min": 0.0,
+        "p50": 10.8,
+        "p95": 45.7
+      },
+      "point": "lowell_ma",
+      "render_ms": 98.161,
+      "valid_fraction": 0.792236328125,
+      "x": 309,
+      "y": 377,
+      "z": 10
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 79.9,
+        "min": 0.0,
+        "p50": 12.0,
+        "p95": 35.8
+      },
+      "point": "lowell_ma",
+      "render_ms": 32.081,
+      "valid_fraction": 1.0,
+      "x": 1236,
+      "y": 1510,
+      "z": 12
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 24.8,
+        "min": 0.0,
+        "p50": 8.2,
+        "p95": 16.3
+      },
+      "point": "lowell_ma",
+      "render_ms": 18.875,
+      "valid_fraction": 1.0,
+      "x": 4946,
+      "y": 6043,
+      "z": 14
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 130.8,
+        "min": 0.0,
+        "p50": 10.8,
+        "p95": 45.7
+      },
+      "point": "haverhill_ma",
+      "render_ms": 93.532,
+      "valid_fraction": 0.792236328125,
+      "x": 309,
+      "y": 377,
+      "z": 10
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 87.1,
+        "min": 0.0,
+        "p50": 19.7,
+        "p95": 55.3
+      },
+      "point": "haverhill_ma",
+      "render_ms": 30.626,
+      "valid_fraction": 0.99884033203125,
+      "x": 1239,
+      "y": 1508,
+      "z": 12
+    },
+    {
+      "bytes": 131072,
+      "hand_m": {
+        "max": 68.6,
+        "min": 0.0,
+        "p50": 14.2,
+        "p95": 45.8
+      },
+      "point": "haverhill_ma",
+      "render_ms": 20.325,
+      "valid_fraction": 1.0,
+      "x": 4957,
+      "y": 6034,
+      "z": 14
+    }
+  ]
+}

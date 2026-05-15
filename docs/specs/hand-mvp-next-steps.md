@@ -339,6 +339,59 @@ Gate verdict:
   near-term product is a terrain/drainage explorer or curated regional HAND
   viewer, not a nationwide flood-risk model.
 
+### Gate 9: Precomputed National HAND Ingest
+
+Goal: test whether an external precomputed HAND product can replace our
+self-built national HAND compute path.
+
+Success criteria:
+
+- Download one real external HUC6 HAND package directly to Cube.
+- Convert its source HAND raster to the app's `uint16` decimeter COG format.
+- Generate a terrain manifest that can be served by the existing terrain-v2 API.
+- Render sample app tiles and point samples from the converted COG.
+- Compare the converted product against the prior Gate 6 Merrimack reference,
+  but do not treat the self-built reference as ground truth.
+
+Result:
+
+- Complete on `2026-05-15` for ORNL CFIM v0.21 HUC6 `010700`.
+- Source archive on Cube:
+  `/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/010700/010700.zip`
+  (`8,222,025,235` bytes).
+- Extracted source HAND raster: `14,427 x 21,615`, `float32`, `EPSG:4269`,
+  LZW-compressed scanline GeoTIFF, no overviews.
+- Converted app COG:
+  `/mnt/storage/floodmap/data/terrain/hand-precomputed/ornl-cfim-v0.21/010700/010700hand-u16dm.cog.tif`
+  (`172,578,583` bytes), tiled `512 x 512`, `uint16`, nodata `65535`,
+  overviews `[2, 4, 8, 16, 32, 64]`.
+- Conversion took `51.054s` on Cube and wrote a one-region manifest at
+  `/mnt/storage/floodmap/data/terrain/manifests/ornl-cfim-v0p21-010700.json`.
+- Tile smoke passed through the app's dynamic COG renderer for z10/z12/z14
+  tiles around Manchester, Nashua, Concord, Lowell, and Haverhill.
+- Distribution: `167,329,470` valid cells (`53.659%`), p50 HAND `22.2m`,
+  p95 `161.8m`, p99 `342.0m`.
+- Low-HAND coverage: `8.755%` of valid cells at or below 3ft, `11.623%` at or
+  below 6ft, and `15.089%` at or below 10ft.
+- Against the Gate 6 HUC4 Merrimack pyflwdir reference, sampled absolute
+  differences were p50 `1.7m`, p95 `64.205m`, p99 `176.766m`, with `40.576%`
+  within 1m. Threshold-mask Jaccard was `0.5739` / `0.5997` / `0.6314` at
+  3ft/6ft/10ft.
+- Report committed under
+  `docs/qa/hand-precomputed/ornl-cfim-v0p21-huc6-010700/`.
+
+Decision:
+
+- Ingest/render path: pass. External precomputed HAND can be transformed into
+  the existing Floodmap serving format quickly and compactly.
+- Product correctness: unresolved. ORNL CFIM and our self-built pyflwdir
+  reference differ materially, so the next gate should compare ORNL against an
+  external floodplain/drainage reference and visual corridor expectations, not
+  against our failed prototype as if it were truth.
+- Strategic implication: prefer external precomputed HAND products over a
+  self-built CONUS hydrology engine unless a later gate proves the external data
+  is unavailable or unsuitable at national coverage.
+
 ## Kill Or Pivot Criteria
 
 Current state: triggered.
