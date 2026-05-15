@@ -166,7 +166,7 @@ async function installInstrumentation(page) {
         tileUrl: typeof fm.getTileUrl === 'function' ? fm.getTileUrl() : null,
         rendererStats: fm.elevationRenderer?.getStats?.() ?? null,
         tileDebug: fm.tileDebug ?? null,
-        handGpuStats: fm.handGpuStats ?? fm.handGpuLayer?.getStats?.() ?? null,
+        handGpuStats: fm.handGpuLayer?.getStats?.() ?? fm.handGpuStats ?? null,
         terrainConfig: fm.getTerrainLayerConfig?.('hand') ?? null,
         webgl2: !!document.querySelector('#map canvas')?.getContext?.('webgl2'),
         webgpu: !!navigator.gpu,
@@ -304,7 +304,7 @@ async function collectPerf(page) {
         tileUrl: typeof fm?.getTileUrl === 'function' ? fm.getTileUrl() : null,
         rendererStats: fm?.elevationRenderer?.getStats?.() ?? null,
         tileDebug: fm?.tileDebug ?? null,
-        handGpuStats: fm?.handGpuStats ?? fm?.handGpuLayer?.getStats?.() ?? null
+        handGpuStats: fm?.handGpuLayer?.getStats?.() ?? fm?.handGpuStats ?? null
       }
     };
   });
