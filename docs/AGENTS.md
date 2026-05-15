@@ -9,5 +9,5 @@ too long. Prefer current-state checks over copied snapshots.
 - Rendering pipeline (worker/LUT/palette): `docs/runbooks/rendering-pipeline.md`
 - CONUS/HAND terrain architecture: `docs/specs/conus-hand-refactor.md`
 - HAND scale/boundary gates and QA: `docs/qa/hand-huc-scale/`,
-  `docs/qa/hand-boundary/`
+  `docs/qa/hand-boundary/`, `docs/qa/hand-banded/`
 - Analytics (Umami): `docs/runbooks/analytics.md`

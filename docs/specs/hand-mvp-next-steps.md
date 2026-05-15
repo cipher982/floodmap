@@ -216,6 +216,56 @@ Success criteria:
   explainable by drain adjacency, nodata/coastline effects, or band edges rather
   than arbitrary interior seams.
 
+Result:
+
+- Complete on `2026-05-14` for HUC4 `0107` Merrimack using a horizontal
+  banded pyflwdir builder.
+- Method: 10m DEM, 5km buffered HUC output, 20km band overlap, 2000-row
+  interior bands, polygon-clipped COG output.
+- Compute result: pass but tight. Cube run took `9222.96s`, peaked at
+  `23698.8 MB` RSS, and wrote a `200.8 MB` COG.
+- Diff result: fail. Against the Gate 6 monolithic Merrimack COG, sampled
+  absolute HAND differences were p50 `0.2m`, p95 `3.7m`, p99 `20.4m`, with
+  only `79.821%` of samples within `1m`.
+- Threshold result: fail for product equivalence. The 3ft threshold mask
+  Jaccard was `0.8405`.
+- Attribution result: fail. Of `32709247` cells with >1m difference,
+  `94.256%` were unattributed interior cells, not explained by band edges,
+  nodata adjacency, drain adjacency, or HUC-boundary/coastline proxy effects.
+- Report committed under
+  `docs/qa/hand-banded/huc4-0107-merrimack-buffer5km-clipped-banded-overlap20km-rows2000/`.
+- Decision: horizontal bands solve peak RAM but do not preserve hydrologic
+  correctness well enough. Do not scale this algorithm to CONUS.
+
+### Gate 8: Hydrologic Work Unit Benchmark
+
+Goal: pick the production decomposition and HAND engine before starting CONUS
+batching.
+
+Success criteria:
+
+- First test whether smaller hydrologic units solve the problem: run a
+  monolithic pyflwdir HUC8/HUC10 unit inside Merrimack with 5km buffer and
+  polygon-clipped output.
+- Use hydrologic work units with explicit buffer handling, not arbitrary
+  horizontal DEM bands.
+- If the HUC8/HUC10 pyflwdir path does not pass, run a comparable benchmark
+  through at least one native hydrology engine candidate: GRASS, WhiteboxTools,
+  or TauDEM.
+- Report wall time, peak RSS, output size, selected drainage cells, valid area,
+  3ft/6ft/10ft threshold coverage, and failure modes.
+- Compare each candidate against the Gate 6 monolithic pyflwdir HUC4 output and
+  the failed Gate 7 banded output where extents overlap.
+- Produce automated diff and visual artifacts for >1m differences and threshold
+  masks.
+- Go threshold for a production path: p99 sampled HAND difference <=1m versus
+  the Gate 6 HUC4 reference where comparable, >=99% of paired cells within 1m,
+  threshold-mask Jaccard >=0.97 at 3ft/6ft/10ft, no obvious interior artifacts,
+  and a credible path to process-level parallelism by HUC8/HUC10.
+- Decision rule: prefer the simplest decomposition and engine that preserves
+  hydrologic correctness. If HUC8/HUC10 monolithic pyflwdir passes, avoid
+  native-engine churn until a larger-region benchmark proves it is needed.
+
 ## Kill Or Pivot Criteria
 
 - If external-reference overlap is very low and the disagreement is not

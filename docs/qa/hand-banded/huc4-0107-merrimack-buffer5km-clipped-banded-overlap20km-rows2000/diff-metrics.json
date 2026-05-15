@@ -1,0 +1,85 @@
+{
+  "abs_diff_m": {
+    "max_sampled": 386.2,
+    "mean": 1.238,
+    "p50": 0.2,
+    "p90": 2.0,
+    "p95": 3.7,
+    "p99": 20.4,
+    "within_1m_pct": 79.821
+  },
+  "attribution": {
+    "counts": {
+      "band_edge_adjacent_cells": 660386,
+      "drain_adjacent_cells": 514082,
+      "explained_by_any_bucket_cells": 1878950,
+      "gt_1m_cells": 32709247,
+      "huc_boundary_or_coastline_proxy_cells": 584800,
+      "interior_cells": 32124447,
+      "nodata_adjacent_cells": 366807,
+      "primary_band_edge_adjacent_cells": 646661,
+      "primary_drain_adjacent_cells": 335159,
+      "primary_huc_boundary_or_coastline_proxy_cells": 530323,
+      "primary_nodata_adjacent_cells": 366807,
+      "unattributed_interior_cells": 30830297
+    },
+    "params": {
+      "adjacent_pixels": 20,
+      "band_rows": 2000,
+      "coastline_proxy": "HUC polygon boundary buffer; separates outer-boundary/coastal-adjacent differences from interior differences.",
+      "diff_threshold_m": 1.0,
+      "drain_adjacent_dm": 1
+    },
+    "percent_of_gt_1m": {
+      "band_edge_adjacent_pct": 2.019,
+      "drain_adjacent_pct": 1.572,
+      "explained_by_any_bucket_pct": 5.744,
+      "gt_1m_pct": 100.0,
+      "huc_boundary_or_coastline_proxy_pct": 1.788,
+      "interior_pct": 98.212,
+      "nodata_adjacent_pct": 1.121,
+      "primary_band_edge_adjacent_pct": 1.977,
+      "primary_drain_adjacent_pct": 1.025,
+      "primary_huc_boundary_or_coastline_proxy_pct": 1.621,
+      "primary_nodata_adjacent_pct": 1.121,
+      "unattributed_interior_pct": 94.256
+    }
+  },
+  "candidate_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0107-merrimack-buffer5km-clipped-banded-overlap20km-rows2000.tif",
+  "counts": {
+    "candidate_valid_cells": 162283883,
+    "gt_1m_cells": 32709247,
+    "low_candidate_cells": 14243019,
+    "low_intersection_cells": 13023260,
+    "low_reference_cells": 14274005,
+    "low_union_cells": 15493764,
+    "reference_valid_cells": 162258356,
+    "total_cells": 355674758,
+    "valid_pair_cells": 161634478
+  },
+  "heatmap": "docs/qa/hand-banded/huc4-0107-merrimack-buffer5km-clipped-banded-overlap20km-rows2000/diff-gt1m-sample.png",
+  "reference_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0107-merrimack-buffer5km-clipped.tif",
+  "region": {
+    "area_km2": 12963.56,
+    "bbox": [
+      -72.14260543657879,
+      42.19665524711205,
+      -70.8039552627585,
+      44.20043493123295
+    ],
+    "huc4": "0107",
+    "name": "Merrimack",
+    "states": "MA,NH"
+  },
+  "sample_count": 113635,
+  "sample_rate": 0.0007028893515125411,
+  "sample_seed": 7,
+  "sample_target": 250000,
+  "threshold_3ft": {
+    "candidate_cells": 14243019,
+    "intersection_cells": 13023260,
+    "jaccard": 0.8405,
+    "reference_cells": 14274005,
+    "union_cells": 15493764
+  }
+}

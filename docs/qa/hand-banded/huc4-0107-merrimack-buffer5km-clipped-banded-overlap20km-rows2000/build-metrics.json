@@ -1,0 +1,310 @@
+{
+  "artifact_dir": "/mnt/storage/floodmap/scratch/hand-banded/huc4-0107-merrimack-buffer5km-clipped-banded-overlap20km-rows2000",
+  "bands": [
+    {
+      "band_index": 0,
+      "bbox_lonlat": [
+        -72.08221526468843,
+        43.647870988242424,
+        -70.2676686063439,
+        44.33945749077696
+      ],
+      "dem_shape": [
+        13582,
+        19413
+      ],
+      "peak_rss_mb": 16909.1,
+      "row_start": 0,
+      "row_stop": 2000,
+      "valid_written_cells": 3923101,
+      "wall_time_s": 649.78
+    },
+    {
+      "band_index": 1,
+      "bbox_lonlat": [
+        -72.13743651992691,
+        43.49437883841966,
+        -70.27693447900846,
+        44.31540467816161
+      ],
+      "dem_shape": [
+        15276,
+        20163
+      ],
+      "peak_rss_mb": 22674.0,
+      "row_start": 2000,
+      "row_stop": 4000,
+      "valid_written_cells": 6664495,
+      "wall_time_s": 752.77
+    },
+    {
+      "band_index": 2,
+      "bbox_lonlat": [
+        -72.19240871851859,
+        43.34090154285108,
+        -70.33624784457305,
+        44.16104939565899
+      ],
+      "dem_shape": [
+        15233,
+        20124
+      ],
+      "peak_rss_mb": 22996.0,
+      "row_start": 4000,
+      "row_stop": 6000,
+      "valid_written_cells": 12540603,
+      "wall_time_s": 742.17
+    },
+    {
+      "band_index": 3,
+      "bbox_lonlat": [
+        -72.24713350505947,
+        43.18743786752968,
+        -70.39529494139093,
+        44.00671847658281
+      ],
+      "dem_shape": [
+        15192,
+        20084
+      ],
+      "peak_rss_mb": 23238.7,
+      "row_start": 6000,
+      "row_stop": 8000,
+      "valid_written_cells": 15708198,
+      "wall_time_s": 735.31
+    },
+    {
+      "band_index": 4,
+      "bbox_lonlat": [
+        -72.30161251003148,
+        43.03398658881443,
+        -70.45407751315645,
+        43.852410590437756
+      ],
+      "dem_shape": [
+        15151,
+        20045
+      ],
+      "peak_rss_mb": 23290.7,
+      "row_start": 8000,
+      "row_stop": 10000,
+      "valid_written_cells": 15803680,
+      "wall_time_s": 736.12
+    },
+    {
+      "band_index": 5,
+      "bbox_lonlat": [
+        -72.3558473499499,
+        42.88054649322196,
+        -70.51259728878539,
+        43.698124418754944
+      ],
+      "dem_shape": [
+        15109,
+        20005
+      ],
+      "peak_rss_mb": 23310.5,
+      "row_start": 10000,
+      "row_stop": 12000,
+      "valid_written_cells": 14903549,
+      "wall_time_s": 723.21
+    },
+    {
+      "band_index": 6,
+      "bbox_lonlat": [
+        -72.4098396275087,
+        42.72711637722234,
+        -70.57085598256654,
+        43.54385865485037
+      ],
+      "dem_shape": [
+        15068,
+        19966
+      ],
+      "peak_rss_mb": 23389.2,
+      "row_start": 12000,
+      "row_stop": 14000,
+      "valid_written_cells": 14160306,
+      "wall_time_s": 715.05
+    },
+    {
+      "band_index": 7,
+      "bbox_lonlat": [
+        -72.46359093172434,
+        42.573695047039095,
+        -70.62885529431132,
+        43.38961200358834
+      ],
+      "dem_shape": [
+        15027,
+        19928
+      ],
+      "peak_rss_mb": 23448.2,
+      "row_start": 14000,
+      "row_stop": 16000,
+      "valid_written_cells": 20689788,
+      "wall_time_s": 715.33
+    },
+    {
+      "band_index": 8,
+      "bbox_lonlat": [
+        -72.51710283807768,
+        42.420281318452886,
+        -70.68659690950176,
+        43.23538318114946
+      ],
+      "dem_shape": [
+        14986,
+        19889
+      ],
+      "peak_rss_mb": 23496.5,
+      "row_start": 16000,
+      "row_stop": 18000,
+      "valid_written_cells": 19651077,
+      "wall_time_s": 729.33
+    },
+    {
+      "band_index": 9,
+      "bbox_lonlat": [
+        -72.5703769086543,
+        42.266874016608945,
+        -70.74408249943669,
+        43.081170914803316
+      ],
+      "dem_shape": [
+        14946,
+        19851
+      ],
+      "peak_rss_mb": 23612.4,
+      "row_start": 18000,
+      "row_stop": 20000,
+      "valid_written_cells": 15078358,
+      "wall_time_s": 714.88
+    },
+    {
+      "band_index": 10,
+      "bbox_lonlat": [
+        -72.62341469228294,
+        42.11347197582842,
+        -70.80131372137615,
+        42.926973942685954
+      ],
+      "dem_shape": [
+        14906,
+        19813
+      ],
+      "peak_rss_mb": 23698.8,
+      "row_start": 20000,
+      "row_stop": 22000,
+      "valid_written_cells": 12642220,
+      "wall_time_s": 714.76
+    },
+    {
+      "band_index": 11,
+      "bbox_lonlat": [
+        -72.64627052615677,
+        42.0471565472137,
+        -70.85829221868423,
+        42.77279101358176
+      ],
+      "dem_shape": [
+        13741,
+        19284
+      ],
+      "peak_rss_mb": 23698.8,
+      "row_start": 22000,
+      "row_stop": 24000,
+      "valid_written_cells": 9736716,
+      "wall_time_s": 704.21
+    },
+    {
+      "band_index": 12,
+      "bbox_lonlat": [
+        -72.64627052615677,
+        42.0471565472137,
+        -70.91501962097006,
+        42.618620886709145
+      ],
+      "dem_shape": [
+        11708,
+        18391
+      ],
+      "peak_rss_mb": 23698.8,
+      "row_start": 24000,
+      "row_stop": 24553,
+      "valid_written_cells": 781792,
+      "wall_time_s": 538.29
+    }
+  ],
+  "build": {
+    "peak_rss_mb": 23698.8,
+    "source_cog_bytes": 200813169,
+    "wall_time_s": 9222.96
+  },
+  "estimate": {
+    "compute_bbox": {
+      "cells": 316407366,
+      "columns": 13869,
+      "height_m": 228135.34847352793,
+      "raw_u16_bytes": 632814732,
+      "rows": 22814,
+      "width_m": 138685.30154560017
+    },
+    "compute_bbox_lonlat": [
+      -72.20435883148366,
+      42.15194812928101,
+      -70.74252899917154,
+      44.24525692520025
+    ],
+    "output_bbox": {
+      "cells": 280724366,
+      "columns": 12869,
+      "height_m": 218138.21915934095,
+      "raw_u16_bytes": 561448732,
+      "rows": 21814,
+      "width_m": 128689.73634366831
+    },
+    "output_bbox_lonlat": [
+      -72.14260543657879,
+      42.19665524711205,
+      -70.8039552627585,
+      44.20043493123292
+    ]
+  },
+  "params": {
+    "accumulation_threshold_km2": 16.0,
+    "band_rows": 2000,
+    "buffer_km": 5.0,
+    "dem_resolution_m": 10,
+    "overlap_m": 20000.0,
+    "stream_burn_depth_m": 5.0
+  },
+  "reference_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0107-merrimack-buffer5km-clipped.tif",
+  "region": {
+    "area_km2": 12963.56,
+    "bbox": [
+      -72.14260543657879,
+      42.19665524711205,
+      -70.8039552627585,
+      44.20043493123295
+    ],
+    "huc4": "0107",
+    "name": "Merrimack",
+    "states": "MA,NH"
+  },
+  "region_id": "huc4-0107-merrimack-buffer5km-clipped-banded-overlap20km-rows2000",
+  "source_cog": "/mnt/storage/floodmap/data/terrain/hand/huc4-0107-merrimack-buffer5km-clipped-banded-overlap20km-rows2000.tif",
+  "target_grid": {
+    "crs": "EPSG:5070",
+    "height": 24553,
+    "transform": [
+      8.884685733122751,
+      0.0,
+      1897162.236569182,
+      0.0,
+      -8.88468573288992,
+      2607895.83906933
+    ],
+    "width": 14486
+  }
+}
