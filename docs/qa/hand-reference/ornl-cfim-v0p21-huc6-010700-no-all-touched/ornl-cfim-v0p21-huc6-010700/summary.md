@@ -5,18 +5,18 @@
 - FEMA source: `https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query`
 - FEMA filter: `SFHA_TF = 'T'` (Special Flood Hazard Area, 1% annual chance flood hazard)
 - FEMA feature count fetched: `20239`
-- FEMA raster cells: `31823915`; in HAND nodata: `15586314`
-- Rasterization: `all_touched=true`, `maxAllowableOffset=4.49156e-05 degrees` (requested ~`5m`)
+- FEMA raster cells: `29561848`; in HAND nodata: `14632411`
+- Rasterization: `all_touched=false`, `maxAllowableOffset=4.49156e-05 degrees` (requested ~`5m`)
 - Low-elevation baseline raster: `/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/010700/010700-elevation.tif`
 - Bbox: `(-72.1425925402299, 42.19759257754596, -70.806759206189, 44.19898146749495)`
 
 | HAND threshold | IoU | Precision | Recall | Lift vs random | Lift vs low elev | HAND coverage | FEMA coverage | Image |
 |---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 1 ft | 0.320 | 0.612 | 0.402 | 6.305x | 2.219x | 6.37% | 9.70% | [comparison-1ft.png](comparison-1ft.png) |
-| 3 ft | 0.397 | 0.599 | 0.540 | 6.172x | 2.488x | 8.76% | 9.70% | [comparison-3ft.png](comparison-3ft.png) |
-| 6 ft | 0.439 | 0.560 | 0.671 | 5.770x | 2.594x | 11.62% | 9.70% | [comparison-6ft.png](comparison-6ft.png) |
-| 10 ft | 0.443 | 0.505 | 0.785 | 5.200x | 2.410x | 15.09% | 9.70% | [comparison-10ft.png](comparison-10ft.png) |
-| 20 ft | 0.372 | 0.387 | 0.904 | 3.988x | 2.063x | 22.66% | 9.70% | [comparison-20ft.png](comparison-20ft.png) |
+| 1 ft | 0.333 | 0.600 | 0.428 | 6.720x | 2.346x | 6.37% | 8.92% | [comparison-1ft.png](comparison-1ft.png) |
+| 3 ft | 0.402 | 0.579 | 0.568 | 6.492x | 2.601x | 8.76% | 8.92% | [comparison-3ft.png](comparison-3ft.png) |
+| 6 ft | 0.432 | 0.533 | 0.695 | 5.975x | 2.681x | 11.62% | 8.92% | [comparison-6ft.png](comparison-6ft.png) |
+| 10 ft | 0.425 | 0.474 | 0.802 | 5.316x | 2.457x | 15.09% | 8.92% | [comparison-10ft.png](comparison-10ft.png) |
+| 20 ft | 0.347 | 0.359 | 0.911 | 4.022x | 2.081x | 22.66% | 8.92% | [comparison-20ft.png](comparison-20ft.png) |
 
 Interpretation notes:
 

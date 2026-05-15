@@ -19,6 +19,18 @@ Decision: pass for product-direction validation.
 - Best balanced thresholds:
   - `6ft`: IoU `0.439`, precision `0.560`, recall `0.671`
   - `10ft`: IoU `0.443`, precision `0.505`, recall `0.785`
+- The low-elevation baseline check also passes. ORNL HAND beats a
+  same-coverage lowest-absolute-elevation mask by:
+  - `1ft`: `2.219x`
+  - `3ft`: `2.488x`
+  - `6ft`: `2.594x`
+  - `10ft`: `2.410x`
+  - `20ft`: `2.063x`
+- The `all_touched=false` sensitivity run is stable:
+  - `6ft`: IoU `0.432`, precision `0.533`, recall `0.695`,
+    low-elevation lift `2.681x`
+  - `10ft`: IoU `0.425`, precision `0.474`, recall `0.802`,
+    low-elevation lift `2.457x`
 
 ## Product Interpretation
 
@@ -47,6 +59,11 @@ not:
   a simple HAND threshold.
 - This is one HUC6. The next product-risk pilot should be Birmingham's inland
   storm-prone drainage geography, not another convenient New England unit.
+- About half of FEMA raster cells in the HUC6 bbox fall outside the valid ORNL
+  HAND footprint (`48.98%` with `all_touched=true`, `49.50%` with
+  `all_touched=false`). The current metrics correctly compare inside valid HAND
+  cells only, but cross-region comparisons need HUC polygon coverage rather than
+  bbox-only context.
 
 ## Next Gate
 
