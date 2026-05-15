@@ -68,7 +68,8 @@ One HUC6 should become a repeatable package, not a hand-built exception.
 
 Tasks:
 
-1. Add or tighten a single command path for ORNL HUC6 ingest.
+1. Add or tighten a single command path for ORNL HUC6 ingest:
+   `uv run python tools/hand/ingest_ornl_huc6.py --huc <HUC6>`.
 2. Produce a manifest, ingest report, validation report, and review URL for a
    given HUC6.
 3. Record input bytes, output COG bytes, nodata percent, bounds, CRS, and wall
