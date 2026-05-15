@@ -8,6 +8,7 @@ too long. Prefer current-state checks over copied snapshots.
 - Cache-busting (Cloudflare + MapLibre): `docs/runbooks/cache-busting.md`
 - Rendering pipeline (worker/LUT/palette): `docs/runbooks/rendering-pipeline.md`
 - CONUS/HAND terrain architecture: `docs/specs/conus-hand-refactor.md`
+- ORNL external validation gate: `docs/specs/gate-10-ornl-reference-validation.md`
 - HAND scale/boundary gates and QA: `docs/qa/hand-huc-scale/`,
   `docs/qa/hand-boundary/`, `docs/qa/hand-banded/`, `docs/qa/hand-unit/`,
   `docs/qa/hand-whitebox/`, `docs/qa/hand-context/`,
