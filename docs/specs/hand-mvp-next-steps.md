@@ -330,7 +330,18 @@ Third result:
   region-local pyflwdir outputs are not equivalent enough to the larger
   reference without a more principled hydrologic production method.
 
+Gate verdict:
+
+- Gate 8 fails. No tested bounded-memory or smaller-work-unit path preserves
+  enough hydrologic correctness to justify CONUS batching from the current
+  algorithm family.
+- Product implication: pause national "flood map" execution. The defensible
+  near-term product is a terrain/drainage explorer or curated regional HAND
+  viewer, not a nationwide flood-risk model.
+
 ## Kill Or Pivot Criteria
+
+Current state: triggered.
 
 - If external-reference overlap is very low and the disagreement is not
   explainable, pivot the pitch away from "flood map" toward "terrain/drainage
