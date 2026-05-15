@@ -7,7 +7,10 @@
 - Output size: 172,578,583 bytes
 - Manifest: `/mnt/storage/floodmap/data/terrain/manifests/ornl-cfim-v0p21-010700.json`
 - Report manifest copy: `docs/qa/hand-precomputed/ornl-cfim-v0p21-huc6-010700/manifest.json`
-- Elapsed: 51.054 seconds
+- Elapsed: 51.696 seconds
+- Source archive: `/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/010700/010700.zip`
+- Source archive size: 8,222,025,235 bytes
+- Source archive SHA-256: `cbb8fb753d803715971e8f3682c397e66015cac2997ce31028045f3561e8fb4d`
 
 ## Source
 

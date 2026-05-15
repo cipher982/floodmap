@@ -1,5 +1,5 @@
 {
-  "elapsed_seconds": 51.054,
+  "elapsed_seconds": 51.696,
   "encoding": {
     "meters_per_unit": 0.1,
     "name": "uint16-decimeters",
@@ -36,6 +36,21 @@
       64
     ],
     "width": 14427
+  },
+  "source_archive": {
+    "archive": "/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/010700/010700.zip",
+    "archive_bytes": 8222025235,
+    "archive_sha256": "cbb8fb753d803715971e8f3682c397e66015cac2997ce31028045f3561e8fb4d",
+    "elevation_member": "010700/010700.tif",
+    "elevation_member_bytes": 1051054354,
+    "extracted_elevation": false,
+    "extracted_hand": false,
+    "hand_member": "010700/010700hand.tif",
+    "hand_member_bytes": 742187379,
+    "source_elevation": "/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/010700/010700-elevation.tif",
+    "source_elevation_bytes": 1051054354,
+    "source_hand": "/mnt/storage/floodmap/data/hand-precomputed/ornl-cfim-v0.21/010700/010700hand.tif",
+    "source_hand_bytes": 742187379
   },
   "source_profile": {
     "block_shapes": [
