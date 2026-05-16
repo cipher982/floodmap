@@ -2599,7 +2599,7 @@ class FloodMapClient {
             el.className = 'model-note model-note--warning';
             el.innerHTML = `
                 <div class="model-note__title">Height above drainage</div>
-                <div class="model-note__body">Slider highlights land up to the selected ground height above nearby mapped creeks, bayous, and drainage channels. Coverage: ${this.escapeHtml(config.coverageLabel || 'prototype region')}.</div>
+                <div class="model-note__body">Slider highlights land up to the selected ground height above nearby mapped creeks, bayous, and drainage channels. Uncolored land can be higher than the selected height or outside current HAND coverage. Coverage: ${this.escapeHtml(config.coverageLabel || 'prototype region')}.</div>
             `;
             return;
         }
