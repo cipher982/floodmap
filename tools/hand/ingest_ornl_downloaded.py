@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import zipfile
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
@@ -63,6 +64,32 @@ def preferred_archives(entries: list[SourceZipEntry]) -> dict[str, SourceZipEntr
         if existing is None or entry.bytes > existing.bytes:
             archives[entry.huc] = entry
     return dict(sorted(archives.items()))
+
+
+def archive_readiness(entry: SourceZipEntry) -> str | None:
+    if not entry.huc:
+        return "invalid HUC name"
+    try:
+        with zipfile.ZipFile(entry.path) as archive:
+            archive.getinfo(f"{entry.huc}/{entry.huc}hand.tif")
+            archive.getinfo(f"{entry.huc}/{entry.huc}.tif")
+    except Exception as exc:
+        return str(exc)
+    return None
+
+
+def filter_ready_archives(
+    archives: dict[str, SourceZipEntry],
+) -> tuple[dict[str, SourceZipEntry], list[dict[str, str]]]:
+    ready: dict[str, SourceZipEntry] = {}
+    not_ready: list[dict[str, str]] = []
+    for huc, entry in archives.items():
+        reason = archive_readiness(entry)
+        if reason is None:
+            ready[huc] = entry
+        else:
+            not_ready.append({"huc": huc, "archive": entry.path, "reason": reason})
+    return ready, not_ready
 
 
 def normalize_requested_hucs(hucs: list[str] | None) -> list[str] | None:
@@ -207,6 +234,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--continue-on-error", action="store_true")
     parser.add_argument(
+        "--allow-incomplete-archives",
+        action="store_true",
+        help="Do not preflight ZIP central directory and expected ORNL members.",
+    )
+    parser.add_argument(
         "--combined-output",
         type=Path,
         help="Optional combined manifest to write after successful ingests.",
@@ -227,6 +259,9 @@ def main() -> None:
     manifest_root = args.manifest_root or args.data_root / "terrain" / "manifests"
     entries = iter_source_zip_entries(source_roots)
     archives = preferred_archives(entries)
+    not_ready: list[dict[str, str]] = []
+    if not args.allow_incomplete_archives:
+        archives, not_ready = filter_ready_archives(archives)
     planned, missing_requested = plan_downloaded_ingest(
         archives=archives,
         manifest_root=manifest_root,
@@ -274,6 +309,8 @@ def main() -> None:
         "completed_count": len(completed),
         "failed_count": len(failed),
         "missing_requested": missing_requested,
+        "not_ready": not_ready,
+        "not_ready_count": len(not_ready),
         "planned": [asdict(item) for item in planned],
         "completed": completed,
         "failed": failed,

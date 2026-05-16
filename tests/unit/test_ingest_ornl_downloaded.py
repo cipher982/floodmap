@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import zipfile
 
 from tools.hand.ingest_ornl_downloaded import (
+    archive_readiness,
     converted_hucs,
+    filter_ready_archives,
     plan_downloaded_ingest,
     preferred_archives,
 )
@@ -33,6 +36,29 @@ def test_preferred_archives_keeps_largest_duplicate() -> None:
 
     assert archives["031601"].path == "/b/031601.zip"
     assert list(archives) == ["031601"]
+
+
+def test_archive_readiness_checks_expected_ornl_members(tmp_path) -> None:
+    good_zip = tmp_path / "031601.zip"
+    with zipfile.ZipFile(good_zip, "w") as archive:
+        archive.writestr("031601/031601hand.tif", b"hand")
+        archive.writestr("031601/031601.tif", b"elevation")
+    bad_zip = tmp_path / "031502.zip"
+    bad_zip.write_bytes(b"partial")
+
+    good = SourceZipEntry(
+        huc="031601", path=str(good_zip), bytes=good_zip.stat().st_size, valid_name=True
+    )
+    bad = SourceZipEntry(
+        huc="031502", path=str(bad_zip), bytes=bad_zip.stat().st_size, valid_name=True
+    )
+
+    assert archive_readiness(good) is None
+    assert "zip" in archive_readiness(bad).lower()
+
+    ready, not_ready = filter_ready_archives({"031601": good, "031502": bad})
+    assert list(ready) == ["031601"]
+    assert not_ready[0]["huc"] == "031502"
 
 
 def test_converted_hucs_reads_per_huc_manifest_names(tmp_path) -> None:
