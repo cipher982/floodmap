@@ -62,7 +62,7 @@ def test_city_page_structured_data_matches_visible_city_content(monkeypatch):
     breadcrumb = graph_node(payload, "BreadcrumbList")
 
     assert webpage["url"] == "https://drose.io/floodmap/fl/tampa"
-    assert webpage["name"].startswith("Tampa Flood Map")
+    assert webpage["name"].startswith("Tampa Flood Toy")
     assert webpage["about"]["@id"] == "https://drose.io/floodmap/fl/tampa#place"
     assert place["name"] == "Tampa, Florida"
     assert abs(place["geo"]["latitude"] - 27.9449854) < 0.0001
