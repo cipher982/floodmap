@@ -568,14 +568,14 @@ class FloodmapHandGpuLayer {
 
                 // Terrain-driven current strokes: the local HAND gradient sets the
                 // flow direction, then procedural dashes move downstream through it.
-                float laneA = smoothstep(0.70, 1.0, sin(crossCoord * 2.7 + waveNoise(v_world, 0.0) * 2.0) * 0.5 + 0.5);
-                float laneB = smoothstep(0.76, 1.0, sin(crossCoord * 5.1 + 1.9) * 0.5 + 0.5);
-                float dashA = smoothstep(0.42, 1.0, sin(flowCoord * 0.9 - u_time * (4.2 + gradientStrength * 5.2)) * 0.5 + 0.5);
-                float dashB = smoothstep(0.52, 1.0, sin(flowCoord * 2.35 - u_time * (7.0 + gradientStrength * 7.0)) * 0.5 + 0.5);
-                float sparkle = smoothstep(0.68, 1.0, hash21(floor(v_world * 8200.0 + current * u_time * 3.5)));
+                float laneA = smoothstep(0.50, 1.0, sin(crossCoord * 1.2 + flowCoord * 0.12 + waveNoise(v_world, 0.0) * 1.2) * 0.5 + 0.5);
+                float laneB = smoothstep(0.58, 1.0, sin(crossCoord * 2.2 - flowCoord * 0.08 + 1.9) * 0.5 + 0.5);
+                float dashA = smoothstep(0.34, 1.0, sin(flowCoord * 0.72 - u_time * (3.4 + gradientStrength * 4.2)) * 0.5 + 0.5);
+                float dashB = smoothstep(0.46, 1.0, sin(flowCoord * 1.45 - u_time * (5.6 + gradientStrength * 5.0)) * 0.5 + 0.5);
+                float sparkle = smoothstep(0.82, 1.0, hash21(floor(v_world * 5200.0 + current * u_time * 2.4)));
                 float ripple = smoothstep(0.42, 1.0, sin(crossCoord + u_time * 1.8) * 0.5 + 0.5);
                 float broken = smoothstep(-0.18, 0.82, waveNoise(v_world * 1.8 + current * 0.01, u_time * 0.35));
-                float currentLight = ((laneA * dashA * 1.05) + (laneB * dashB * 0.78) + sparkle * 0.2)
+                float currentLight = ((laneA * dashA * 0.92) + (laneB * dashB * 0.58) + sparkle * 0.05)
                     * slopeBoost
                     * (0.32 + 0.68 * ripple)
                     * (0.55 + 0.45 * broken);
