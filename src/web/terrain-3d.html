@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FloodMap 3D Terrain Toy</title>
+  <link rel="stylesheet" href="static/vendor/maplibre-gl-4.7.1.css?v=__FLOODMAP_ASSET_VERSION__">
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #05070d;
+      color: #e5edf8;
+    }
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: #05070d;
+    }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      height: 100vh;
+    }
+    .stage {
+      position: relative;
+      min-width: 0;
+      overflow: hidden;
+      background: #020617;
+    }
+    #terrain-3d-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+    }
+    #terrain-3d-canvas:active {
+      cursor: grabbing;
+    }
+    aside {
+      border-left: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(12, 16, 25, 0.96);
+      padding: 22px;
+      overflow: auto;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 24px;
+      line-height: 1.05;
+    }
+    p {
+      margin: 0 0 18px;
+      color: #aeb9c9;
+      line-height: 1.45;
+    }
+    label {
+      display: block;
+      margin: 16px 0 8px;
+      color: #d8e2f1;
+      font-weight: 800;
+      font-size: 13px;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    .readout {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 8px;
+      color: #93c5fd;
+      font-weight: 800;
+    }
+    .badge {
+      position: absolute;
+      left: 18px;
+      top: 18px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 11px;
+      border-radius: 999px;
+      background: rgba(2, 6, 23, 0.78);
+      color: #dbeafe;
+      font-size: 13px;
+      font-weight: 800;
+      pointer-events: none;
+    }
+    .status {
+      margin-top: 18px;
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(37, 99, 235, 0.14);
+      color: #bfdbfe;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    pre {
+      margin: 12px 0 0;
+      max-height: 38vh;
+      overflow: auto;
+      border-radius: 8px;
+      padding: 12px;
+      background: #020617;
+      color: #d1fae5;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    #basemap-capture {
+      position: fixed;
+      left: -1200px;
+      top: 0;
+      width: 1024px;
+      height: 1024px;
+      opacity: 0;
+      pointer-events: none;
+    }
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1fr) auto;
+      }
+      aside {
+        border-left: 0;
+        border-top: 1px solid rgba(148, 163, 184, 0.24);
+        max-height: 40vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="stage">
+      <canvas id="terrain-3d-canvas" aria-label="3D flood terrain canvas"></canvas>
+      <div class="badge">3D Terrain Toy · real map texture + HAND water</div>
+      <div id="basemap-capture"></div>
+    </section>
+    <aside>
+      <h1>FloodMap 3D</h1>
+      <p>Real map tiles draped over real elevation, with HAND-seeded animated water on top.</p>
+
+      <label for="water-level">Water</label>
+      <input id="water-level" type="range" min="0" max="1000" step="1" value="20">
+      <div class="readout">
+        <span id="water-readout">20m</span>
+        <span>HAND seed</span>
+      </div>
+
+      <label for="exaggeration">Terrain lift</label>
+      <input id="exaggeration" type="range" min="0.4" max="5" step="0.1" value="2.2">
+      <div class="readout">
+        <span id="exaggeration-readout">2.2x</span>
+        <span>relief</span>
+      </div>
+
+      <div id="terrain-status" class="status">Booting 3D scene</div>
+      <pre id="terrain-stats">{}</pre>
+    </aside>
+  </main>
+  <script>
+    (() => {
+      window.FLOODMAP_ASSET_VERSION = "__FLOODMAP_ASSET_VERSION__";
+      window.FLOODMAP_PUBLIC_BASE_PATH = (function determineFloodmapPublicBasePath() {
+        const pathname = window.location.pathname || "/";
+        return pathname === "/floodmap" || pathname.startsWith("/floodmap/") ? "/floodmap" : "";
+      })();
+      function normalizeFloodmapPath(path) {
+        if (typeof path !== "string" || !path.trim()) {
+          throw new TypeError("Floodmap path helpers require a non-empty string path.");
+        }
+        return path.startsWith("/") ? path : `/${path}`;
+      }
+      window.floodmapPublicUrl = (path) => `${window.FLOODMAP_PUBLIC_BASE_PATH}${normalizeFloodmapPath(path)}`;
+      window.floodmapApiUrl = (path) => {
+        const normalizedPath = normalizeFloodmapPath(path);
+        const apiPath = normalizedPath === "/api" || normalizedPath.startsWith("/api/")
+          ? normalizedPath
+          : `/api${normalizedPath}`;
+        return window.floodmapPublicUrl(apiPath);
+      };
+      window.floodmapAssetUrl = (path) => {
+        const normalizedPath = normalizeFloodmapPath(path);
+        const staticPath = normalizedPath === "/static" || normalizedPath.startsWith("/static/")
+          ? normalizedPath
+          : `/static${normalizedPath}`;
+        const url = new URL(window.floodmapPublicUrl(staticPath), window.location.origin);
+        if (window.FLOODMAP_ASSET_VERSION) url.searchParams.set("v", window.FLOODMAP_ASSET_VERSION);
+        return url.toString();
+      };
+      window.FLOODMAP_TILE_VERSION = window.FLOODMAP_ASSET_VERSION;
+    })();
+  </script>
+  <script src="static/vendor/maplibre-gl-csp-4.7.1.js?v=__FLOODMAP_ASSET_VERSION__"></script>
+  <script>
+    maplibregl.setWorkerUrl(window.floodmapAssetUrl("/vendor/maplibre-gl-csp-worker-4.7.1.js"));
+  </script>
+  <script src="static/js/elevation-renderer.js?v=__FLOODMAP_ASSET_VERSION__"></script>
+  <script src="static/js/terrain-3d-math.js?v=__FLOODMAP_ASSET_VERSION__"></script>
+  <script src="static/js/terrain-3d-shaders.js?v=__FLOODMAP_ASSET_VERSION__"></script>
+  <script src="static/js/terrain-3d-basemap.js?v=__FLOODMAP_ASSET_VERSION__"></script>
+  <script src="static/js/terrain-3d-mesh.js?v=__FLOODMAP_ASSET_VERSION__"></script>
+  <script src="static/js/terrain-3d.js?v=__FLOODMAP_ASSET_VERSION__"></script>
+</body>
+</html>

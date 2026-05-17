@@ -22,6 +22,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 FAVICON_SVG_PATH = WEB_DIR / "favicon.svg"
 DRAINAGE_LAB_HTML_PATH = WEB_DIR / "drainage-lab.html"
 SIM_LAB_HTML_PATH = WEB_DIR / "sim-lab.html"
+TERRAIN_3D_HTML_PATH = WEB_DIR / "terrain-3d.html"
 DRAINAGE_LAB_TILES_DIR = WEB_DIR / "prototypes" / "birmingham-drainage" / "tiles"
 DRAINAGE_LAB_SAMPLE_ZOOM = 12
 MAPLIBRE_CSP_JS_GZ_PATH = WEB_DIR / "vendor" / "maplibre-gl-csp-4.7.1.js.gz"
@@ -172,6 +173,7 @@ from location_catalog import get_city_page, get_zip_page
 # Import middleware
 from middleware.rate_limiter import RateLimitMiddleware
 from page_renderer import (
+    ASSET_VERSION,
     build_city_page_html,
     build_home_page_html,
     build_zip_page_html,
@@ -257,6 +259,9 @@ if IS_DEVELOPMENT or ENABLE_DIAGNOSTICS:
 app.include_router(
     tiles_v1.router, tags=["tiles-v1"]
 )  # New v1 routes (already prefixed)
+app.include_router(
+    tiles_v1.router, prefix="/floodmap", tags=["tiles-v1"]
+)  # Local/dev support for public /floodmap subpath routes.
 
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 app.include_router(places.router, prefix="/api", tags=["places"])
@@ -412,6 +417,24 @@ async def serve_sim_lab():
 )
 async def serve_sim_lab_floodmap():
     return await serve_sim_lab()
+
+
+@app.api_route("/terrain-3d", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def serve_terrain_3d():
+    """Serve the real-map 3D terrain flood toy review page."""
+    if not TERRAIN_3D_HTML_PATH.exists():
+        raise HTTPException(status_code=404, detail="3D terrain page not found")
+    content = TERRAIN_3D_HTML_PATH.read_text(encoding="utf-8").replace(
+        "__FLOODMAP_ASSET_VERSION__", ASSET_VERSION
+    )
+    return HTMLResponse(content=content)
+
+
+@app.api_route(
+    "/floodmap/terrain-3d", methods=["GET", "HEAD"], response_class=HTMLResponse
+)
+async def serve_terrain_3d_floodmap():
+    return await serve_terrain_3d()
 
 
 @app.get("/favicon.svg", include_in_schema=False)
