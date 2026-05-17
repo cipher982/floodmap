@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from playwright.async_api import async_playwright
 
@@ -48,6 +48,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--backend", default="auto", choices=("auto", "webgpu", "cpu"))
     parser.add_argument("--headed", action="store_true")
     parser.add_argument("--timeout-ms", type=int, default=45000)
+    parser.add_argument(
+        "--no-trust-insecure-origin",
+        action="store_true",
+        help=(
+            "Do not pass Chromium's secure-origin override. WebGPU normally requires "
+            "HTTPS or localhost, so remote HTTP review URLs need the override for QA."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -69,6 +77,27 @@ def scenario_url(
         }
     )
     return f"{base_url.rstrip('/')}/sim-lab?{query}"
+
+
+def browser_launch_args(base_url: str, trust_insecure_origin: bool) -> list[str]:
+    launch_args = [
+        "--disable-dev-shm-usage",
+        "--enable-unsafe-webgpu",
+        "--enable-webgpu",
+        "--ignore-gpu-blocklist",
+    ]
+    parsed = urlparse(base_url)
+    origin = (
+        f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else ""
+    )
+    if (
+        trust_insecure_origin
+        and parsed.scheme == "http"
+        and parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+        and origin
+    ):
+        launch_args.append(f"--unsafely-treat-insecure-origin-as-secure={origin}")
+    return launch_args
 
 
 async def run_scenario(
@@ -149,12 +178,7 @@ async def main() -> int:
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(
             headless=not args.headed,
-            args=[
-                "--disable-dev-shm-usage",
-                "--enable-unsafe-webgpu",
-                "--enable-webgpu",
-                "--ignore-gpu-blocklist",
-            ],
+            args=browser_launch_args(args.base_url, not args.no_trust_insecure_origin),
         )
         results = [
             await run_scenario(browser, args, out_dir, scenario)

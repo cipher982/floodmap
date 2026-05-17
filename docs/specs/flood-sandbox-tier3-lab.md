@@ -47,6 +47,18 @@ docs/qa/flood-sandbox/runs/<timestamp>/
 Generated runs are ignored by git. Commit code, specs, and tests; do not commit
 large run artifacts.
 
+## Review URLs
+
+WebGPU requires HTTPS or a localhost origin in normal browsers. Direct Cube
+review URLs such as `http://100.125.140.78:18000/sim-lab` can serve the lab but
+may fall back to CPU. For WebGPU review against Cube, tunnel the Cube app to a
+local port and open the localhost URL:
+
+```bash
+ssh -N -L 127.0.0.1:18081:100.125.140.78:18000 cube
+uv run python tools/sim_lab/run_sim_lab_qa.py --base-url http://127.0.0.1:18081 --backend webgpu
+```
+
 ## Next Milestone
 
 Feed the lab from one real Birmingham terrain patch. DEM drives the physical
