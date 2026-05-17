@@ -215,10 +215,17 @@ def cache_path_for_region(
 def arcgis_generalization_params(
     *, target_epsg: int, simplify_m: float
 ) -> dict[str, Any]:
-    import rasterio
+    try:
+        import rasterio
 
-    crs = rasterio.crs.CRS.from_epsg(target_epsg)
-    if crs.is_geographic:
+        is_geographic = bool(rasterio.crs.CRS.from_epsg(target_epsg).is_geographic)
+    except ImportError:
+        # EPSG geographic coordinate systems are conventionally in the 4000s.
+        # This keeps the request-parameter helper testable without the optional
+        # rasterio/GDAL processing stack installed in lightweight CI.
+        is_geographic = 4000 <= target_epsg < 5000
+
+    if is_geographic:
         return {
             "max_allowable_offset": simplify_m / 111_320.0,
             "offset_units": "degrees",

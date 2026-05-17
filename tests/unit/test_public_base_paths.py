@@ -12,6 +12,7 @@ def load_main_module(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "development")
 
     sys.modules.pop("main", None)
+    sys.modules.pop("config", None)
     return importlib.import_module("main")
 
 
