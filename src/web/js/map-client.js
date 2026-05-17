@@ -2357,24 +2357,47 @@ class FloodMapClient {
     }
 
     async findUserLocation() {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-
-                    this.map.setCenter([lng, lat]);
-                    this.map.setZoom(this.map.getMaxZoom());
-                    this.assessLocationRisk(lat, lng);
-                },
-                (error) => {
-                    console.warn('Geolocation error:', error);
-                    alert('Could not get your location. Please click on the map instead.');
-                }
+        if (!window.isSecureContext) {
+            this.updateLocationError(
+                'Browser location requires HTTPS. Use search or click the map for this review server.'
             );
-        } else {
-            alert('Geolocation is not supported by this browser.');
+            return;
         }
+
+        if (!navigator.geolocation) {
+            this.updateLocationError(
+                'Browser location is not supported here. Use search or click the map instead.'
+            );
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+
+                this.map.setCenter([lng, lat]);
+                this.map.setZoom(this.map.getMaxZoom());
+                this.assessLocationRisk(lat, lng);
+            },
+            (error) => {
+                console.warn('Geolocation error:', error);
+                this.updateLocationError(
+                    'Could not get your browser location. Use search or click the map instead.'
+                );
+            }
+        );
+    }
+
+    updateLocationError(message) {
+        const riskDetails = document.getElementById('risk-details');
+        if (!riskDetails) return;
+        riskDetails.innerHTML = `
+            <div class="risk-summary risk-unknown">
+                <strong>Location unavailable</strong>
+            </div>
+            <p>${this.escapeHtml(message)}</p>
+        `;
     }
 
     async assessLocationRisk(lat, lng, lngLat = null) {
