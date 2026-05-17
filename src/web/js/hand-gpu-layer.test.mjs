@@ -70,7 +70,7 @@ test("HAND GPU nodata debug state is reflected in stats", () => {
   const layer = new FloodmapHandGpuLayer({ client: null, renderer: null });
 
   assert.equal(layer.getStats().showNoData, false);
-  assert.equal(layer.getStats().visualModel, "terrain-flow-streaks-v2");
+  assert.equal(layer.getStats().visualModel, "terrain-flow-depth-v3");
   assert.equal(layer.setShowNoData(true), true);
   assert.equal(layer.getStats().showNoData, true);
   assert.equal(layer.setShowNoData(true), false);

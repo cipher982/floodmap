@@ -16,10 +16,16 @@ The finished product promise is:
   per-city rendering hacks.
 - Flood Toy mode uses real terrain/HAND data where coverage exists and gives a
   clear fallback when coverage is missing.
+- HAND/slider coverage is not the final water boundary. It is an initial
+  condition or pressure field for the toy. The physics layer may spill beyond
+  the selected HAND mask when the local terrain, water surface, and bounded
+  solver rules make that visually plausible.
 - Slider input updates water while dragging and does not re-render tiles for
   every slider position on the GPU path.
 - Water looks fun: animated edges, current streaks, depth color, and visible
-  motion that follows real terrain gradients.
+  motion that follows real terrain gradients. The finished version should feel
+  like water is moving through a terrain surface, not like a blue overlay is
+  fading in and out.
 - The experience remains honest: it is an exploratory visual toy, not a
   forecast, FEMA map, insurance product, or emergency-planning model.
 - The map stays readable at low, medium, and extreme water levels.
@@ -45,4 +51,6 @@ Automated QA must prove the product without a human reviewer:
 
 The current real-map layer is a GPU-rendered 2D flood toy. The next major leap
 is a bounded 3D/WebGPU terrain sandbox over the current map view, using the
-same real terrain/HAND sources as initial conditions.
+same real terrain/HAND sources as initial conditions. That engine should let
+water propagate past the initial HAND threshold within the active viewport
+instead of treating the threshold polygon as a hard mask.

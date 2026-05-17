@@ -267,6 +267,11 @@ async def run_product_qa(args: argparse.Namespace, out_dir: Path) -> ProductQaRe
         )
         panned_path = screenshots_dir / "real-map-panned.png"
         await capture_map_screenshot(page, panned_path)
+        animation_a_path = screenshots_dir / "real-map-animation-a.png"
+        animation_b_path = screenshots_dir / "real-map-animation-b.png"
+        await capture_map_screenshot(page, animation_a_path)
+        await page.wait_for_timeout(700)
+        await capture_map_screenshot(page, animation_b_path)
 
         share_url = await page.evaluate("() => window.floodMap.buildShareUrl()")
         share_page = await browser.new_page(
@@ -320,6 +325,7 @@ async def run_product_qa(args: argparse.Namespace, out_dir: Path) -> ProductQaRe
     visual_metrics = {
         "low_to_mid": low_to_mid,
         "mid_to_high": mid_to_high,
+        "animation": image_change_metrics(animation_a_path, animation_b_path),
         "high_richness": visual_richness_metrics(water_screenshots["high"]),
         "share_state": share_state,
     }
@@ -339,8 +345,8 @@ async def run_product_qa(args: argparse.Namespace, out_dir: Path) -> ProductQaRe
         failures.append("HAND metadata has no regions")
     if not stats_after.get("active"):
         failures.append("HAND GPU layer inactive")
-    if stats_after.get("visualModel") != "terrain-flow-streaks-v2":
-        failures.append("terrain-flow-streak visual model not active")
+    if stats_after.get("visualModel") != "terrain-flow-depth-v3":
+        failures.append("terrain-flow-depth visual model not active")
     if stats_after.get("tileTextureCount", 0) <= 0:
         failures.append("no real HAND tile textures loaded")
     if stats_after.get("textureUploads", 0) <= 0:
@@ -353,6 +359,8 @@ async def run_product_qa(args: argparse.Namespace, out_dir: Path) -> ProductQaRe
         failures.append("mid-to-high slider change is not visually meaningful")
     if visual_metrics["high_richness"]["unique_sample_colors"] < 256:
         failures.append("high-water map is too visually flat")
+    if visual_metrics["animation"]["changed_pixel_ratio"] < 0.002:
+        failures.append("water animation is not visually measurable")
     if share_state.get("view") != "hand":
         failures.append("share URL did not preserve Flood Toy mode")
     if abs(float(share_state.get("water", -999)) - WATER_LEVELS["high"]) > 0.2:
@@ -366,6 +374,8 @@ async def run_product_qa(args: argparse.Namespace, out_dir: Path) -> ProductQaRe
             "mid": str(water_screenshots["mid"]),
             "high": str(water_screenshots["high"]),
             "panned": str(panned_path),
+            "animation_a": str(animation_a_path),
+            "animation_b": str(animation_b_path),
         },
         stats_before=stats_before,
         stats_after=stats_after,
@@ -412,8 +422,11 @@ def write_markdown(path: Path, summary: dict) -> None:
         f"- Mid-water screenshot: `{Path(summary['screenshots']['mid']).name}`",
         f"- High-water screenshot: `{Path(summary['screenshots']['high']).name}`",
         f"- Panned screenshot: `{Path(summary['screenshots']['panned']).name}`",
+        f"- Animation A screenshot: `{Path(summary['screenshots']['animation_a']).name}`",
+        f"- Animation B screenshot: `{Path(summary['screenshots']['animation_b']).name}`",
         f"- Low-to-mid changed pixels: `{summary['visual_metrics']['low_to_mid']['changed_pixel_ratio']}`",
         f"- Mid-to-high changed pixels: `{summary['visual_metrics']['mid_to_high']['changed_pixel_ratio']}`",
+        f"- Animation changed pixels: `{summary['visual_metrics']['animation']['changed_pixel_ratio']}`",
         f"- High-water sample colors: `{summary['visual_metrics']['high_richness']['unique_sample_colors']}`",
         "",
     ]

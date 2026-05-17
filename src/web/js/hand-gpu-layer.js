@@ -45,7 +45,7 @@ class FloodmapHandGpuLayer {
             drawCalls: 0,
             renderCount: 0,
             lastRenderMs: 0,
-            visualModel: 'terrain-flow-streaks-v2'
+            visualModel: 'terrain-flow-depth-v3'
         };
     }
 
@@ -519,14 +519,14 @@ class FloodmapHandGpuLayer {
             }
 
             vec4 waterRamp(float depthT, float shimmer) {
-                vec4 shallow = vec4(80.0 / 255.0, 190.0 / 255.0, 240.0 / 255.0, 0.45);
-                vec4 mid = vec4(22.0 / 255.0, 124.0 / 255.0, 215.0 / 255.0, 0.64);
-                vec4 deep = vec4(4.0 / 255.0, 48.0 / 255.0, 128.0 / 255.0, 0.82);
+                vec4 shallow = vec4(92.0 / 255.0, 220.0 / 255.0, 248.0 / 255.0, 0.46);
+                vec4 mid = vec4(22.0 / 255.0, 126.0 / 255.0, 224.0 / 255.0, 0.66);
+                vec4 deep = vec4(2.0 / 255.0, 36.0 / 255.0, 118.0 / 255.0, 0.88);
                 vec4 color = depthT < 0.55
                     ? mixStop(shallow, mid, depthT / 0.55)
                     : mixStop(mid, deep, (depthT - 0.55) / 0.45);
-                color.rgb += shimmer * vec3(0.055, 0.095, 0.11);
-                color.a = clamp(color.a + shimmer * 0.06, 0.32, 0.88);
+                color.rgb += shimmer * vec3(0.065, 0.11, 0.13);
+                color.a = clamp(color.a + shimmer * 0.06, 0.34, 0.92);
                 return color;
             }
 
@@ -555,39 +555,54 @@ class FloodmapHandGpuLayer {
                     : normalize(vec2(0.62, 0.78));
 
                 float thresholdDm = max(1.0, float(u_thresholdDm));
-                float thresholdM = max(0.1, float(u_thresholdDm) * 0.1);
+                float thresholdM = max(0.1, thresholdDm * 0.1);
                 float apparentDepthM = max(0.0, (thresholdDm - rawDm) * 0.1);
-                float depthT = 1.0 - exp(-apparentDepthM / max(0.8, thresholdM * 0.08));
+                float relativeHand = clamp(rawDm / thresholdDm, 0.0, 1.0);
+                float fillDepth = 1.0 - relativeHand;
+                float physicalDepth = 1.0 - exp(-apparentDepthM / max(0.8, thresholdM * 0.10));
+                float depthT = clamp(max(fillDepth, physicalDepth * 0.82), 0.0, 1.0);
                 float shimmer = waveNoise(v_world, u_time);
                 vec4 water = waterRamp(clamp(depthT, 0.0, 1.0), shimmer);
+
+                float channelCore = 1.0 - smoothstep(0.0, clamp(thresholdDm * 0.035, 8.0, 420.0), rawDm);
+                float terraceBand = smoothstep(0.12, 0.62, relativeHand) * (1.0 - smoothstep(0.62, 1.0, relativeHand));
+                float sunShade = dot(normalize(gradient + vec2(0.001)), normalize(vec2(-0.62, -0.78))) * 0.5 + 0.5;
+                float relief = mix(0.82, 1.22, sunShade) + gradientStrength * 0.22;
+                water.rgb *= relief;
+                water.rgb = mix(water.rgb, vec3(0.0, 0.12, 0.34), channelCore * 0.48);
+                water.rgb = mix(water.rgb, vec3(0.24, 0.76, 0.92), terraceBand * 0.18);
 
                 float flowCoord = dot(v_world * vec2(15000.0, 9800.0), current);
                 vec2 crossDir = vec2(-current.y, current.x);
                 float crossCoord = dot(v_world * vec2(9800.0, 15000.0), crossDir);
-                float slopeBoost = mix(0.42, 1.0, gradientStrength);
+                float slopeBoost = mix(0.52, 1.0, gradientStrength);
 
                 // Terrain-driven current strokes: the local HAND gradient sets the
                 // flow direction, then procedural dashes move downstream through it.
-                float laneA = smoothstep(0.50, 1.0, sin(crossCoord * 1.2 + flowCoord * 0.12 + waveNoise(v_world, 0.0) * 1.2) * 0.5 + 0.5);
-                float laneB = smoothstep(0.58, 1.0, sin(crossCoord * 2.2 - flowCoord * 0.08 + 1.9) * 0.5 + 0.5);
-                float dashA = smoothstep(0.34, 1.0, sin(flowCoord * 0.72 - u_time * (3.4 + gradientStrength * 4.2)) * 0.5 + 0.5);
-                float dashB = smoothstep(0.46, 1.0, sin(flowCoord * 1.45 - u_time * (5.6 + gradientStrength * 5.0)) * 0.5 + 0.5);
-                float sparkle = smoothstep(0.82, 1.0, hash21(floor(v_world * 5200.0 + current * u_time * 2.4)));
-                float ripple = smoothstep(0.42, 1.0, sin(crossCoord + u_time * 1.8) * 0.5 + 0.5);
-                float broken = smoothstep(-0.18, 0.82, waveNoise(v_world * 1.8 + current * 0.01, u_time * 0.35));
-                float currentLight = ((laneA * dashA * 0.92) + (laneB * dashB * 0.58) + sparkle * 0.05)
+                float laneA = smoothstep(0.34, 0.86, sin(crossCoord * 1.15 + flowCoord * 0.16 + waveNoise(v_world, 0.0) * 1.6) * 0.5 + 0.5);
+                float laneB = smoothstep(0.45, 0.92, sin(crossCoord * 2.4 - flowCoord * 0.11 + 1.9) * 0.5 + 0.5);
+                float laneC = smoothstep(0.55, 0.96, sin(crossCoord * 4.8 + flowCoord * 0.05 - 0.6) * 0.5 + 0.5);
+                float dashA = smoothstep(0.18, 0.92, sin(flowCoord * 0.78 - u_time * (5.4 + gradientStrength * 6.2)) * 0.5 + 0.5);
+                float dashB = smoothstep(0.26, 0.96, sin(flowCoord * 1.66 - u_time * (8.0 + gradientStrength * 7.5)) * 0.5 + 0.5);
+                float sparkle = smoothstep(0.90, 1.0, hash21(floor(v_world * 7200.0 + current * u_time * 3.6)));
+                float ripple = smoothstep(0.25, 0.92, sin(crossCoord * 1.35 + u_time * 2.6) * 0.5 + 0.5);
+                float broken = smoothstep(-0.34, 0.70, waveNoise(v_world * 2.2 + current * 0.015, u_time * 0.42));
+                float currentLight = ((laneA * dashA * 1.15) + (laneB * dashB * 0.78) + (laneC * dashA * 0.34) + sparkle * 0.04)
                     * slopeBoost
                     * (0.32 + 0.68 * ripple)
-                    * (0.55 + 0.45 * broken);
+                    * (0.55 + 0.45 * broken)
+                    * (0.46 + 0.54 * channelCore + 0.18 * terraceBand);
                 vec3 currentColor = vec3(0.72, 0.97, 1.0);
-                water.rgb = mix(water.rgb, currentColor, clamp(currentLight * (0.55 + depthT * 0.42), 0.0, 0.86));
-                water.a = clamp(water.a + currentLight * 0.24, 0.34, 0.94);
+                water.rgb = mix(water.rgb, currentColor, clamp(currentLight * (0.62 + depthT * 0.46), 0.0, 0.92));
+                water.a = clamp(water.a + currentLight * 0.30 + channelCore * 0.08, 0.36, 0.96);
 
                 float foamWidthDm = clamp(6.0 + thresholdDm * 0.012, 5.0, 120.0);
                 float foamBand = 1.0 - smoothstep(0.0, foamWidthDm, abs(thresholdDm - rawDm));
                 float foamPulse = 0.5 + 0.5 * sin(u_time * 5.2 + v_world.x * 6200.0 - v_world.y * 4100.0);
-                vec4 foam = vec4(0.88, 0.98, 1.0, 0.72 + foamPulse * 0.14);
-                fragColor = mix(water, foam, clamp(foamBand * (0.75 + foamPulse * 0.25), 0.0, 1.0));
+                float foamNoise = 0.62 + 0.38 * waveNoise(v_world * 3.0 + current * 0.02, u_time * 0.55);
+                vec4 foam = vec4(0.90, 0.985, 1.0, 0.78 + foamPulse * 0.16);
+                water.rgb += vec3(0.0, 0.025, 0.055) * (1.0 - relativeHand) * (0.4 + currentLight);
+                fragColor = mix(water, foam, clamp(foamBand * foamNoise * (0.82 + foamPulse * 0.28), 0.0, 1.0));
             }
         `);
 
