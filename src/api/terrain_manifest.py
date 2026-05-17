@@ -63,8 +63,9 @@ def hand_route_context_from_manifest(
             "hand": {
                 "enabled": enabled and hand_layer is not None,
                 "datasetVersion": manifest.dataset_version,
-                "label": "Drainage",
+                "label": "Flood Toy",
                 "coverageLabel": coverage_label,
             }
-        }
+        },
+        "handGpu": True,
     }

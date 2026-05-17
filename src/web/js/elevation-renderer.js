@@ -65,17 +65,15 @@ class ElevationRenderer {
         // In flood mode, treat NODATA as water (not "flooded land").
         this.WATER_RGBA = [70, 130, 180, 220];
 
-        // HAND visualization mapping:
-        // Color encodes height above local drainage within the selected slider
-        // threshold. The threshold clips visibility; it does not create a flat
-        // "inside" color. This keeps high thresholds readable as terrain.
+        // HAND fallback visualization:
+        // Static blue water keyed by apparent depth. The GPU path adds animated
+        // shimmer and foam, but this keeps unsupported browsers in the same
+        // flood-toy visual language.
         this.HAND_VIZ_ASINH_SCALE_M = 1.5;
         this.HAND_VIZ_STOPS = [
-            { t: 0.0, color: [18, 97, 160, 220] },    // drainage floor
-            { t: 0.18, color: [45, 165, 205, 205] },  // low terrace
-            { t: 0.38, color: [98, 190, 170, 175] },  // valley floor
-            { t: 0.65, color: [190, 204, 132, 125] }, // upper valley
-            { t: 1.0, color: [205, 170, 110, 70] }    // selected edge
+            { t: 0.0, color: [80, 190, 240, 115] },   // shallow water
+            { t: 0.55, color: [22, 124, 215, 165] },  // rising water
+            { t: 1.0, color: [4, 48, 128, 215] }      // deep water
         ];
         this.HAND_NODATA_RGBA = [189, 0, 255, 107];
 
@@ -558,11 +556,9 @@ class ElevationRenderer {
             return this.colors.TRANSPARENT;
         }
 
-        const visibleThreshold = Math.max(0.1, threshold);
-        const scale = this.HAND_VIZ_ASINH_SCALE_M;
-        const compressed = Math.asinh(Math.max(0, heightAboveDrainageM) / scale)
-            / Math.asinh(visibleThreshold / scale);
-        const t = Math.min(1, Math.max(0, compressed));
+        const apparentDepthM = Math.max(0, threshold - heightAboveDrainageM);
+        const depthScale = Math.max(0.8, threshold * 0.08);
+        const t = Math.min(1, Math.max(0, 1 - Math.exp(-apparentDepthM / depthScale)));
         for (let i = 0; i < this.HAND_VIZ_STOPS.length - 1; i++) {
             const a = this.HAND_VIZ_STOPS[i];
             const b = this.HAND_VIZ_STOPS[i + 1];

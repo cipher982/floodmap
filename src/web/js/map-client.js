@@ -79,11 +79,11 @@ class FloodMapClient {
                 { level: 1.0, label: '2100 Baseline (+1m)' }
             ],
             hand: [
-                { level: 0.5, label: '0.5m above drainage' },
-                { level: 1.0, label: '1m above drainage' },
-                { level: 2.0, label: '2m above drainage' },
-                { level: 5.0, label: '5m above drainage' },
-                { level: 10.0, label: '10m above drainage' }
+                { level: 0.5, label: 'Puddle' },
+                { level: 3.0, label: 'Street Flood' },
+                { level: 10.0, label: 'Neighborhood' },
+                { level: 75.0, label: 'City Flood' },
+                { level: 1000.0, label: 'Apocalypse' }
             ]
         };
 
@@ -1090,9 +1090,7 @@ class FloodMapClient {
                 const oldWaterLevel = this.currentWaterLevel;
                 this.currentWaterLevel = this.sliderToWaterLevel(sliderValue);
 
-                waterLevelDisplay.textContent = this.viewMode === 'hand'
-                    ? `${this.currentWaterLevel}m above drainage`
-                    : `${this.currentWaterLevel}m`;
+                this.syncWaterLevelReadout(waterLevelDisplay, waterLevelVibe);
                 this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
                 this.updateActivePresetChip();
 
@@ -1193,7 +1191,7 @@ class FloodMapClient {
         const mode = this.getLevelControlMode();
         if (label) {
             label.textContent = mode === 'hand'
-                ? 'Show Land Within:'
+                ? 'Raise the water:'
                 : 'Water Level:';
         }
 
@@ -1221,15 +1219,27 @@ class FloodMapClient {
             waterLevelSlider.value = String(this.waterLevelToSlider(this.currentWaterLevel));
         }
         if (waterLevelDisplay) {
-            waterLevelDisplay.textContent = this.viewMode === 'hand'
-                ? `${this.currentWaterLevel}m above drainage`
-                : `${this.currentWaterLevel}m`;
-        }
-        if (waterLevelVibe) {
+            this.syncWaterLevelReadout(waterLevelDisplay, waterLevelVibe);
+        } else if (waterLevelVibe) {
             this.updateWaterLevelVibe(this.currentWaterLevel, waterLevelVibe);
         }
 
         this.updateActivePresetChip();
+    }
+
+    syncWaterLevelReadout(displayElement, vibeElement) {
+        if (!displayElement) return;
+        if (this.viewMode === 'hand') {
+            displayElement.textContent = this.floodToyLabel(this.currentWaterLevel);
+            if (vibeElement) {
+                vibeElement.textContent = `${this.currentWaterLevel}m`;
+                vibeElement.className = this.floodToyVibeClass(this.currentWaterLevel);
+            }
+            return;
+        }
+
+        displayElement.textContent = `${this.currentWaterLevel}m`;
+        if (vibeElement) this.updateWaterLevelVibe(this.currentWaterLevel, vibeElement);
     }
 
     updateActivePresetChip() {
@@ -1246,9 +1256,15 @@ class FloodMapClient {
         const floodLegend = document.getElementById('flood-legend');
         const elevationLegend = document.getElementById('elevation-legend');
         const handLegend = document.getElementById('hand-legend');
+        const riskPanelTitle = document.querySelector('#risk-panel h3');
 
         this.applyModeZoomCap();
         this.updateModelNote(this.modelNoteState);
+        if (riskPanelTitle) {
+            riskPanelTitle.textContent = this.viewMode === 'hand'
+                ? 'Flood Check'
+                : 'Risk Assessment';
+        }
 
         if (this.viewMode === 'elevation') {
             waterLevelControls.style.opacity = '0';
@@ -2316,22 +2332,8 @@ class FloodMapClient {
         let vibeClass = '';
 
         if (this.viewMode === 'hand') {
-            if (waterLevel <= 0.5) {
-                vibeText = 'Creek edge';
-                vibeClass = 'vibe-normal';
-            } else if (waterLevel <= 2) {
-                vibeText = 'Low ground';
-                vibeClass = 'vibe-concerning';
-            } else if (waterLevel <= 5) {
-                vibeText = 'Wide corridor';
-                vibeClass = 'vibe-dangerous';
-            } else {
-                vibeText = 'Broad basin';
-                vibeClass = 'vibe-extreme';
-            }
-
-            vibeElement.textContent = vibeText;
-            vibeElement.className = vibeClass;
+            vibeElement.textContent = `${waterLevel}m`;
+            vibeElement.className = this.floodToyVibeClass(waterLevel);
             return;
         }
 
@@ -2354,6 +2356,23 @@ class FloodMapClient {
 
         vibeElement.textContent = vibeText;
         vibeElement.className = vibeClass;
+    }
+
+    floodToyLabel(waterLevel) {
+        if (waterLevel <= 0.5) return 'Puddle';
+        if (waterLevel <= 3) return 'Street Flood';
+        if (waterLevel <= 10) return 'Neighborhood';
+        if (waterLevel <= 75) return 'City Flood';
+        if (waterLevel <= 1000) return 'Mega Flood';
+        return 'Apocalypse';
+    }
+
+    floodToyVibeClass(waterLevel) {
+        if (waterLevel <= 0.5) return 'vibe-normal';
+        if (waterLevel <= 3) return 'vibe-concerning';
+        if (waterLevel <= 10) return 'vibe-dangerous';
+        if (waterLevel <= 1000) return 'vibe-extreme';
+        return 'vibe-apocalyptic';
     }
 
     async findUserLocation() {
@@ -2584,22 +2603,22 @@ class FloodMapClient {
 
         const riskClass = `risk-${data.status || 'unknown'}`;
         const heightLine = Number.isFinite(data.height_m)
-            ? `<p><strong>Ground height above nearby mapped drainage:</strong> ${data.height_m.toFixed(2)}m (${this.escapeHtml(data.height_ft ?? '')} ft)</p>`
+            ? `<p><strong>This spot starts flooding around:</strong> ${data.height_m.toFixed(2)}m (${this.escapeHtml(data.height_ft ?? '')} ft)</p>`
             : '';
         const thresholdLine = Number.isFinite(data.threshold_m)
-            ? `<p><strong>Map is showing land within:</strong> ${data.threshold_m.toFixed(1)}m above drainage</p>`
+            ? `<p><strong>Current flood toy level:</strong> ${this.escapeHtml(this.floodToyLabel(data.threshold_m))} (${data.threshold_m.toFixed(1)}m)</p>`
             : '';
         const sourceLine = data.sample_source
             ? `<p><strong>Source:</strong> ${this.escapeHtml(data.region || 'terrain')} • ${this.escapeHtml(data.sample_source)}</p>`
             : '';
         const message = data.message
             || (data.status === 'low'
-                ? 'This point is higher than the selected local-drainage range.'
-                : 'This point is inside the selected local-drainage range.');
+                ? 'This spot is still dry at the current slider level.'
+                : 'This spot is underwater in the current visual scenario.');
 
         riskDetails.innerHTML = `
             <div class="risk-summary ${riskClass}">
-                <strong>Drainage: ${this.escapeHtml(String(data.status || 'unknown')).toUpperCase()}</strong>
+                <strong>${this.escapeHtml(String(data.status === 'low' ? 'DRY' : data.status || 'unknown')).toUpperCase()}</strong>
             </div>
             <p><strong>Location:</strong> ${data.latitude.toFixed(4)}°, ${data.longitude.toFixed(4)}°</p>
             ${heightLine}
@@ -2617,12 +2636,11 @@ class FloodMapClient {
 
         // Only show in Flood Risk mode (it explains the slider’s meaning).
         if (this.viewMode === 'hand') {
-            const config = this.getTerrainLayerConfig('hand');
             el.style.display = 'block';
-            el.className = 'model-note model-note--warning';
+            el.className = 'model-note model-note--ok';
             el.innerHTML = `
-                <div class="model-note__title">Height above drainage</div>
-                <div class="model-note__body">Slider highlights land up to the selected ground height above nearby mapped creeks, bayous, and drainage channels. Uncolored land can be higher than the selected height or outside current HAND coverage. Coverage: ${this.escapeHtml(config.coverageLabel || 'prototype region')}.</div>
+                <div class="model-note__title">Visual flood toy</div>
+                <div class="model-note__body">Drag the slider and watch low ground fill in. Powered by terrain/drainage data; not a forecast.</div>
             `;
             return;
         }
@@ -2749,13 +2767,13 @@ class FloodMapClient {
         this.clearMapMarkers();
 
         const height = Number.isFinite(data.height_m)
-            ? `${data.height_m.toFixed(2)}m above drainage`
-            : 'Unknown height above drainage';
+            ? `Floods around ${data.height_m.toFixed(2)}m`
+            : 'Unknown flood toy height';
         new maplibregl.Marker({ color: '#2563eb' })
             .setLngLat([lng, lat])
             .setPopup(new maplibregl.Popup().setHTML(`
                 <div>
-                    <strong>Drainage: ${this.escapeHtml(data.status || 'unknown')}</strong><br>
+                    <strong>Flood Toy: ${this.escapeHtml(data.status === 'low' ? 'dry' : data.status || 'unknown')}</strong><br>
                     ${this.escapeHtml(height)}
                 </div>
             `))

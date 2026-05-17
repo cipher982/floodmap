@@ -240,24 +240,24 @@
                 </div>
             </div>
 
-            <!-- HAND drainage mode legend -->
+            <!-- Water toy mode legend -->
             <div id="hand-legend" class="legend-content" style="display: none;">
-                <h4>Height Above Drainage</h4>
+                <h4>Water Toy</h4>
                 <div class="legend-item">
-                    <span class="legend-color" style="background-color: rgba(18, 97, 160, 0.86);"></span>
-                    <span>Nearest drainage</span>
+                    <span class="legend-color" style="background-color: rgba(80, 190, 240, 0.45);"></span>
+                    <span>Shallow water</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color" style="background-color: rgba(45, 165, 205, 0.8);"></span>
-                    <span>Low terrace</span>
+                    <span class="legend-color" style="background-color: rgba(22, 124, 215, 0.64);"></span>
+                    <span>Rising water</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color" style="background-color: rgba(98, 190, 170, 0.68);"></span>
-                    <span>Valley floor</span>
+                    <span class="legend-color" style="background-color: rgba(4, 48, 128, 0.82);"></span>
+                    <span>Deep water</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color" style="background-color: rgba(205, 170, 110, 0.38);"></span>
-                    <span>Selected upper edge</span>
+                    <span class="legend-color" style="background-color: rgba(225, 250, 255, 0.86);"></span>
+                    <span>Flood edge</span>
                 </div>
             </div>
         </div>
@@ -282,7 +282,7 @@
                     <label for="share-view-button">Share This View:</label>
                     <div class="share-actions">
                         <button id="share-view-button" type="button">Copy Share Link</button>
-                        <p class="control-hint">Includes the map center, zoom, view mode, and water level.</p>
+                        <p class="control-hint">Includes the map center, zoom, mode, and slider level.</p>
                     </div>
                     <div id="share-view-status" class="share-status" aria-live="polite"></div>
                 </div>
@@ -292,9 +292,9 @@
                         <input type="radio" name="view-mode" id="elevation-mode" value="elevation" checked>
                         <label for="elevation-mode">Elevation</label>
                         <input type="radio" name="view-mode" id="flood-mode" value="flood">
-                        <label for="flood-mode">Flood Risk</label>
+                        <label for="flood-mode">Sea Level</label>
                         <input type="radio" name="view-mode" id="hand-mode" value="hand">
-                        <label for="hand-mode">Drainage</label>
+                        <label for="hand-mode">Flood Toy</label>
                     </div>
                 </div>
                 <div class="control-group" id="water-level-controls">
@@ -319,7 +319,7 @@
             <div id="risk-panel">
                 <h3>Risk Assessment</h3>
                 <div id="risk-details">
-                    <p>Click on the map or use "Find My Location" to see flood risk assessment.</p>
+                    <p>Click on the map or use "Find My Location" for a quick flood check.</p>
                 </div>
             </div>
 

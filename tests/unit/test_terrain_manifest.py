@@ -76,4 +76,6 @@ def test_hand_route_context_reports_manifest_dataset_and_coverage(tmp_path):
 
     assert context["terrainLayers"]["hand"]["enabled"] is True
     assert context["terrainLayers"]["hand"]["datasetVersion"] == "hand-test"
+    assert context["terrainLayers"]["hand"]["label"] == "Flood Toy"
     assert context["terrainLayers"]["hand"]["coverageLabel"] == "Birmingham Prototype"
+    assert context["handGpu"] is True

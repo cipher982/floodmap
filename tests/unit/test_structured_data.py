@@ -43,9 +43,10 @@ def test_homepage_structured_data_matches_rendered_content(monkeypatch):
     assert website["url"] == "https://drose.io/floodmap"
     assert website["name"] == "FloodMap USA"
     assert webpage["url"] == "https://drose.io/floodmap"
-    assert webpage["name"].startswith("FloodMap USA | Search ZIP Codes")
+    assert webpage["name"].startswith("FloodMap USA | Search Any City")
     assert (
-        "Interactive U.S. flood map for any city or ZIP code." in webpage["description"]
+        "A real-world flood toy for any U.S. city or ZIP code."
+        in webpage["description"]
     )
     assert '"@type":"BreadcrumbList"' not in html
 

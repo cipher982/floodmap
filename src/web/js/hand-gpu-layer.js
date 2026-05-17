@@ -29,6 +29,9 @@ class FloodmapHandGpuLayer {
         this.thresholdDm = 10;
         this.showNoData = false;
         this.sequence = 0;
+        this.animationFrame = null;
+        this.animationStartedAt = 0;
+        this.forceNextRender = true;
 
         this.attribs = {};
         this.uniforms = {};
@@ -49,7 +52,13 @@ class FloodmapHandGpuLayer {
         const nextActive = !!active;
         if (this.active === nextActive) return false;
         this.active = nextActive;
-        if (this.map && this.active) this.map.triggerRepaint();
+        if (this.active) {
+            this.forceNextRender = true;
+            this.startAnimation();
+            if (this.map) this.map.triggerRepaint();
+        } else {
+            this.stopAnimation();
+        }
         return true;
     }
 
@@ -58,6 +67,7 @@ class FloodmapHandGpuLayer {
         const nextThresholdDm = Math.round(threshold * 10);
         if (this.thresholdDm === nextThresholdDm) return false;
         this.thresholdDm = nextThresholdDm;
+        this.forceNextRender = true;
         if (this.map && this.active) this.map.triggerRepaint();
         return true;
     }
@@ -66,6 +76,7 @@ class FloodmapHandGpuLayer {
         const nextShowNoData = !!showNoData;
         if (this.showNoData === nextShowNoData) return false;
         this.showNoData = nextShowNoData;
+        this.forceNextRender = true;
         if (this.map && this.active) this.map.triggerRepaint();
         return true;
     }
@@ -107,6 +118,7 @@ class FloodmapHandGpuLayer {
             this.uniforms.uTileBounds = gl.getUniformLocation(this.program, 'u_tileBounds');
             this.uniforms.uThresholdDm = gl.getUniformLocation(this.program, 'u_thresholdDm');
             this.uniforms.uShowNoData = gl.getUniformLocation(this.program, 'u_showNoData');
+            this.uniforms.uTime = gl.getUniformLocation(this.program, 'u_time');
             this.configureGeometry(gl);
             this.supported = true;
             this.fallbackReason = '';
@@ -135,6 +147,7 @@ class FloodmapHandGpuLayer {
             if (this.program) this.gl.deleteProgram(this.program);
         }
         this.tiles.clear();
+        this.stopAnimation();
         this.map = null;
         this.gl = null;
         this.program = null;
@@ -241,6 +254,7 @@ class FloodmapHandGpuLayer {
         tile.texture = texture;
         tile.data = null;
         tile.state = 'ready';
+        this.forceNextRender = true;
         this.stats.textureUploads += 1;
         this.stats.tileTextureCount += 1;
 
@@ -273,6 +287,7 @@ class FloodmapHandGpuLayer {
         if (this.tiles.size === 0) return;
 
         const start = performance.now();
+        this.forceNextRender = false;
         const state = this.saveState(gl);
 
         gl.useProgram(this.program);
@@ -280,6 +295,7 @@ class FloodmapHandGpuLayer {
         gl.uniformMatrix4fv(this.uniforms.uMatrix, false, matrix);
         gl.uniform1ui(this.uniforms.uThresholdDm, this.thresholdDm);
         gl.uniform1i(this.uniforms.uShowNoData, this.showNoData ? 1 : 0);
+        gl.uniform1f(this.uniforms.uTime, this.currentTimeSeconds());
         gl.uniform1i(this.uniforms.uHand, 0);
 
         gl.enable(gl.BLEND);
@@ -302,6 +318,36 @@ class FloodmapHandGpuLayer {
         this.stats.drawCalls += drawCalls;
         this.stats.renderCount += 1;
         this.stats.lastRenderMs = performance.now() - start;
+    }
+
+    startAnimation() {
+        if (this.animationFrame || !this.map) return;
+        this.animationStartedAt = performance.now();
+        const tick = () => {
+            this.animationFrame = null;
+            if (!this.active || !this.map) return;
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+                this.animationFrame = window.setTimeout(tick, 250);
+                return;
+            }
+            this.map.triggerRepaint();
+            this.animationFrame = window.setTimeout(tick, 50);
+        };
+        this.animationFrame = window.setTimeout(tick, 0);
+    }
+
+    stopAnimation() {
+        if (!this.animationFrame) return;
+        if (typeof window !== 'undefined') {
+            window.cancelAnimationFrame(this.animationFrame);
+            window.clearTimeout(this.animationFrame);
+        }
+        this.animationFrame = null;
+    }
+
+    currentTimeSeconds() {
+        if (!this.animationStartedAt) return 0;
+        return (performance.now() - this.animationStartedAt) / 1000;
     }
 
     syncVisibleSourceTiles() {
@@ -429,9 +475,11 @@ class FloodmapHandGpuLayer {
             uniform mat4 u_matrix;
             uniform vec4 u_tileBounds;
             out vec2 v_uv;
+            out vec2 v_world;
             void main() {
                 v_uv = a_uv;
                 vec2 mercator = mix(u_tileBounds.xy, u_tileBounds.zw, a_pos);
+                v_world = mercator;
                 gl_Position = u_matrix * vec4(mercator, 0.0, 1.0);
             }
         `);
@@ -442,27 +490,32 @@ class FloodmapHandGpuLayer {
             uniform highp usampler2D u_hand;
             uniform uint u_thresholdDm;
             uniform bool u_showNoData;
+            uniform float u_time;
             in vec2 v_uv;
+            in vec2 v_world;
             out vec4 fragColor;
 
-            float handAsinh(float value) {
-                return log(value + sqrt(value * value + 1.0));
+            float waveNoise(vec2 world, float time) {
+                float a = sin(world.x * 980.0 + world.y * 520.0 + time * 1.4);
+                float b = sin(world.x * 2110.0 - world.y * 1360.0 - time * 1.9);
+                float c = sin((world.x + world.y) * 4200.0 + time * 2.8);
+                return (a + 0.55 * b + 0.28 * c) / 1.83;
             }
 
             vec4 mixStop(vec4 a, vec4 b, float t) {
                 return mix(a, b, clamp(t, 0.0, 1.0));
             }
 
-            vec4 ramp(float t) {
-                vec4 c0 = vec4(18.0 / 255.0, 97.0 / 255.0, 160.0 / 255.0, 220.0 / 255.0);
-                vec4 c1 = vec4(45.0 / 255.0, 165.0 / 255.0, 205.0 / 255.0, 205.0 / 255.0);
-                vec4 c2 = vec4(98.0 / 255.0, 190.0 / 255.0, 170.0 / 255.0, 175.0 / 255.0);
-                vec4 c3 = vec4(190.0 / 255.0, 204.0 / 255.0, 132.0 / 255.0, 125.0 / 255.0);
-                vec4 c4 = vec4(205.0 / 255.0, 170.0 / 255.0, 110.0 / 255.0, 70.0 / 255.0);
-                if (t <= 0.18) return mixStop(c0, c1, t / 0.18);
-                if (t <= 0.38) return mixStop(c1, c2, (t - 0.18) / 0.20);
-                if (t <= 0.65) return mixStop(c2, c3, (t - 0.38) / 0.27);
-                return mixStop(c3, c4, (t - 0.65) / 0.35);
+            vec4 waterRamp(float depthT, float shimmer) {
+                vec4 shallow = vec4(80.0 / 255.0, 190.0 / 255.0, 240.0 / 255.0, 0.45);
+                vec4 mid = vec4(22.0 / 255.0, 124.0 / 255.0, 215.0 / 255.0, 0.64);
+                vec4 deep = vec4(4.0 / 255.0, 48.0 / 255.0, 128.0 / 255.0, 0.82);
+                vec4 color = depthT < 0.55
+                    ? mixStop(shallow, mid, depthT / 0.55)
+                    : mixStop(mid, deep, (depthT - 0.55) / 0.45);
+                color.rgb += shimmer * vec3(0.055, 0.095, 0.11);
+                color.a = clamp(color.a + shimmer * 0.06, 0.32, 0.88);
+                return color;
             }
 
             void main() {
@@ -477,12 +530,19 @@ class FloodmapHandGpuLayer {
 
                 if (raw > u_thresholdDm) discard;
 
-                float heightDm = float(raw);
-                float heightM = heightDm * 0.1;
+                float rawDm = float(raw);
+                float thresholdDm = max(1.0, float(u_thresholdDm));
                 float thresholdM = max(0.1, float(u_thresholdDm) * 0.1);
-                float compressed = handAsinh(max(0.0, heightM) / 1.5)
-                    / max(0.000001, handAsinh(thresholdM / 1.5));
-                fragColor = ramp(clamp(compressed, 0.0, 1.0));
+                float apparentDepthM = max(0.0, (thresholdDm - rawDm) * 0.1);
+                float depthT = 1.0 - exp(-apparentDepthM / max(0.8, thresholdM * 0.08));
+                float shimmer = waveNoise(v_world, u_time);
+                vec4 water = waterRamp(clamp(depthT, 0.0, 1.0), shimmer);
+
+                float foamWidthDm = clamp(6.0 + thresholdDm * 0.012, 5.0, 120.0);
+                float foamBand = 1.0 - smoothstep(0.0, foamWidthDm, abs(thresholdDm - rawDm));
+                float foamPulse = 0.5 + 0.5 * sin(u_time * 5.2 + v_world.x * 6200.0 - v_world.y * 4100.0);
+                vec4 foam = vec4(0.88, 0.98, 1.0, 0.72 + foamPulse * 0.14);
+                fragColor = mix(water, foam, clamp(foamBand * (0.75 + foamPulse * 0.25), 0.0, 1.0));
             }
         `);
 

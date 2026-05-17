@@ -31,7 +31,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260517a"
+ASSET_VERSION: Final[str] = "20260517e"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )
@@ -267,26 +267,26 @@ def _render_page(context: PageRenderContext) -> str:
 
 def build_home_page_html() -> str:
     context = PageRenderContext(
-        title="FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk",
-        description="Interactive U.S. flood map for any city or ZIP code. Search a location, compare elevation, test storm surge or sea-level scenarios, and share the exact map view.",
+        title="FloodMap USA | Search Any City and Watch the Water Rise",
+        description="A real-world flood toy for any U.S. city or ZIP code. Search a place, raise the water, watch low ground fill in, and share the exact map view.",
         canonical_url="https://drose.io/floodmap",
         h1="FloodMap USA",
-        header_kicker="Search any U.S. city or ZIP code, compare elevation, and preview flood or sea-level scenarios in a shareable map view.",
+        header_kicker="Search any U.S. city or ZIP code, raise the water, and watch low ground fill in on a shareable real-world map.",
         breadcrumb_nav_html="",
-        about_title="Flood map for any U.S. city or ZIP",
-        about_intro="FloodMap USA is a fast screening tool for exploring elevation and water exposure across the United States. Search a location, inspect terrain, switch to flood mode, and share the exact scenario you are looking at.",
+        about_title="Real-world flood toy for any U.S. city or ZIP",
+        about_intro="FloodMap USA is a fast map toy for exploring what low ground looks like as the water rises. Search a place, drag the slider, and share the scenario you are looking at.",
         feature_items=(
             "Jump straight to a city or ZIP code instead of manually panning.",
-            "Compare elevation and flood-risk views at the same location.",
-            "Test scenarios from high tide through extreme storm surge.",
+            "Switch into Flood Toy mode and watch low areas fill with animated water.",
+            "Push the slider from puddles to ridiculous apocalypse levels.",
             "Copy a permalink with the current center, zoom, view mode, and water level.",
         ),
         how_to_items=(
             "Search for a U.S. city or ZIP code, or pan to the area you care about.",
-            "Use elevation mode for terrain context, then switch to flood mode to test a scenario.",
-            "Click a specific point on the map for a location-based risk sample and share the permalink if you want the same view later.",
+            "Switch to Flood Toy mode and drag Raise the water.",
+            "Click a specific point on the map for a quick flood check and share the permalink if you want the same view later.",
         ),
-        model_summary="This is a rapid relative-visibility tool built from elevation and map data. It is useful for exploration, communication, and scenario comparison, but it is not a substitute for parcel surveys, FEMA products, insurance decisions, or emergency instructions.",
+        model_summary="This is a visual scenario toy powered by elevation and drainage-relative terrain data. It is for exploration and sharing, not a forecast, FEMA product, insurance decision, or emergency instruction.",
         route_context={
             "pageType": "home",
             "canonicalPath": "/floodmap",
@@ -294,8 +294,8 @@ def build_home_page_html() -> str:
             **_terrain_route_context(),
         },
         structured_data_html=_build_home_structured_data(
-            "FloodMap USA | Search ZIP Codes, Cities, Elevation & Flood Risk",
-            "Interactive U.S. flood map for any city or ZIP code. Search a location, compare elevation, test storm surge or sea-level scenarios, and share the exact map view.",
+            "FloodMap USA | Search Any City and Watch the Water Rise",
+            "A real-world flood toy for any U.S. city or ZIP code. Search a place, raise the water, watch low ground fill in, and share the exact map view.",
         ),
         nearby_links_html=_build_location_link_section(
             title="Popular city flood maps",
