@@ -71,6 +71,7 @@ instance/
 # Sphinx documentation
 docs/_build/
 docs/qa/flood-sandbox/runs/
+docs/qa/flood-product/runs/
 
 # PyBuilder
 .pybuilder/

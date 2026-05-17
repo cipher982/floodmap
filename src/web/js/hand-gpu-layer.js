@@ -44,7 +44,8 @@ class FloodmapHandGpuLayer {
             tileLoadErrors: 0,
             drawCalls: 0,
             renderCount: 0,
-            lastRenderMs: 0
+            lastRenderMs: 0,
+            visualModel: 'terrain-gradient-current-v1'
         };
     }
 
@@ -495,6 +496,11 @@ class FloodmapHandGpuLayer {
             in vec2 v_world;
             out vec4 fragColor;
 
+            float terrainDm(vec2 uv, float fallback) {
+                uint raw = texture(u_hand, clamp(uv, vec2(0.0), vec2(1.0))).r;
+                return raw == 65535u ? fallback : float(raw);
+            }
+
             float waveNoise(vec2 world, float time) {
                 float a = sin(world.x * 980.0 + world.y * 520.0 + time * 1.4);
                 float b = sin(world.x * 2110.0 - world.y * 1360.0 - time * 1.9);
@@ -531,12 +537,31 @@ class FloodmapHandGpuLayer {
                 if (raw > u_thresholdDm) discard;
 
                 float rawDm = float(raw);
+                vec2 texel = vec2(1.0 / 256.0);
+                float left = terrainDm(v_uv - vec2(texel.x, 0.0), rawDm);
+                float right = terrainDm(v_uv + vec2(texel.x, 0.0), rawDm);
+                float up = terrainDm(v_uv - vec2(0.0, texel.y), rawDm);
+                float down = terrainDm(v_uv + vec2(0.0, texel.y), rawDm);
+                vec2 gradient = vec2(right - left, down - up);
+                float gradientStrength = clamp(length(gradient) / 12.0, 0.0, 1.0);
+                vec2 current = length(gradient) > 0.001
+                    ? normalize(-gradient)
+                    : normalize(vec2(0.62, 0.78));
+
                 float thresholdDm = max(1.0, float(u_thresholdDm));
                 float thresholdM = max(0.1, float(u_thresholdDm) * 0.1);
                 float apparentDepthM = max(0.0, (thresholdDm - rawDm) * 0.1);
                 float depthT = 1.0 - exp(-apparentDepthM / max(0.8, thresholdM * 0.08));
                 float shimmer = waveNoise(v_world, u_time);
                 vec4 water = waterRamp(clamp(depthT, 0.0, 1.0), shimmer);
+
+                float flowCoord = dot(v_world * vec2(14000.0, 9000.0), current);
+                float crossCoord = dot(v_world * vec2(9000.0, 14000.0), vec2(-current.y, current.x));
+                float currentBand = smoothstep(0.72, 1.0, sin(flowCoord - u_time * (2.0 + gradientStrength * 4.0)) * 0.5 + 0.5);
+                float ripple = smoothstep(0.55, 1.0, sin(crossCoord + u_time * 1.6) * 0.5 + 0.5);
+                float currentLight = currentBand * mix(0.18, 0.72, gradientStrength) * (0.45 + 0.55 * ripple);
+                water.rgb += currentLight * vec3(0.13, 0.25, 0.30);
+                water.a = clamp(water.a + currentLight * 0.12, 0.34, 0.9);
 
                 float foamWidthDm = clamp(6.0 + thresholdDm * 0.012, 5.0, 120.0);
                 float foamBand = 1.0 - smoothstep(0.0, foamWidthDm, abs(thresholdDm - rawDm));

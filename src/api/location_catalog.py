@@ -82,6 +82,18 @@ HOME_DEFAULT_VIEW_STATE: Final[dict[str, float | str]] = {
 
 _CITY_PAGES: Final[tuple[CityPage, ...]] = (
     CityPage(
+        state_slug="al",
+        city_slug="birmingham",
+        city_name="Birmingham",
+        state_name="Alabama",
+        focus_areas="Village Creek, Valley Creek, Five Mile Creek, and low ground around the Red Mountain valley",
+        local_context="Birmingham is the inland demo for Flood Toy mode: hills, creek corridors, rail valleys, and downtown low ground make the water movement visible without needing a coastline.",
+        default_view_state=FloodmapViewState(
+            lat=33.5186, lng=-86.8104, zoom=11.3, view="hand", water=10.0
+        ),
+        related_city_keys=(("tx", "houston"), ("la", "new-orleans"), ("fl", "tampa")),
+    ),
+    CityPage(
         state_slug="fl",
         city_slug="tampa",
         city_name="Tampa",
