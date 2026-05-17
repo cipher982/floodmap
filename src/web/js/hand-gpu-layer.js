@@ -557,11 +557,17 @@ class FloodmapHandGpuLayer {
 
                 float flowCoord = dot(v_world * vec2(14000.0, 9000.0), current);
                 float crossCoord = dot(v_world * vec2(9000.0, 14000.0), vec2(-current.y, current.x));
-                float currentBand = smoothstep(0.72, 1.0, sin(flowCoord - u_time * (2.0 + gradientStrength * 4.0)) * 0.5 + 0.5);
-                float ripple = smoothstep(0.55, 1.0, sin(crossCoord + u_time * 1.6) * 0.5 + 0.5);
-                float currentLight = currentBand * mix(0.18, 0.72, gradientStrength) * (0.45 + 0.55 * ripple);
-                water.rgb += currentLight * vec3(0.13, 0.25, 0.30);
-                water.a = clamp(water.a + currentLight * 0.12, 0.34, 0.9);
+                float currentBand = smoothstep(0.68, 1.0, sin(flowCoord - u_time * (2.0 + gradientStrength * 4.0)) * 0.5 + 0.5);
+                float fastBand = smoothstep(0.74, 1.0, sin(flowCoord * 2.4 - u_time * (4.5 + gradientStrength * 5.5)) * 0.5 + 0.5);
+                float ripple = smoothstep(0.45, 1.0, sin(crossCoord + u_time * 1.6) * 0.5 + 0.5);
+                float broken = smoothstep(-0.2, 0.8, waveNoise(v_world * 1.8 + current * 0.01, u_time * 0.35));
+                float currentLight = (currentBand * 0.58 + fastBand * 0.42)
+                    * mix(0.24, 0.9, gradientStrength)
+                    * (0.35 + 0.65 * ripple)
+                    * (0.55 + 0.45 * broken);
+                vec3 currentColor = vec3(0.58, 0.93, 1.0);
+                water.rgb = mix(water.rgb, currentColor, clamp(currentLight * (0.38 + depthT * 0.32), 0.0, 0.62));
+                water.a = clamp(water.a + currentLight * 0.18, 0.34, 0.92);
 
                 float foamWidthDm = clamp(6.0 + thresholdDm * 0.012, 5.0, 120.0);
                 float foamBand = 1.0 - smoothstep(0.0, foamWidthDm, abs(thresholdDm - rawDm));
