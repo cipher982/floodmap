@@ -11,9 +11,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
+from PIL import Image, ImageChops, ImageStat
 from playwright.async_api import async_playwright
 
-DEFAULT_PATH = "/?lat=33.5186&lng=-86.8104&zoom=11.3&view=hand&water=10&handGpu=1"
+DEFAULT_PATH = "/al/birmingham?handGpu=1"
+WATER_LEVELS = {
+    "low": 0.5,
+    "mid": 10.0,
+    "high": 1000.0,
+}
 
 
 @dataclass(frozen=True)
@@ -24,6 +30,7 @@ class ProductQaResult:
     stats_before: dict
     stats_after: dict
     metadata: dict
+    visual_metrics: dict
     console_errors: list[str]
     page_errors: list[str]
     failed_requests: list[str]
@@ -38,6 +45,7 @@ class ProductQaResult:
             "stats_before": self.stats_before,
             "stats_after": self.stats_after,
             "metadata": self.metadata,
+            "visual_metrics": self.visual_metrics,
             "console_errors": self.console_errors,
             "page_errors": self.page_errors,
             "failed_requests": self.failed_requests,
@@ -102,6 +110,74 @@ async def wait_for_product_ready(page, timeout_ms: int) -> None:
     )
 
 
+async def set_water_level(page, level: float, timeout_ms: int) -> None:
+    await page.evaluate(
+        """
+        (level) => {
+          const fm = window.floodMap;
+          if (!fm) throw new Error('window.floodMap is unavailable');
+          fm.currentWaterLevel = level;
+          const slider = document.getElementById('water-level');
+          if (slider && typeof fm.waterLevelToSlider === 'function') {
+            slider.value = String(fm.waterLevelToSlider(level));
+            slider.dispatchEvent(new Event('input', { bubbles: true }));
+          } else {
+            fm.syncWaterLevelControls?.();
+            fm.updateFloodLayer?.();
+            fm.schedulePermalinkUpdate?.();
+          }
+        }
+        """,
+        level,
+    )
+    await page.wait_for_function(
+        "(level) => Math.abs((window.floodMap?.currentWaterLevel || 0) - level) < 0.11",
+        level,
+        timeout=timeout_ms,
+    )
+    await page.wait_for_timeout(450)
+
+
+async def capture_map_screenshot(page, path: Path) -> None:
+    await page.locator("#map").screenshot(path=str(path))
+
+
+def image_change_metrics(a_path: Path, b_path: Path) -> dict[str, float]:
+    with (
+        Image.open(a_path).convert("RGB") as a_img,
+        Image.open(b_path).convert("RGB") as b_img,
+    ):
+        if a_img.size != b_img.size:
+            b_img = b_img.resize(a_img.size)
+        diff = ImageChops.difference(a_img, b_img)
+        stat = ImageStat.Stat(diff)
+        mean_abs = sum(stat.mean) / len(stat.mean)
+        changed = 0
+        total = diff.size[0] * diff.size[1]
+        for r, g, b in diff.getdata():
+            if max(r, g, b) >= 18:
+                changed += 1
+        return {
+            "mean_abs_rgb_delta": round(float(mean_abs), 3),
+            "changed_pixel_ratio": round(changed / total, 5),
+        }
+
+
+def visual_richness_metrics(path: Path) -> dict[str, float | int]:
+    with Image.open(path).convert("RGB") as img:
+        sample = img.resize((240, max(1, int(240 * img.height / img.width))))
+        colors = sample.getcolors(maxcolors=1_000_000) or []
+        blueish = 0
+        total = sample.size[0] * sample.size[1]
+        for count, (r, g, b) in colors:
+            if b > r + 20 and b >= g - 15:
+                blueish += count
+        return {
+            "unique_sample_colors": len(colors),
+            "blueish_pixel_ratio": round(blueish / total, 5),
+        }
+
+
 async def run_product_qa(args: argparse.Namespace, out_dir: Path) -> ProductQaResult:
     screenshots_dir = out_dir / "screenshots"
     screenshots_dir.mkdir(parents=True, exist_ok=True)
@@ -161,8 +237,13 @@ async def run_product_qa(args: argparse.Namespace, out_dir: Path) -> ProductQaRe
             }
             """
         )
-        initial_path = screenshots_dir / "real-map-initial.png"
-        await page.screenshot(path=str(initial_path), full_page=False)
+
+        water_screenshots: dict[str, Path] = {}
+        for label, level in WATER_LEVELS.items():
+            await set_water_level(page, level, args.timeout_ms)
+            shot_path = screenshots_dir / f"real-map-{label}-water.png"
+            await capture_map_screenshot(page, shot_path)
+            water_screenshots[label] = shot_path
 
         map_box = await page.locator("#map").bounding_box()
         if map_box:
@@ -185,8 +266,63 @@ async def run_product_qa(args: argparse.Namespace, out_dir: Path) -> ProductQaRe
             "() => window.floodMap.handGpuLayer.getStats()"
         )
         panned_path = screenshots_dir / "real-map-panned.png"
-        await page.screenshot(path=str(panned_path), full_page=False)
+        await capture_map_screenshot(page, panned_path)
+
+        share_url = await page.evaluate("() => window.floodMap.buildShareUrl()")
+        share_page = await browser.new_page(
+            viewport={"width": 1500, "height": 950}, device_scale_factor=1
+        )
+        share_page.on("pageerror", lambda error: page_errors.append(str(error)))
+        share_page.on(
+            "console",
+            lambda msg: (
+                console_errors.append(msg.text)
+                if msg.type == "error" and "Cross-Origin-Opener-Policy" not in msg.text
+                else None
+            ),
+        )
+        share_page.on(
+            "requestfailed",
+            lambda request: failed_requests.append(
+                f"{request.url} {request.failure.get('errorText') if request.failure else ''}"
+            ),
+        )
+        share_page.on(
+            "response",
+            lambda response: (
+                bad_responses.append(f"{response.status} {response.url}")
+                if response.status >= 400
+                else None
+            ),
+        )
+        await share_page.goto(
+            share_url, wait_until="domcontentloaded", timeout=args.timeout_ms
+        )
+        await wait_for_product_ready(share_page, args.timeout_ms)
+        share_state = await share_page.evaluate(
+            """
+            () => ({
+              view: window.floodMap.viewMode,
+              water: window.floodMap.currentWaterLevel,
+              stats: window.floodMap.handGpuLayer.getStats()
+            })
+            """
+        )
+        await share_page.close()
         await browser.close()
+
+    low_to_mid = image_change_metrics(
+        water_screenshots["low"], water_screenshots["mid"]
+    )
+    mid_to_high = image_change_metrics(
+        water_screenshots["mid"], water_screenshots["high"]
+    )
+    visual_metrics = {
+        "low_to_mid": low_to_mid,
+        "mid_to_high": mid_to_high,
+        "high_richness": visual_richness_metrics(water_screenshots["high"]),
+        "share_state": share_state,
+    }
 
     failures: list[str] = []
     if console_errors:
@@ -203,25 +339,38 @@ async def run_product_qa(args: argparse.Namespace, out_dir: Path) -> ProductQaRe
         failures.append("HAND metadata has no regions")
     if not stats_after.get("active"):
         failures.append("HAND GPU layer inactive")
-    if stats_after.get("visualModel") != "terrain-gradient-current-v1":
-        failures.append("terrain-current visual model not active")
+    if stats_after.get("visualModel") != "terrain-flow-streaks-v2":
+        failures.append("terrain-flow-streak visual model not active")
     if stats_after.get("tileTextureCount", 0) <= 0:
         failures.append("no real HAND tile textures loaded")
     if stats_after.get("textureUploads", 0) <= 0:
         failures.append("no HAND texture uploads")
     if stats_after.get("renderCount", 0) <= render_count_before:
         failures.append("animated layer did not repaint")
+    if low_to_mid["changed_pixel_ratio"] < 0.01:
+        failures.append("low-to-mid slider change is not visually meaningful")
+    if mid_to_high["changed_pixel_ratio"] < 0.01:
+        failures.append("mid-to-high slider change is not visually meaningful")
+    if visual_metrics["high_richness"]["unique_sample_colors"] < 256:
+        failures.append("high-water map is too visually flat")
+    if share_state.get("view") != "hand":
+        failures.append("share URL did not preserve Flood Toy mode")
+    if abs(float(share_state.get("water", -999)) - WATER_LEVELS["high"]) > 0.2:
+        failures.append("share URL did not preserve water level")
 
     return ProductQaResult(
         pass_=not failures,
         url=url,
         screenshots={
-            "initial": str(initial_path),
+            "low": str(water_screenshots["low"]),
+            "mid": str(water_screenshots["mid"]),
+            "high": str(water_screenshots["high"]),
             "panned": str(panned_path),
         },
         stats_before=stats_before,
         stats_after=stats_after,
         metadata=metadata,
+        visual_metrics=visual_metrics,
         console_errors=console_errors,
         page_errors=page_errors,
         failed_requests=failed_requests,
@@ -259,8 +408,13 @@ def write_markdown(path: Path, summary: dict) -> None:
         f"- Texture uploads: `{stats.get('textureUploads')}`",
         f"- Render count: `{stats.get('renderCount')}`",
         f"- Metadata regions: `{len(regions)}`",
-        f"- Initial screenshot: `{Path(summary['screenshots']['initial']).name}`",
+        f"- Low-water screenshot: `{Path(summary['screenshots']['low']).name}`",
+        f"- Mid-water screenshot: `{Path(summary['screenshots']['mid']).name}`",
+        f"- High-water screenshot: `{Path(summary['screenshots']['high']).name}`",
         f"- Panned screenshot: `{Path(summary['screenshots']['panned']).name}`",
+        f"- Low-to-mid changed pixels: `{summary['visual_metrics']['low_to_mid']['changed_pixel_ratio']}`",
+        f"- Mid-to-high changed pixels: `{summary['visual_metrics']['mid_to_high']['changed_pixel_ratio']}`",
+        f"- High-water sample colors: `{summary['visual_metrics']['high_richness']['unique_sample_colors']}`",
         "",
     ]
     if summary["failures"]:

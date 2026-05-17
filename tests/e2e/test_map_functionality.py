@@ -25,8 +25,8 @@ async def test_homepage_smoke(map_page: MapPage):
     assert await map_page.page.locator("#share-view-button").is_visible()
 
     state = await map_page.get_map_state()
-    assert state["view"] == "elevation"
-    assert state["zoom"] <= 11
+    assert state["view"] == "hand"
+    assert state["zoom"] <= 14
 
 
 @pytest.mark.asyncio
@@ -72,6 +72,7 @@ async def test_homepage_uses_local_maplibre_assets(map_page: MapPage):
 async def test_max_zoom_matches_precompressed_tile_limit(map_page: MapPage):
     await map_page.goto_homepage()
     await map_page.wait_for_app_ready()
+    await map_page.set_view_mode("elevation")
 
     max_zoom = await map_page.page.evaluate("() => window.floodMap.map.getMaxZoom()")
     assert max_zoom <= 11

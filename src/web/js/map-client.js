@@ -80,10 +80,10 @@ class FloodMapClient {
             ],
             hand: [
                 { level: 0.5, label: 'Puddle' },
-                { level: 3.0, label: 'Street Flood' },
-                { level: 10.0, label: 'Neighborhood' },
+                { level: 3.0, label: 'Creeks Rise' },
+                { level: 10.0, label: 'Streets Fill' },
                 { level: 75.0, label: 'City Flood' },
-                { level: 1000.0, label: 'Apocalypse' }
+                { level: 1000.0, label: 'Max Chaos' }
             ]
         };
 
@@ -2639,8 +2639,8 @@ class FloodMapClient {
             el.style.display = 'block';
             el.className = 'model-note model-note--ok';
             el.innerHTML = `
-                <div class="model-note__title">Visual flood toy</div>
-                <div class="model-note__body">Drag the slider and watch low ground fill in. Powered by terrain/drainage data; not a forecast.</div>
+                <div class="model-note__title">Animated flood toy</div>
+                <div class="model-note__body">Drag the slider and watch water fill low ground. The flow streaks follow real terrain gradients; this is not a forecast.</div>
             `;
             return;
         }

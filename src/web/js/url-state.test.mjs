@@ -77,7 +77,7 @@ test("HAND diagnostic water levels can exceed legacy 1000m ceiling", () => {
 
 test("stripFloodmapStateParams removes only permalink keys", () => {
   const stripped = stripFloodmapStateParams(
-    "https://drose.io/floodmap?debug=1&lat=27.95&lng=-82.46&zoom=8.00&view=elevation&water=1.0"
+    "https://drose.io/floodmap?debug=1&lat=33.51860&lng=-86.81040&zoom=11.30&view=hand&water=10.0"
   );
   const parsed = new URL(stripped);
 

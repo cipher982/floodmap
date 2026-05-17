@@ -12,11 +12,11 @@ const FLOODMAP_STATE_PARAM_KEYS = Object.freeze([
 ]);
 
 const FLOODMAP_DEFAULT_VIEW_STATE = Object.freeze({
-    lat: 27.95,
-    lng: -82.46,
-    zoom: 8,
-    view: 'elevation',
-    water: 1.0
+    lat: 33.5186,
+    lng: -86.8104,
+    zoom: 11.3,
+    view: 'hand',
+    water: 10.0
 });
 
 const FLOODMAP_MAX_LATITUDE = 85.051129;

@@ -31,7 +31,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260517g"
+ASSET_VERSION: Final[str] = "20260517h"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )
@@ -87,9 +87,9 @@ def _build_website_node() -> dict[str, object]:
         "url": "https://drose.io/floodmap",
         "name": "FloodMap USA",
         "description": (
-            "Interactive U.S. flood map for any city or ZIP code. Search a "
-            "location, compare elevation, test storm surge or sea-level "
-            "scenarios, and share the exact map view."
+            "Interactive U.S. flood toy for any city or ZIP code. Search a "
+            "location, raise the water, watch low ground fill in, and share "
+            "the exact map view."
         ),
         "inLanguage": "en-US",
     }
@@ -277,13 +277,13 @@ def build_home_page_html() -> str:
         about_intro="FloodMap USA is a fast map toy for exploring what low ground looks like as the water rises. Search a place, drag the slider, and share the scenario you are looking at.",
         feature_items=(
             "Jump straight to a city or ZIP code instead of manually panning.",
-            "Switch into Flood Toy mode and watch low areas fill with animated water.",
-            "Push the slider from puddles to ridiculous apocalypse levels.",
+            "Flood Toy mode starts with animated water over real terrain data.",
+            "Push the slider from puddles to ridiculous max-chaos levels.",
             "Copy a permalink with the current center, zoom, view mode, and water level.",
         ),
         how_to_items=(
             "Search for a U.S. city or ZIP code, or pan to the area you care about.",
-            "Switch to Flood Toy mode and drag Raise the water.",
+            "Drag Raise the water and watch the flow streaks move through low ground.",
             "Click a specific point on the map for a quick flood check and share the permalink if you want the same view later.",
         ),
         model_summary="This is a visual scenario toy powered by elevation and drainage-relative terrain data. It is for exploration and sharing, not a forecast, FEMA product, insurance decision, or emergency instruction.",
@@ -299,7 +299,7 @@ def build_home_page_html() -> str:
         ),
         nearby_links_html=_build_location_link_section(
             title="Popular city flood maps",
-            intro="Start with a city landing page if you want location-specific copy, metadata, and a map already centered on a major coastal or river metro.",
+            intro="Start with a city landing page if you want a map already centered on a place with interesting terrain.",
             city_pages=list_city_pages(),
         ),
     )
@@ -310,33 +310,33 @@ def build_city_page_html(city_page: CityPage) -> str:
     scenario_label = f"{city_page.default_view_state.water:.1f}m"
     focus = city_page.focus_areas
     full_name = city_page.full_name
-    title = f"{city_page.city_name} Flood Map | {city_page.state_name} Elevation & Water Scenarios | FloodMap USA"
-    description = f"Interactive flood map for {full_name}. Compare elevation, test a {scenario_label} water scenario, and share a city-centered view."
+    title = f"{city_page.city_name} Flood Toy | {city_page.state_name} Water Map | FloodMap USA"
+    description = f"Interactive flood toy for {full_name}. Raise the water, watch low ground fill in, and share a city-centered view."
     about_intro = (
-        f"Use this {full_name} flood map to inspect {focus}. "
+        f"Use this {full_name} flood toy to inspect {focus}. "
         f"The page opens directly on {city_page.city_name} instead of making you pan from the national view."
     )
     context = PageRenderContext(
         title=title,
         description=description,
         canonical_url=f"https://drose.io{city_page.canonical_path}",
-        h1=f"Flood map for {full_name}",
+        h1=f"Flood toy for {full_name}",
         header_kicker=(
-            f"Start on a {full_name} map view, compare elevation with flood mode, "
-            f"and use the default {scenario_label} scenario as a fast screening baseline."
+            f"Start on a {full_name} map view, raise the water, "
+            f"and use the default {scenario_label} setup as a fast visual baseline."
         ),
         breadcrumb_nav_html=_build_city_breadcrumb_html(city_page),
-        about_title=f"{city_page.city_name} flood map and elevation view",
+        about_title=f"{city_page.city_name} flood toy and water map",
         about_intro=about_intro,
         feature_items=(
             f"Open a {city_page.city_name}-centered map instead of manually panning across the U.S.",
-            f"Compare elevation and flood scenarios around {focus}.",
-            f"Start with a {scenario_label} flood setup, then adjust the slider for milder or more extreme water levels.",
+            f"Watch animated water fill low ground around {focus}.",
+            f"Start with a {scenario_label} setup, then adjust the slider for milder or more extreme water levels.",
             f"Copy a permalink for the exact {city_page.city_name} scenario you want to share.",
         ),
         how_to_items=(
             f"Start with the default {city_page.city_name} map view and pan toward the shoreline, river, or neighborhood you care about.",
-            "Use flood mode for scenario testing, or switch to elevation mode to inspect terrain and relative height differences.",
+            "Use Flood Toy mode for animated water, or switch to elevation mode to inspect terrain.",
             "Click a specific point on the map for a location-based risk sample, then copy the permalink if you want the same view later.",
         ),
         model_summary=(

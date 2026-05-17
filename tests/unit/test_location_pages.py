@@ -26,16 +26,13 @@ def test_city_page_renders_unique_metadata_and_route_context(monkeypatch):
     assert root_resp.text == subpath_resp.text
 
     html = root_resp.text
-    assert (
-        "<title>Tampa Flood Map | Florida Elevation &amp; Water Scenarios | FloodMap USA</title>"
-        in html
-    )
+    assert "<title>Tampa Flood Toy | Florida Water Map | FloodMap USA</title>" in html
     assert '<link rel="canonical" href="https://drose.io/floodmap/fl/tampa">' in html
     assert (
         '<meta property="og:url" content="https://drose.io/floodmap/fl/tampa">' in html
     )
-    assert "Flood map for Tampa, Florida" in html
-    assert "Use this Tampa, Florida flood map to inspect" in html
+    assert "Flood toy for Tampa, Florida" in html
+    assert "Use this Tampa, Florida flood toy to inspect" in html
     assert '"pageType":"city"' in html
     assert '"stateSlug":"fl"' in html
     assert '"citySlug":"tampa"' in html

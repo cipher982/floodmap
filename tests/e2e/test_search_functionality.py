@@ -57,8 +57,8 @@ async def test_location_search_moves_map_and_updates_status(map_page: MapPage):
     assert abs(state["lat"] - 27.95) < 0.02
     assert abs(state["lng"] - (-82.46)) < 0.02
     assert abs(state["zoom"] - 10.5) < 0.2
-    assert query["view"] == ["elevation"]
-    assert query["water"] == ["1.0"]
+    assert query["view"] == ["hand"]
+    assert query["water"] == ["10.0"]
     assert "lat" in query
     assert "lng" in query
     assert "zoom" in query

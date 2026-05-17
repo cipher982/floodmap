@@ -45,7 +45,7 @@ class FloodmapHandGpuLayer {
             drawCalls: 0,
             renderCount: 0,
             lastRenderMs: 0,
-            visualModel: 'terrain-gradient-current-v1'
+            visualModel: 'terrain-flow-streaks-v2'
         };
     }
 
@@ -508,6 +508,12 @@ class FloodmapHandGpuLayer {
                 return (a + 0.55 * b + 0.28 * c) / 1.83;
             }
 
+            float hash21(vec2 p) {
+                p = fract(p * vec2(123.34, 345.45));
+                p += dot(p, p + 34.345);
+                return fract(p.x * p.y);
+            }
+
             vec4 mixStop(vec4 a, vec4 b, float t) {
                 return mix(a, b, clamp(t, 0.0, 1.0));
             }
@@ -555,15 +561,23 @@ class FloodmapHandGpuLayer {
                 float shimmer = waveNoise(v_world, u_time);
                 vec4 water = waterRamp(clamp(depthT, 0.0, 1.0), shimmer);
 
-                float flowCoord = dot(v_world * vec2(14000.0, 9000.0), current);
-                float crossCoord = dot(v_world * vec2(9000.0, 14000.0), vec2(-current.y, current.x));
-                float currentBand = smoothstep(0.68, 1.0, sin(flowCoord - u_time * (2.0 + gradientStrength * 4.0)) * 0.5 + 0.5);
-                float fastBand = smoothstep(0.74, 1.0, sin(flowCoord * 2.4 - u_time * (4.5 + gradientStrength * 5.5)) * 0.5 + 0.5);
-                float ripple = smoothstep(0.45, 1.0, sin(crossCoord + u_time * 1.6) * 0.5 + 0.5);
-                float broken = smoothstep(-0.2, 0.8, waveNoise(v_world * 1.8 + current * 0.01, u_time * 0.35));
-                float currentLight = (currentBand * 0.58 + fastBand * 0.42)
-                    * mix(0.24, 0.9, gradientStrength)
-                    * (0.35 + 0.65 * ripple)
+                float flowCoord = dot(v_world * vec2(15000.0, 9800.0), current);
+                vec2 crossDir = vec2(-current.y, current.x);
+                float crossCoord = dot(v_world * vec2(9800.0, 15000.0), crossDir);
+                float slopeBoost = mix(0.18, 1.0, gradientStrength);
+
+                // Terrain-driven current strokes: the local HAND gradient sets the
+                // flow direction, then procedural dashes move downstream through it.
+                float laneA = smoothstep(0.86, 1.0, sin(crossCoord * 2.7 + waveNoise(v_world, 0.0) * 2.0) * 0.5 + 0.5);
+                float laneB = smoothstep(0.90, 1.0, sin(crossCoord * 5.1 + 1.9) * 0.5 + 0.5);
+                float dashA = smoothstep(0.58, 1.0, sin(flowCoord * 0.9 - u_time * (4.2 + gradientStrength * 5.2)) * 0.5 + 0.5);
+                float dashB = smoothstep(0.66, 1.0, sin(flowCoord * 2.35 - u_time * (7.0 + gradientStrength * 7.0)) * 0.5 + 0.5);
+                float sparkle = smoothstep(0.78, 1.0, hash21(floor(v_world * 8200.0 + current * u_time * 3.5)));
+                float ripple = smoothstep(0.42, 1.0, sin(crossCoord + u_time * 1.8) * 0.5 + 0.5);
+                float broken = smoothstep(-0.18, 0.82, waveNoise(v_world * 1.8 + current * 0.01, u_time * 0.35));
+                float currentLight = ((laneA * dashA * 0.72) + (laneB * dashB * 0.5) + sparkle * 0.14)
+                    * slopeBoost
+                    * (0.32 + 0.68 * ripple)
                     * (0.55 + 0.45 * broken);
                 vec3 currentColor = vec3(0.58, 0.93, 1.0);
                 water.rgb = mix(water.rgb, currentColor, clamp(currentLight * (0.38 + depthT * 0.32), 0.0, 0.62));

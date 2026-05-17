@@ -72,11 +72,11 @@ class ZipPage:
 
 
 HOME_DEFAULT_VIEW_STATE: Final[dict[str, float | str]] = {
-    "lat": 27.95,
-    "lng": -82.46,
-    "zoom": 8.0,
-    "view": "elevation",
-    "water": 1.0,
+    "lat": 33.5186,
+    "lng": -86.8104,
+    "zoom": 11.3,
+    "view": "hand",
+    "water": 10.0,
 }
 
 
