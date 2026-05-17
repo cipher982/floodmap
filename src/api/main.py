@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 FAVICON_SVG_PATH = WEB_DIR / "favicon.svg"
 DRAINAGE_LAB_HTML_PATH = WEB_DIR / "drainage-lab.html"
+SIM_LAB_HTML_PATH = WEB_DIR / "sim-lab.html"
 DRAINAGE_LAB_TILES_DIR = WEB_DIR / "prototypes" / "birmingham-drainage" / "tiles"
 DRAINAGE_LAB_SAMPLE_ZOOM = 12
 MAPLIBRE_CSP_JS_GZ_PATH = WEB_DIR / "vendor" / "maplibre-gl-csp-4.7.1.js.gz"
@@ -394,6 +395,23 @@ async def serve_drainage_lab():
 )
 async def serve_drainage_lab_floodmap():
     return await serve_drainage_lab()
+
+
+@app.api_route("/sim-lab", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def serve_sim_lab():
+    """Serve the dev-only Flood Sandbox simulation lab."""
+    if not (IS_DEVELOPMENT or ENABLE_DIAGNOSTICS):
+        raise HTTPException(status_code=404, detail="Simulation lab is disabled")
+    if not SIM_LAB_HTML_PATH.exists():
+        raise HTTPException(status_code=404, detail="Simulation lab not found")
+    return HTMLResponse(content=SIM_LAB_HTML_PATH.read_text(encoding="utf-8"))
+
+
+@app.api_route(
+    "/floodmap/sim-lab", methods=["GET", "HEAD"], response_class=HTMLResponse
+)
+async def serve_sim_lab_floodmap():
+    return await serve_sim_lab()
 
 
 @app.get("/favicon.svg", include_in_schema=False)
