@@ -10,11 +10,22 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import rasterio
-from rasterio.shutil import copy as rio_copy
-from rasterio.windows import Window
 
 U16_NODATA = 65535
+
+
+def _load_rasterio() -> tuple[Any, Any, Any]:
+    try:
+        import rasterio
+        from rasterio.shutil import copy as rio_copy
+        from rasterio.windows import Window
+    except ImportError as exc:
+        raise RuntimeError(
+            "rasterio is required to convert precomputed HAND rasters. "
+            "Install the processing extra before running this command."
+        ) from exc
+
+    return rasterio, rio_copy, Window
 
 
 def encode_hand_window(
@@ -141,6 +152,7 @@ def convert_precomputed_hand(
     chunk_rows: int = 512,
     quiet: bool = False,
 ) -> dict[str, Any]:
+    rasterio, rio_copy, Window = _load_rasterio()
     start = time.monotonic()
     output_cog.parent.mkdir(parents=True, exist_ok=True)
     temp_path.parent.mkdir(parents=True, exist_ok=True)
