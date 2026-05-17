@@ -6,17 +6,32 @@ import zipfile
 from tools.hand.ingest_ornl_downloaded import (
     archive_readiness,
     converted_hucs,
+    existing_conversion_ready,
     filter_ready_archives,
     plan_downloaded_ingest,
     preferred_archives,
+    write_progress_event,
 )
 from tools.hand.ornl_source_inventory import SourceZipEntry
 
 
-def write_manifest(root, huc: str) -> None:
+def write_manifest(root, huc: str, cog_path: str | None = None) -> None:
     root.mkdir(parents=True, exist_ok=True)
     (root / f"ornl-cfim-v0p21-{huc}.json").write_text(
-        json.dumps({"dataset_version": f"ornl-cfim-v0p21-{huc}"}),
+        json.dumps(
+            {
+                "dataset_version": f"ornl-cfim-v0p21-{huc}",
+                "layers": {
+                    "hand": {
+                        "regions": [
+                            {
+                                "url": cog_path or f"/data/{huc}.tif",
+                            }
+                        ]
+                    }
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -61,6 +76,14 @@ def test_archive_readiness_checks_expected_ornl_members(tmp_path) -> None:
     assert not_ready[0]["huc"] == "031502"
 
 
+def test_existing_conversion_ready_checks_manifest_without_rasterio(tmp_path) -> None:
+    write_manifest(tmp_path, "031601")
+
+    assert existing_conversion_ready(tmp_path, "031601", verify=False) is True
+    assert existing_conversion_ready(tmp_path, "031601", verify=True) is False
+    assert existing_conversion_ready(tmp_path, "031502", verify=False) is False
+
+
 def test_converted_hucs_reads_per_huc_manifest_names(tmp_path) -> None:
     write_manifest(tmp_path, "031601")
     (tmp_path / "ornl-cfim-v0p21-southeast-pilot.json").write_text(
@@ -88,6 +111,7 @@ def test_plan_downloaded_ingest_skips_converted_and_applies_limit(tmp_path) -> N
         start_after="030101",
         limit=1,
         force=False,
+        verify_existing=False,
     )
 
     assert missing == []
@@ -105,7 +129,22 @@ def test_plan_downloaded_ingest_reports_missing_requested_huc(tmp_path) -> None:
         start_after=None,
         limit=None,
         force=False,
+        verify_existing=False,
     )
 
     assert [item.huc for item in planned] == ["031601"]
     assert missing == ["031502"]
+
+
+def test_write_progress_event_appends_jsonl(tmp_path) -> None:
+    progress = tmp_path / "progress.jsonl"
+
+    write_progress_event(progress, {"event": "completed", "huc": "031601"})
+    write_progress_event(progress, {"event": "failed", "huc": "031502"})
+
+    lines = [
+        json.loads(line) for line in progress.read_text(encoding="utf-8").splitlines()
+    ]
+    assert [line["event"] for line in lines] == ["completed", "failed"]
+    assert lines[0]["huc"] == "031601"
+    assert "ts" in lines[0]

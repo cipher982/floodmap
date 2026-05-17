@@ -8,7 +8,7 @@ import json
 import sys
 import zipfile
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +55,44 @@ def converted_hucs(manifest_root: Path) -> set[str]:
     return hucs
 
 
+def cog_path_from_manifest(manifest_path: Path) -> Path | None:
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    regions = manifest.get("layers", {}).get("hand", {}).get("regions") or []
+    if len(regions) != 1:
+        return None
+    url = regions[0].get("url")
+    return Path(url) if isinstance(url, str) else None
+
+
+def existing_conversion_ready(manifest_root: Path, huc: str, *, verify: bool) -> bool:
+    manifest_path = huc_manifest_path(manifest_root, huc)
+    if not manifest_path.exists():
+        return False
+    if not verify:
+        return True
+
+    cog_path = cog_path_from_manifest(manifest_path)
+    if cog_path is None or not cog_path.exists():
+        return False
+
+    import rasterio
+
+    try:
+        with rasterio.open(cog_path) as dataset:
+            return (
+                dataset.count == 1
+                and dataset.dtypes[0] == "uint16"
+                and dataset.nodata == 65535
+                and dataset.width > 0
+                and dataset.height > 0
+            )
+    except Exception:
+        return False
+
+
 def preferred_archives(entries: list[SourceZipEntry]) -> dict[str, SourceZipEntry]:
     archives: dict[str, SourceZipEntry] = {}
     for entry in entries:
@@ -66,13 +104,17 @@ def preferred_archives(entries: list[SourceZipEntry]) -> dict[str, SourceZipEntr
     return dict(sorted(archives.items()))
 
 
-def archive_readiness(entry: SourceZipEntry) -> str | None:
+def archive_readiness(entry: SourceZipEntry, *, crc_check: bool = False) -> str | None:
     if not entry.huc:
         return "invalid HUC name"
     try:
         with zipfile.ZipFile(entry.path) as archive:
             archive.getinfo(f"{entry.huc}/{entry.huc}hand.tif")
             archive.getinfo(f"{entry.huc}/{entry.huc}.tif")
+            if crc_check:
+                bad_member = archive.testzip()
+                if bad_member is not None:
+                    return f"CRC check failed for {bad_member}"
     except Exception as exc:
         return str(exc)
     return None
@@ -80,11 +122,13 @@ def archive_readiness(entry: SourceZipEntry) -> str | None:
 
 def filter_ready_archives(
     archives: dict[str, SourceZipEntry],
+    *,
+    crc_check: bool = False,
 ) -> tuple[dict[str, SourceZipEntry], list[dict[str, str]]]:
     ready: dict[str, SourceZipEntry] = {}
     not_ready: list[dict[str, str]] = []
     for huc, entry in archives.items():
-        reason = archive_readiness(entry)
+        reason = archive_readiness(entry, crc_check=crc_check)
         if reason is None:
             ready[huc] = entry
         else:
@@ -114,10 +158,10 @@ def plan_downloaded_ingest(
     start_after: str | None,
     limit: int | None,
     force: bool,
+    verify_existing: bool,
 ) -> tuple[list[PlannedHuc], list[str]]:
     requested = normalize_requested_hucs(hucs)
     available_hucs = requested or sorted(archives)
-    already_converted = converted_hucs(manifest_root)
     missing_requested: list[str] = []
     planned: list[PlannedHuc] = []
 
@@ -136,7 +180,11 @@ def plan_downloaded_ingest(
             if requested:
                 missing_requested.append(huc)
             continue
-        if huc in already_converted and not force:
+        if not force and existing_conversion_ready(
+            manifest_root,
+            huc,
+            verify=verify_existing,
+        ):
             continue
         planned.append(
             PlannedHuc(
@@ -152,6 +200,18 @@ def plan_downloaded_ingest(
     return planned, missing_requested
 
 
+def write_progress_event(progress_jsonl: Path | None, event: dict[str, Any]) -> None:
+    if progress_jsonl is None:
+        return
+    payload = {
+        "ts": datetime.now(UTC).isoformat(timespec="seconds"),
+        **event,
+    }
+    progress_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    with progress_jsonl.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
 def run_ingest_plan(
     *,
     planned: list[PlannedHuc],
@@ -165,15 +225,21 @@ def run_ingest_plan(
     quiet: bool,
     dry_run: bool,
     continue_on_error: bool,
+    keep_extracted_sources: bool,
+    progress_jsonl: Path | None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     completed: list[dict[str, Any]] = []
     failed: list[dict[str, str]] = []
     if dry_run:
-        return [asdict(item) for item in planned], failed
+        return completed, failed
 
     from tools.hand.ingest_ornl_huc6 import default_paths, ingest_ornl_huc6
 
     for item in planned:
+        write_progress_event(
+            progress_jsonl,
+            {"event": "start", "huc": item.huc, "archive": item.archive},
+        )
         try:
             paths = default_paths(
                 huc=item.huc,
@@ -194,18 +260,29 @@ def run_ingest_plan(
                 dry_run=False,
             )
             metrics = result.get("metrics", {})
-            completed.append(
-                {
-                    "huc": item.huc,
-                    "archive": item.archive,
-                    "manifest": str(paths.manifest_path),
-                    "output_cog": str(paths.output_cog),
-                    "output_cog_bytes": paths.output_cog.stat().st_size,
-                    "valid_fraction": metrics.get("summary", {}).get("valid_fraction"),
-                }
+            if not keep_extracted_sources:
+                paths.source_hand.unlink(missing_ok=True)
+                paths.source_elevation.unlink(missing_ok=True)
+            completed_item = {
+                "huc": item.huc,
+                "archive": item.archive,
+                "manifest": str(paths.manifest_path),
+                "output_cog": str(paths.output_cog),
+                "output_cog_bytes": paths.output_cog.stat().st_size,
+                "valid_fraction": metrics.get("summary", {}).get("valid_fraction"),
+            }
+            completed.append(completed_item)
+            write_progress_event(
+                progress_jsonl,
+                {"event": "completed", **completed_item},
             )
         except Exception as exc:
-            failed.append({"huc": item.huc, "archive": item.archive, "error": str(exc)})
+            failed_item = {"huc": item.huc, "archive": item.archive, "error": str(exc)}
+            failed.append(failed_item)
+            write_progress_event(
+                progress_jsonl,
+                {"event": "failed", **failed_item},
+            )
             if not continue_on_error:
                 break
     return completed, failed
@@ -234,6 +311,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--continue-on-error", action="store_true")
     parser.add_argument(
+        "--crc-check",
+        action="store_true",
+        help="Run ZIP CRC validation before considering archives ready.",
+    )
+    parser.add_argument(
+        "--verify-existing",
+        action="store_true",
+        help="Open existing COGs with rasterio before skipping converted HUCs.",
+    )
+    parser.add_argument(
+        "--keep-extracted-sources",
+        action="store_true",
+        help="Keep extracted ORNL float rasters after COG conversion.",
+    )
+    parser.add_argument(
+        "--progress-jsonl",
+        type=Path,
+        help="Append per-HUC progress events to this JSONL file.",
+    )
+    parser.add_argument(
         "--allow-incomplete-archives",
         action="store_true",
         help="Do not preflight ZIP central directory and expected ORNL members.",
@@ -261,7 +358,10 @@ def main() -> None:
     archives = preferred_archives(entries)
     not_ready: list[dict[str, str]] = []
     if not args.allow_incomplete_archives:
-        archives, not_ready = filter_ready_archives(archives)
+        archives, not_ready = filter_ready_archives(
+            archives,
+            crc_check=args.crc_check,
+        )
     planned, missing_requested = plan_downloaded_ingest(
         archives=archives,
         manifest_root=manifest_root,
@@ -270,6 +370,7 @@ def main() -> None:
         start_after=args.start_after,
         limit=args.limit,
         force=args.force,
+        verify_existing=args.verify_existing,
     )
     completed, failed = run_ingest_plan(
         planned=planned,
@@ -283,10 +384,12 @@ def main() -> None:
         quiet=args.quiet,
         dry_run=args.dry_run,
         continue_on_error=args.continue_on_error,
+        keep_extracted_sources=args.keep_extracted_sources,
+        progress_jsonl=args.progress_jsonl,
     )
 
     combined_manifest = None
-    if args.combined_output and not args.dry_run and not failed:
+    if args.combined_output and not args.dry_run:
         hucs = sorted(converted_hucs(manifest_root))
         manifest = build_combined_manifest(
             hucs=hucs,
