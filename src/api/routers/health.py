@@ -3,7 +3,14 @@
 import os
 from datetime import datetime
 
-from config import ELEVATION_DATA_DIR, HEALTH_CHECK_DIRS, MAP_DATA_DIR
+from config import (
+    ELEVATION_DATA_DIR,
+    ENVIRONMENT,
+    HEALTH_CHECK_DIRS,
+    MAP_DATA_DIR,
+    TERRAIN_MANIFEST_PATH,
+    TERRAIN_V2_ENABLED,
+)
 from fastapi import APIRouter
 
 # Import health monitor if available
@@ -61,18 +68,28 @@ async def health_check():
         if not health_monitor.is_healthy():
             health_data["status"] = "unhealthy"
 
-    # Check elevation data availability with detailed validation
+    terrain_manifest_available = TERRAIN_V2_ENABLED and TERRAIN_MANIFEST_PATH.exists()
+    health_data["terrain_v2_enabled"] = TERRAIN_V2_ENABLED
+    health_data["terrain_manifest_available"] = terrain_manifest_available
+
+    # Check legacy elevation source availability. Terrain v2 deployments can run
+    # from precomputed manifests/COGs without the old source-tile inventory.
     if ELEVATION_DATA_DIR.exists():
         elevation_files = list(ELEVATION_DATA_DIR.glob("*.zst"))
         health_data["elevation_files_available"] = len(elevation_files)
 
-        # Critical data validation
         if len(elevation_files) < 1000:
-            health_data["status"] = "critical"
-            health_data["errors"] = health_data.get("errors", [])
-            health_data["errors"].append(
-                f"Critical: Only {len(elevation_files)} elevation files (expected 2000+)"
-            )
+            if terrain_manifest_available:
+                health_data["warnings"] = health_data.get("warnings", [])
+                health_data["warnings"].append(
+                    "Legacy elevation source inventory is missing; terrain v2 manifest is available."
+                )
+            else:
+                health_data["status"] = "critical"
+                health_data["errors"] = health_data.get("errors", [])
+                health_data["errors"].append(
+                    f"Critical: Only {len(elevation_files)} elevation files (expected 2000+)"
+                )
         elif len(elevation_files) < 2000:
             if health_data["status"] == "healthy":
                 health_data["status"] = "degraded"
@@ -82,11 +99,17 @@ async def health_check():
             )
     else:
         health_data["elevation_files_available"] = 0
-        health_data["status"] = "critical"
-        health_data["errors"] = health_data.get("errors", [])
-        health_data["errors"].append(
-            f"Critical: Elevation data directory missing: {ELEVATION_DATA_DIR}"
-        )
+        if terrain_manifest_available:
+            health_data["warnings"] = health_data.get("warnings", [])
+            health_data["warnings"].append(
+                "Legacy elevation source directory is missing; terrain v2 manifest is available."
+            )
+        else:
+            health_data["status"] = "critical"
+            health_data["errors"] = health_data.get("errors", [])
+            health_data["errors"].append(
+                f"Critical: Elevation data directory missing: {ELEVATION_DATA_DIR}"
+            )
 
     # Check map data availability with validation
     mbtiles_file = MAP_DATA_DIR / "usa-complete.mbtiles"
@@ -113,7 +136,8 @@ async def health_check():
     health_data["deployment_context"] = {
         "elevation_data_dir": str(ELEVATION_DATA_DIR),
         "map_data_dir": str(MAP_DATA_DIR),
-        "environment": os.getenv("ENVIRONMENT", "unknown"),
+        "environment": ENVIRONMENT,
+        "terrain_manifest_path": str(TERRAIN_MANIFEST_PATH),
     }
 
     return health_data
