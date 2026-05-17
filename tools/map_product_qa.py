@@ -116,12 +116,12 @@ async def set_water_level(page, level: float, timeout_ms: int) -> None:
         (level) => {
           const fm = window.floodMap;
           if (!fm) throw new Error('window.floodMap is unavailable');
-          fm.currentWaterLevel = level;
           const slider = document.getElementById('water-level');
           if (slider && typeof fm.waterLevelToSlider === 'function') {
             slider.value = String(fm.waterLevelToSlider(level));
             slider.dispatchEvent(new Event('input', { bubbles: true }));
           } else {
+            fm.currentWaterLevel = level;
             fm.syncWaterLevelControls?.();
             fm.updateFloodLayer?.();
             fm.schedulePermalinkUpdate?.();
@@ -132,7 +132,7 @@ async def set_water_level(page, level: float, timeout_ms: int) -> None:
     )
     await page.wait_for_function(
         "(level) => Math.abs((window.floodMap?.currentWaterLevel || 0) - level) < 0.11",
-        level,
+        arg=level,
         timeout=timeout_ms,
     )
     await page.wait_for_timeout(450)
