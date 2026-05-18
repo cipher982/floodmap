@@ -26,6 +26,10 @@ class Terrain3dBasemapCapture {
       const timeout = window.setTimeout(() => reject(new Error("Timed out rendering basemap texture")), 15000);
       map.once("idle", () => {
         window.clearTimeout(timeout);
+        if (this.errors.length > 0) {
+          reject(new Error(`Basemap texture rendered with errors: ${this.errors.join("; ")}`));
+          return;
+        }
         resolve();
       });
       map.once("error", (event) => {

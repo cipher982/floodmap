@@ -54,3 +54,28 @@ test("terrain mesh builder returns stable grid geometry", () => {
   assert.equal(mesh.minElevationM, 90);
   assert.equal(mesh.maxElevationM, 110);
 });
+
+test("water mesh builder uses HAND as the initial wet threshold", () => {
+  const renderer = { decodeHandHeight: (value) => (value === 65535 ? NaN : value / 10) };
+  const handData = new Uint16Array(256 * 256);
+  handData.fill(65535);
+  handData[0] = 5;
+  const terrainVertices = new Float32Array(4 * 4 * 8);
+  for (let i = 0; i < 16; i += 1) {
+    terrainVertices[i * 8] = i % 4;
+    terrainVertices[i * 8 + 1] = 0.5;
+    terrainVertices[i * 8 + 2] = Math.floor(i / 4);
+  }
+
+  const mesh = Terrain3dMeshBuilder.buildWater({
+    renderer,
+    handData,
+    terrainVertices,
+    meshSize: 4,
+    waterMeters: 1
+  });
+
+  assert.equal(mesh.waterVisible, true);
+  assert.equal(mesh.waterVertexRatio, 0.0625);
+  assert.ok(mesh.indices.length > 0);
+});
