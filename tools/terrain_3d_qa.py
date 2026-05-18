@@ -247,7 +247,7 @@ async def run_terrain_3d_qa(
             """
             () => {
               const current = window.floodTerrain3d.waterMeters || 0;
-              window.floodTerrain3d.setWaterMeters(Math.max(35, current + 35));
+              window.floodTerrain3d.setWaterMeters(Math.max(100, current + 100));
             }
             """
         )
