@@ -116,7 +116,7 @@ void main() {
   v_strength = a_strength;
   v_phase = pulse;
   gl_Position = u_matrix * vec4(pos, 1.0);
-  gl_PointSize = 2.4 + a_strength * 7.5;
+  gl_PointSize = 1.8 + a_strength * 6.0;
 }
 `,
 

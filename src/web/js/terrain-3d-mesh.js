@@ -136,7 +136,7 @@ class Terrain3dMeshBuilder {
   static buildFlowParticles({ renderer, handData, terrainVertices, meshSize, waterMeters }) {
     const vertices = [];
     const step = Math.max(3, Math.floor(meshSize / 48));
-    const channelMeters = Math.max(4, Math.min(40, waterMeters * 0.65));
+    const channelMeters = Math.max(2.5, Math.min(12, waterMeters * 0.22));
     for (let y = 1; y < meshSize - 1; y += step) {
       for (let x = 1; x < meshSize - 1; x += step) {
         const srcX = x / (meshSize - 1) * 255;
@@ -149,7 +149,7 @@ class Terrain3dMeshBuilder {
         const handDown = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.min(255, srcY + 2));
         const flow = Terrain3dMeshBuilder.flowDirection(handLeft, handRight, handUp, handDown);
         const terrainO = (y * meshSize + x) * 8;
-        const strength = Math.max(0.12, 1 - hand / channelMeters);
+        const strength = Math.max(0.12, (1 - hand / channelMeters) ** 1.7);
         const phase = Terrain3dMeshBuilder.hash2(x, y);
         vertices.push(
           terrainVertices[terrainO],
