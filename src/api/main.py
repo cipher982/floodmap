@@ -167,6 +167,7 @@ from config import (
     FORCE_HTTPS,
     IS_DEVELOPMENT,
     TERRAIN_3D_ENABLED,
+    TERRAIN_REMOTE_BASE_URL,
     TERRAIN_V2_ENABLED,
 )
 from location_catalog import get_city_page, get_zip_page
@@ -267,7 +268,7 @@ app.include_router(
 app.include_router(risk.router, prefix="/api", tags=["risk"])
 app.include_router(places.router, prefix="/api", tags=["places"])
 
-if TERRAIN_V2_ENABLED:
+if TERRAIN_V2_ENABLED or TERRAIN_REMOTE_BASE_URL:
     app.include_router(terrain_v2.router, tags=["terrain-v2"])
     app.include_router(terrain_v2.router, prefix="/floodmap", tags=["terrain-v2"])
 

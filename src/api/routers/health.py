@@ -9,6 +9,7 @@ from config import (
     HEALTH_CHECK_DIRS,
     MAP_DATA_DIR,
     TERRAIN_MANIFEST_PATH,
+    TERRAIN_REMOTE_BASE_URL,
     TERRAIN_V2_ENABLED,
 )
 from fastapi import APIRouter
@@ -68,9 +69,14 @@ async def health_check():
         if not health_monitor.is_healthy():
             health_data["status"] = "unhealthy"
 
-    terrain_manifest_available = TERRAIN_V2_ENABLED and TERRAIN_MANIFEST_PATH.exists()
-    health_data["terrain_v2_enabled"] = TERRAIN_V2_ENABLED
+    terrain_remote_enabled = bool(TERRAIN_REMOTE_BASE_URL)
+    terrain_manifest_available = (
+        TERRAIN_V2_ENABLED and TERRAIN_MANIFEST_PATH.exists()
+    ) or terrain_remote_enabled
+    health_data["terrain_v2_enabled"] = TERRAIN_V2_ENABLED or terrain_remote_enabled
     health_data["terrain_manifest_available"] = terrain_manifest_available
+    if terrain_remote_enabled:
+        health_data["terrain_remote_enabled"] = True
 
     # Check legacy elevation source availability. Terrain v2 deployments can run
     # from precomputed manifests/COGs without the old source-tile inventory.
@@ -139,6 +145,10 @@ async def health_check():
         "environment": ENVIRONMENT,
         "terrain_manifest_path": str(TERRAIN_MANIFEST_PATH),
     }
+    if terrain_remote_enabled:
+        health_data["deployment_context"]["terrain_remote_base_url"] = (
+            TERRAIN_REMOTE_BASE_URL
+        )
 
     return health_data
 

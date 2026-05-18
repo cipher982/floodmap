@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import numpy as np
 from config import (
     BIRMINGHAM_HAND_COG_PATH,
@@ -10,6 +11,7 @@ from config import (
     TERRAIN_CACHE_PRUNE_INTERVAL_SECONDS,
     TERRAIN_CACHE_WRITE_THROUGH,
     TERRAIN_MANIFEST_PATH,
+    TERRAIN_REMOTE_BASE_URL,
     TERRAIN_SAMPLE_CACHE_ZOOM,
     TERRAIN_TILE_CACHE_DIR,
 )
@@ -38,6 +40,54 @@ from terrain_manifest import (
 
 router = APIRouter(prefix="/api/v2/terrain", tags=["terrain-v2"])
 terrain_tile_cache = TerrainTileCache(TERRAIN_TILE_CACHE_DIR)
+REMOTE_TIMEOUT_SECONDS = 30.0
+
+
+def remote_terrain_enabled(layer: str) -> bool:
+    return bool(TERRAIN_REMOTE_BASE_URL) and layer == "hand"
+
+
+def remote_terrain_url(path: str, query_string: bytes = b"") -> str:
+    url = f"{TERRAIN_REMOTE_BASE_URL.rstrip('/')}{path}"
+    if query_string:
+        url = f"{url}?{query_string.decode('utf-8')}"
+    return url
+
+
+def proxy_remote_terrain(path: str, request: Request) -> Response:
+    headers = {
+        "accept": request.headers.get("accept", "*/*"),
+        "accept-encoding": "identity",
+    }
+    url = remote_terrain_url(path, request.scope.get("query_string", b""))
+    with httpx.Client(timeout=REMOTE_TIMEOUT_SECONDS, follow_redirects=True) as client:
+        remote = client.get(url, headers=headers)
+
+    passthrough_headers = {
+        key: value
+        for key, value in remote.headers.items()
+        if key.lower()
+        in {
+            "cache-control",
+            "content-type",
+            "etag",
+            "vary",
+            "x-cache",
+            "x-terrain-data-status",
+            "x-terrain-dataset-version",
+            "x-terrain-layer",
+            "x-terrain-render-ms",
+            "x-terrain-source",
+        }
+    }
+    passthrough_headers["Access-Control-Allow-Origin"] = "*"
+    passthrough_headers["X-Terrain-Proxy"] = "remote"
+    return Response(
+        content=remote.content,
+        status_code=remote.status_code,
+        media_type=remote.headers.get("content-type"),
+        headers=passthrough_headers,
+    )
 
 
 def write_through_tile_cache(
@@ -212,6 +262,12 @@ def get_terrain_tile(
     x: int = PathParam(..., ge=0),
     y: int = PathParam(..., ge=0),
 ):
+    if remote_terrain_enabled(layer):
+        return proxy_remote_terrain(
+            f"/api/v2/terrain/{layer}/{dataset_version}/{z}/{x}/{y}.u16",
+            request,
+        )
+
     try:
         TerrainTileRequest(z=z, x=x, y=y)
     except ValidationError as exc:
@@ -330,7 +386,9 @@ def get_terrain_tile_batch(
 
 
 @router.get("/{layer}/metadata")
-def get_terrain_metadata(layer: str):
+def get_terrain_metadata(layer: str, request: Request):
+    if remote_terrain_enabled(layer):
+        return proxy_remote_terrain(f"/api/v2/terrain/{layer}/metadata", request)
     manifest = get_terrain_manifest()
     terrain_layer = manifest.layers.get(layer)
     if terrain_layer is None:
@@ -348,7 +406,10 @@ def get_terrain_metadata(layer: str):
 
 
 @router.get("/{layer}/sample")
-def sample_terrain(layer: str, lat: float, lng: float):
+def sample_terrain(layer: str, request: Request, lat: float, lng: float):
+    if remote_terrain_enabled(layer):
+        return proxy_remote_terrain(f"/api/v2/terrain/{layer}/sample", request)
+
     manifest = get_terrain_manifest()
     terrain_layer = manifest.layers.get(layer)
     if terrain_layer is None:

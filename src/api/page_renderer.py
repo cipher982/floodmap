@@ -12,6 +12,9 @@ from config import (
     BIRMINGHAM_HAND_DATASET_VERSION,
     TERRAIN_3D_ENABLED,
     TERRAIN_MANIFEST_PATH,
+    TERRAIN_REMOTE_BASE_URL,
+    TERRAIN_REMOTE_COVERAGE_LABEL,
+    TERRAIN_REMOTE_DATASET_VERSION,
     TERRAIN_V2_ENABLED,
 )
 from location_catalog import (
@@ -32,7 +35,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260518m"
+ASSET_VERSION: Final[str] = "20260518n"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )
@@ -72,6 +75,19 @@ def _render_json_ld(payload: dict[str, object]) -> str:
 
 
 def _terrain_route_context() -> dict[str, object]:
+    if TERRAIN_REMOTE_BASE_URL and TERRAIN_REMOTE_DATASET_VERSION:
+        return {
+            "terrainLayers": {
+                "hand": {
+                    "enabled": True,
+                    "datasetVersion": TERRAIN_REMOTE_DATASET_VERSION,
+                    "label": "Flood Toy",
+                    "coverageLabel": TERRAIN_REMOTE_COVERAGE_LABEL,
+                }
+            },
+            "handGpu": True,
+        }
+
     manifest = load_terrain_manifest_from_path(TERRAIN_MANIFEST_PATH)
     if manifest is None:
         manifest = build_builtin_hand_manifest(

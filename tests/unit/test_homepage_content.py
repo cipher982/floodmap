@@ -63,6 +63,22 @@ def test_homepage_can_show_3d_link_when_feature_flag_enabled(monkeypatch):
     assert "Open 3D Map" in html
 
 
+def test_homepage_can_use_remote_hand_terrain_context(monkeypatch):
+    monkeypatch.setenv("TERRAIN_REMOTE_BASE_URL", "https://floodmap3d.drose.io")
+    monkeypatch.setenv("TERRAIN_REMOTE_DATASET_VERSION", "ornl-cfim-v0p21-conus")
+    monkeypatch.setenv("TERRAIN_REMOTE_COVERAGE_LABEL", "331 regions")
+    main = load_main_module(monkeypatch)
+    client = TestClient(main.app)
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    html = resp.text
+    assert '"enabled":true' in html
+    assert '"datasetVersion":"ornl-cfim-v0p21-conus"' in html
+    assert '"coverageLabel":"331 regions"' in html
+
+
 def test_homepage_search_input_allows_browser_history(monkeypatch):
     main = load_main_module(monkeypatch)
     client = TestClient(main.app)

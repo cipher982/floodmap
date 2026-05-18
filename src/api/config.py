@@ -154,6 +154,11 @@ TERRAIN_V2_ENABLED = os.getenv("TERRAIN_V2_ENABLED", "false").lower() in (
     "true",
     "yes",
 )
+TERRAIN_REMOTE_BASE_URL = os.getenv("TERRAIN_REMOTE_BASE_URL", "").rstrip("/")
+TERRAIN_REMOTE_DATASET_VERSION = os.getenv("TERRAIN_REMOTE_DATASET_VERSION", "")
+TERRAIN_REMOTE_COVERAGE_LABEL = os.getenv(
+    "TERRAIN_REMOTE_COVERAGE_LABEL", "Remote HAND terrain"
+)
 TERRAIN_3D_ENABLED = os.getenv("TERRAIN_3D_ENABLED", "false").lower() in (
     "1",
     "true",
