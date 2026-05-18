@@ -36,7 +36,7 @@ void main() {
   vec3 base = texture(u_map, v_uv).rgb;
   base = clamp(base * 0.92 + vec3(0.035, 0.040, 0.046), 0.0, 1.0);
   float ink = 1.0 - smoothstep(0.18, 0.58, dot(base, vec3(0.299, 0.587, 0.114)));
-  float light = clamp(dot(normalize(v_normal), normalize(u_light)) * 0.42 + 0.74, 0.50, 1.03);
+  float light = clamp(dot(normalize(v_normal), normalize(u_light)) * 0.32 + 0.70, 0.55, 0.95);
   float heightTint = smoothstep(-0.18, 0.42, v_height);
   vec3 color = base * light;
   color = mix(color, base * 0.62, ink * 0.58);

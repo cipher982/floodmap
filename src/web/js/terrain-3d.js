@@ -38,7 +38,7 @@ class FloodTerrain3dApp {
     this.meshSize = Terrain3dMath.clamp(Number.parseInt(this.params.get("mesh") || "192", 10), 64, 224);
     this.worldRadius = Terrain3dMath.clamp(Number.parseInt(this.params.get("radius") || "1", 10), 0, 1);
     this.tileScale = 1.38;
-    this.defaultCamera = { rotationX: -0.78, rotationY: -0.34, distance: 6.2, panX: 0, panZ: 0 };
+    this.defaultCamera = { rotationX: -1.05, rotationY: -0.28, distance: 5.4, panX: 0, panZ: 0 };
     this.rotationX = this.defaultCamera.rotationX;
     this.rotationY = this.defaultCamera.rotationY;
     this.distance = this.defaultCamera.distance;
@@ -311,7 +311,7 @@ class FloodTerrain3dApp {
         this.panZ -= dy * 0.006 * this.distance;
       } else {
         this.rotationY += dx * 0.006;
-        this.rotationX = Terrain3dMath.clamp(this.rotationX + dy * 0.004, -1.45, -0.12);
+        this.rotationX = Terrain3dMath.clamp(this.rotationX + dy * 0.004, -1.55, -0.12);
       }
       this.lastPointer = { x: event.clientX, y: event.clientY };
     });
@@ -325,7 +325,7 @@ class FloodTerrain3dApp {
     });
     this.canvas.addEventListener("wheel", (event) => {
       event.preventDefault();
-      this.distance = Terrain3dMath.clamp(this.distance + event.deltaY * 0.002, 2.2, 9.5);
+      this.distance = Terrain3dMath.clamp(this.distance + event.deltaY * 0.002, 1.6, 12);
     }, { passive: false });
     for (const button of document.querySelectorAll("[data-water-preset]")) {
       button.addEventListener("click", () => {
