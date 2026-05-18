@@ -35,8 +35,7 @@ class WorkerElevationRenderer {
         // In flood mode, treat NODATA as water (not "flooded land").
         this.WATER_RGBA = [70, 130, 180, 220];
 
-        // Static fallback for the water-toy HAND view. The GPU layer adds
-        // animation/foam; worker fallback still uses apparent-depth blues.
+        // Static water-toy HAND view for worker rendering.
         this.HAND_VIZ_ASINH_SCALE_M = 1.5;
         this.HAND_VIZ_STOPS = [
             { t: 0.0, color: [80, 190, 240, 115] },
@@ -327,6 +326,9 @@ self.onmessage = function(e) {
     if (type === 'render') {
         try {
             const { elevationData, mode, waterLevel, width, height, showHandNoData } = data;
+            if (mode !== 'hand') {
+                throw new Error(`Unsupported worker render mode: ${mode}`);
+            }
 
             // Fast check before doing any work
             if (self._cancelledJobIds?.has(jobId)) {
@@ -343,13 +345,9 @@ self.onmessage = function(e) {
 
             // Fast-path: check if entire tile is NODATA
             if (renderer.isAllNoData(elevationArray)) {
-                const fillColor = mode === 'flood'
-                    ? renderer.WATER_RGBA
-                    : mode === 'hand'
-                        ? showHandNoData
-                            ? renderer.HAND_NODATA_RGBA
-                            : renderer.colors.TRANSPARENT
-                        : renderer.OCEAN_RGBA;
+                const fillColor = showHandNoData
+                    ? renderer.HAND_NODATA_RGBA
+                    : renderer.colors.TRANSPARENT;
 
                 const packed = renderer._packRgbaToU32(fillColor[0], fillColor[1], fillColor[2], fillColor[3]);
                 pixelU32.fill(packed);
@@ -369,11 +367,7 @@ self.onmessage = function(e) {
                 return;
             }
 
-            const lut = mode === 'elevation'
-                ? renderer.getElevationLut()
-                : mode === 'hand'
-                    ? renderer.getHandLut(waterLevel, !!showHandNoData)
-                    : renderer.getFloodLut(waterLevel);
+            const lut = renderer.getHandLut(waterLevel, !!showHandNoData);
 
             // Process each pixel: rgba32 = lut[u16]
             for (let i = 0; i < elevationArray.length; i++) {

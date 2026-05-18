@@ -36,7 +36,7 @@ def test_city_page_renders_unique_metadata_and_route_context(monkeypatch):
     assert '"pageType":"city"' in html
     assert '"stateSlug":"fl"' in html
     assert '"citySlug":"tampa"' in html
-    assert '"view":"flood"' in html
+    assert '"view":"hand"' in html
     assert '"water":3.0' in html
     assert "__FLOODMAP_" not in html
 

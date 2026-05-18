@@ -150,7 +150,7 @@ async def test_far_location_typeahead_prefetches_coarse_tiles_before_click(
     map_page: MapPage,
 ):
     batch_payloads: list[dict] = []
-    elevation_requests: list[str] = []
+    terrain_requests: list[str] = []
 
     async def handle_search(route):
         query = parse_qs(urlparse(route.request.url).query).get("q", [""])[0]
@@ -173,8 +173,8 @@ async def test_far_location_typeahead_prefetches_coarse_tiles_before_click(
             body=json.dumps({"query": query, "results": results}),
         )
 
-    async def handle_elevation(route):
-        elevation_requests.append(route.request.url)
+    async def handle_terrain(route):
+        terrain_requests.append(route.request.url)
         response = await route.fetch()
         await route.fulfill(response=response)
 
@@ -184,13 +184,13 @@ async def test_far_location_typeahead_prefetches_coarse_tiles_before_click(
         await route.fulfill(response=response)
 
     await map_page.page.route("**/api/places/search*", handle_search)
-    await map_page.page.route("**/api/v1/tiles/elevation-batch.u16*", handle_batch)
-    await map_page.page.route("**/api/v1/tiles/elevation-data/**", handle_elevation)
+    await map_page.page.route("**/api/v2/terrain/hand/*/batch.u16*", handle_batch)
+    await map_page.page.route("**/api/v2/terrain/hand/*/*/*/*.u16*", handle_terrain)
     await map_page.goto_homepage()
     await map_page.wait_for_app_ready()
 
     initial_state = await map_page.get_map_state()
-    elevation_requests.clear()
+    terrain_requests.clear()
 
     await map_page.page.fill("#location-search", "sea")
     await map_page.page.wait_for_function(
@@ -214,7 +214,7 @@ async def test_far_location_typeahead_prefetches_coarse_tiles_before_click(
 
     assert len(batch_payloads) == 1
     assert batch_payloads[0]["tiles"] == prefetch_plan["prefetchTiles"]
-    assert elevation_requests == []
+    assert terrain_requests == []
     assert prefetch_plan["targetCenter"]["lat"] == pytest.approx(47.6062, abs=0.02)
     assert prefetch_plan["prefetchTiles"]
     assert len(prefetch_plan["prefetchTiles"]) == 8
@@ -323,12 +323,8 @@ async def test_far_location_search_uses_progressive_jump_overlay(map_page: MapPa
             ),
         )
 
-    async def delay_elevation_tiles(route):
-        z = int(
-            route.request.url.split("/api/v1/tiles/elevation-data/", 1)[1].split(
-                "/", 1
-            )[0]
-        )
+    async def delay_terrain_tiles(route):
+        z = int(route.request.url.split("/api/v2/terrain/hand/", 1)[1].split("/")[1])
         response = await route.fetch()
         await asyncio.sleep(0.55 if z >= 8 else 0.08)
         await route.fulfill(response=response)
@@ -339,9 +335,9 @@ async def test_far_location_search_uses_progressive_jump_overlay(map_page: MapPa
         await route.fulfill(response=response)
 
     await map_page.page.route("**/api/places/search*", handle_search)
-    await map_page.page.route("**/api/v1/tiles/elevation-batch.u16*", handle_batch)
+    await map_page.page.route("**/api/v2/terrain/hand/*/batch.u16*", handle_batch)
     await map_page.page.route(
-        "**/api/v1/tiles/elevation-data/**", delay_elevation_tiles
+        "**/api/v2/terrain/hand/*/*/*/*.u16*", delay_terrain_tiles
     )
     await map_page.goto_homepage()
     await map_page.wait_for_app_ready()

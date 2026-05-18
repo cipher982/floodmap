@@ -44,6 +44,14 @@ def test_homepage_contains_social_metadata_and_explanatory_copy(monkeypatch):
     assert 'id="elevation-mode"' not in html
     assert 'id="flood-mode"' not in html
     assert 'id="hand-mode"' not in html
+    assert 'id="flood-legend"' not in html
+    assert 'id="elevation-legend"' not in html
+    assert "Water Level:" not in html
+    assert "High Tide" not in html
+    assert "Storm Surge" not in html
+    assert "Raise the water:" in html
+    assert "Puddle" in html
+    assert "Max Chaos" in html
     assert "Animated flood toy" not in html
     assert "What you can do" in html
     assert "How to use it" in html
@@ -101,6 +109,9 @@ def test_client_does_not_render_model_note_copy():
     assert "Animated flood toy" not in content
     assert "flow streaks follow" not in content
     assert "model-note" not in content
+    assert "/risk/location" not in content
+    assert "client://flood" not in content
+    assert "client://elevation" not in content
 
 
 def test_homepage_uses_vendored_maplibre_assets(monkeypatch):

@@ -271,13 +271,15 @@ class TestFrontendBackendConsistency:
     def test_frontend_zoom_caps_match_tile_sources(self):
         """Frontend zoom caps must match each tile source.
 
-        Elevation/flood views stay capped to precompressed tile availability.
+        The public app has one visible render path: HAND terrain.
         HAND can use the dynamic terrain source at higher zooms.
         """
         js_file = Path(__file__).parent.parent.parent / "src/web/js/map-client.js"
         content = js_file.read_text()
 
-        assert "return viewMode === 'hand' && handLayer?.enabled ? 14 : 11;" in content
+        assert "return this.isTerrainLayerEnabled('hand') ? 14 : 11;" in content
+        assert "viewMode === 'flood'" not in content
+        assert "viewMode === 'elevation'" not in content
 
         vector_match = re.search(r"vectorMaxZoom:\s*(\d+)", content)
         assert vector_match, "Could not find vectorMaxZoom setting in map-client.js"

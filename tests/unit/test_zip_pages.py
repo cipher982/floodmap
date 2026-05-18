@@ -42,7 +42,7 @@ def test_zip_page_renders_noindex_metadata_headers_and_route_context(monkeypatch
     assert '"zipCode":"33602"' in html
     assert '"stateSlug":"fl"' in html
     assert '"citySlug":"tampa"' in html
-    assert '"view":"flood"' in html
+    assert '"view":"hand"' in html
     assert '"water":3.0' in html
     assert "__FLOODMAP_" not in html
 

@@ -70,22 +70,13 @@ class FloodMapClient {
         this.lastProgressiveJumpPlan = null;
         this.refinementNeighborPrefetchTimer = null;
         this.suppressViewportSync = false;
-        this.levelPresets = {
-            flood: [
-                { level: 0.5, label: 'High Tide (0.5m)' },
-                { level: 3.0, label: 'Storm Surge (3m)' },
-                { level: 6.0, label: 'Category 5 (6m)' },
-                { level: 15.0, label: 'Extreme (15m)' },
-                { level: 1.0, label: '2100 Baseline (+1m)' }
-            ],
-            hand: [
-                { level: 0.5, label: 'Puddle' },
-                { level: 3.0, label: 'Creeks Rise' },
-                { level: 10.0, label: 'Streets Fill' },
-                { level: 75.0, label: 'City Flood' },
-                { level: 1000.0, label: 'Max Chaos' }
-            ]
-        };
+        this.levelPresets = [
+            { level: 0.5, label: 'Puddle' },
+            { level: 3.0, label: 'Creeks Rise' },
+            { level: 10.0, label: 'Streets Fill' },
+            { level: 75.0, label: 'City Flood' },
+            { level: 1000.0, label: 'Max Chaos' }
+        ];
 
         // Initialize WebWorker for rendering if available
         this.initWorker();
@@ -117,12 +108,30 @@ class FloodMapClient {
         return this.getTerrainLayerConfig(layer).enabled === true;
     }
 
-    preferredFloodViewMode() {
-        return this.isTerrainLayerEnabled('hand') ? 'hand' : 'flood';
+    requireHandTerrainLayer() {
+        const handLayer = this.getTerrainLayerConfig('hand');
+        if (handLayer.enabled !== true || !handLayer.datasetVersion) {
+            throw new Error('HAND terrain is required for FloodMap rendering.');
+        }
+        return handLayer;
+    }
+
+    showFatalTerrainConfigError(message) {
+        const riskDetails = typeof document !== 'undefined'
+            ? document.getElementById('risk-details')
+            : null;
+        if (riskDetails) {
+            riskDetails.innerHTML = `
+                <div class="risk-summary risk-unknown">
+                    <strong>Terrain unavailable</strong>
+                </div>
+                <p>${this.escapeHtml(message)}</p>
+            `;
+        }
     }
 
     normalizeInitialViewMode(_mode) {
-        return this.preferredFloodViewMode();
+        return 'hand';
     }
 
     isHandGpuRequested() {
@@ -180,7 +189,7 @@ class FloodMapClient {
     }
 
     isHandGpuActive() {
-        return this.viewMode === 'hand' && this.isHandGpuAvailableForRouting();
+        return this.isHandGpuAvailableForRouting();
     }
 
     disableHandGpu(reason) {
@@ -196,7 +205,7 @@ class FloodMapClient {
                 active: false
             };
         }
-        if (this.viewMode === 'hand' && this.map) {
+        if (this.map) {
             const restoreFallbackTiles = () => {
                 const source = this.map?.getSource?.('elevation-tiles');
                 if (!source) return;
@@ -309,7 +318,7 @@ class FloodMapClient {
                 };
 
             } catch (error) {
-                console.warn('Failed to initialize WebWorker, falling back to main thread:', error);
+                console.warn('Failed to initialize WebWorker; using main-thread rendering:', error);
                 this.renderWorker = null;
                 this.workerReady = false;
             }
@@ -330,17 +339,17 @@ class FloodMapClient {
                 const signal = abortController?.signal;
 
                 // Parse the request URL
-                // Format: client://flood/{z}/{x}/{y}
+                // Format: client://hand/{z}/{x}/{y}
                 const url = params.url.replace('client://', '');
                 const parts = url.split('/');
 
-                if ((parts[0] === 'flood' || parts[0] === 'elevation' || parts[0] === 'hand') && parts.length >= 4) {
+                if (parts[0] === 'hand' && parts.length >= 4) {
                     const mode = parts[0];
                     const z = parseInt(parts[1]);
                     const x = parseInt(parts[2]);
                     const y = parseInt(parts[3].split('?')[0]);
 
-                    if (mode === 'hand' && self.isHandGpuActive()) {
+                    if (self.isHandGpuActive()) {
                         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
                         void self.handGpuLayer.requestTile(z, x, y, signal);
                         const transparentTile = await self.getTransparentTileBuffer();
@@ -348,7 +357,7 @@ class FloodMapClient {
                         return { data: transparentTile.slice(0) };
                     }
 
-                    // Generate tile based on mode
+                    // Generate the HAND tile.
                     const blob = await self.generateTile(z, x, y, mode, self.currentWaterLevel, signal);
 
                     const arrayBuffer = await blob.arrayBuffer();
@@ -371,10 +380,12 @@ class FloodMapClient {
 
     async generateTile(z, x, y, mode, waterLevel = null, signal = null) {
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (mode !== 'hand') {
+            throw new Error(`Unsupported render mode: ${mode}`);
+        }
 
-        // Load terrain data. Flood and elevation modes use absolute elevation;
-        // HAND mode uses drainage-relative height encoded as uint16 decimeters.
-        const terrainLayer = mode === 'hand' ? 'hand' : 'elevation';
+        // HAND uses drainage-relative height encoded as uint16 decimeters.
+        const terrainLayer = 'hand';
         let terrainData;
         try {
             terrainData = await this.elevationRenderer.loadTerrainTile(terrainLayer, z, x, y, signal);
@@ -394,9 +405,7 @@ class FloodMapClient {
                 dataLength: terrainData.length,
                 first10Values: Array.from(terrainData.slice(0, 10)),
                 centerValue: terrainData[128 * 256 + 128],
-                decodedCenter: mode === 'hand'
-                    ? this.elevationRenderer.decodeHandHeight(terrainData[128 * 256 + 128])
-                    : this.elevationRenderer.decodeElevation(terrainData[128 * 256 + 128])
+                decodedCenter: this.elevationRenderer.decodeHandHeight(terrainData[128 * 256 + 128])
             });
         }
 
@@ -410,12 +419,12 @@ class FloodMapClient {
                 return this.imageDataToBlob(result, 256, 256);
             } catch (error) {
                 if (error?.name === 'AbortError') throw error;
-                console.warn('Worker rendering failed, falling back to main thread:', error);
+                console.warn('Worker rendering failed; using main-thread rendering:', error);
                 // Fall through to main thread rendering
             }
         }
 
-        // Main thread rendering (fallback or when worker not available)
+        // Main thread rendering when worker rendering is unavailable.
         return this.renderTileMainThread(z, x, y, terrainData, mode, waterLevel, signal);
     }
 
@@ -502,13 +511,9 @@ class FloodMapClient {
 
         // Fast-path: if the entire tile is NODATA, fill with a consistent water/ocean color
         if (this.elevationRenderer.isAllNoData(terrainData)) {
-            const fillColor = mode === 'flood'
-                ? this.elevationRenderer.WATER_RGBA
-                : mode === 'hand'
-                    ? this.handNoDataDebug
-                        ? this.elevationRenderer.HAND_NODATA_RGBA
-                        : this.elevationRenderer.colors.TRANSPARENT
-                    : this.elevationRenderer.OCEAN_RGBA;
+            const fillColor = this.handNoDataDebug
+                ? this.elevationRenderer.HAND_NODATA_RGBA
+                : this.elevationRenderer.colors.TRANSPARENT;
             this.elevationRenderer.fillImageData(imageData, fillColor);
             ctx.putImageData(imageData, 0, 0);
             return new Promise((resolve, reject) => {
@@ -540,9 +545,7 @@ class FloodMapClient {
             if (!debugColorSample && color[3] > 0) {
                 debugColorSample = {
                     raw: terrainData[i],
-                    decoded: mode === 'hand'
-                        ? this.elevationRenderer.decodeHandHeight(terrainData[i])
-                        : this.elevationRenderer.decodeElevation(terrainData[i]),
+                    decoded: this.elevationRenderer.decodeHandHeight(terrainData[i]),
                     color,
                     mode
                 };
@@ -596,13 +599,19 @@ class FloodMapClient {
     }
 
     init() {
+        try {
+            this.requireHandTerrainLayer();
+        } catch (error) {
+            const message = error?.message || 'HAND terrain is unavailable.';
+            this.showFatalTerrainConfigError(message);
+            throw error;
+        }
         this.initializeMap();
         this.setupEventListeners();
     }
 
-    maxZoomForViewMode(viewMode) {
-        const handLayer = this.routeContext.terrainLayers?.hand;
-        return viewMode === 'hand' && handLayer?.enabled ? 14 : 11;
+    maxZoomForViewMode(_viewMode) {
+        return this.isTerrainLayerEnabled('hand') ? 14 : 11;
     }
 
     applyModeZoomCap() {
@@ -1008,21 +1017,12 @@ class FloodMapClient {
     }
 
     getTileUrl() {
-        if (this.viewMode === 'elevation') {
-            // Client-side elevation rendering (no server requests)
-            return 'client://elevation/{z}/{x}/{y}';
-        } else if (this.viewMode === 'hand') {
-            if (this.isHandGpuAvailableForRouting()) {
-                return 'client://hand/{z}/{x}/{y}';
-            }
-            const clusteredThreshold = Math.round(this.currentWaterLevel * 10) / 10;
-            return `client://hand/{z}/{x}/{y}?threshold=${clusteredThreshold}`;
-        } else {
-            // Client-side flood rendering
-            // Include clustered water level in URL to bust MapLibre's tile cache on level change
-            const clusteredWL = Math.round(this.currentWaterLevel * 10) / 10;
-            return `client://flood/{z}/{x}/{y}?wl=${clusteredWL}`;
+        this.requireHandTerrainLayer();
+        if (this.isHandGpuAvailableForRouting()) {
+            return 'client://hand/{z}/{x}/{y}';
         }
+        const clusteredThreshold = Math.round(this.currentWaterLevel * 10) / 10;
+        return `client://hand/{z}/{x}/{y}?threshold=${clusteredThreshold}`;
     }
 
     setupEventListeners() {
@@ -1145,23 +1145,15 @@ class FloodMapClient {
         }
     }
 
-    getLevelControlMode() {
-        return this.viewMode === 'hand' ? 'hand' : 'flood';
-    }
-
     syncLevelControlCopy() {
         const label = document.getElementById('water-level-label');
-        const mode = this.getLevelControlMode();
         if (label) {
-            label.textContent = mode === 'hand'
-                ? 'Raise the water:'
-                : 'Water Level:';
+            label.textContent = 'Raise the water:';
         }
 
-        const presets = this.levelPresets[mode] || this.levelPresets.flood;
         const chips = Array.from(document.querySelectorAll('.preset-chip'));
         chips.forEach((chip, index) => {
-            const preset = presets[index];
+            const preset = this.levelPresets[index];
             if (!preset) {
                 chip.style.display = 'none';
                 return;
@@ -1192,17 +1184,11 @@ class FloodMapClient {
 
     syncWaterLevelReadout(displayElement, vibeElement) {
         if (!displayElement) return;
-        if (this.viewMode === 'hand') {
-            displayElement.textContent = this.floodToyLabel(this.currentWaterLevel);
-            if (vibeElement) {
-                vibeElement.textContent = `${this.currentWaterLevel}m`;
-                vibeElement.className = this.floodToyVibeClass(this.currentWaterLevel);
-            }
-            return;
+        displayElement.textContent = this.floodToyLabel(this.currentWaterLevel);
+        if (vibeElement) {
+            vibeElement.textContent = `${this.currentWaterLevel}m`;
+            vibeElement.className = this.floodToyVibeClass(this.currentWaterLevel);
         }
-
-        displayElement.textContent = `${this.currentWaterLevel}m`;
-        if (vibeElement) this.updateWaterLevelVibe(this.currentWaterLevel, vibeElement);
     }
 
     updateActivePresetChip() {
@@ -1216,44 +1202,24 @@ class FloodMapClient {
 
     updateViewMode() {
         const waterLevelControls = document.getElementById('water-level-controls');
-        const floodLegend = document.getElementById('flood-legend');
-        const elevationLegend = document.getElementById('elevation-legend');
         const handLegend = document.getElementById('hand-legend');
         const riskPanelTitle = document.querySelector('#risk-panel h3');
 
         this.applyModeZoomCap();
         this.updateModelNote(this.modelNoteState);
         if (riskPanelTitle) {
-            riskPanelTitle.textContent = this.viewMode === 'hand'
-                ? 'Flood Check'
-                : 'Risk Assessment';
+            riskPanelTitle.textContent = 'Flood Check';
         }
 
-        if (this.viewMode === 'elevation') {
-            waterLevelControls.style.opacity = '0';
-            waterLevelControls.style.transform = 'translateY(-10px)';
-            setTimeout(() => {
-                waterLevelControls.style.display = 'none';
-            }, 200);
-
-            // Show elevation legend, hide flood legend
-            if (floodLegend) floodLegend.style.display = 'none';
-            if (elevationLegend) elevationLegend.style.display = 'flex';
-            if (handLegend) handLegend.style.display = 'none';
-        } else {
+        if (waterLevelControls) {
             waterLevelControls.style.display = 'block';
             setTimeout(() => {
                 waterLevelControls.style.opacity = '1';
                 waterLevelControls.style.transform = 'translateY(0)';
             }, 10);
-
-            this.syncWaterLevelControls();
-
-            // Show mode-specific legend
-            if (elevationLegend) elevationLegend.style.display = 'none';
-            if (floodLegend) floodLegend.style.display = this.viewMode === 'flood' ? 'flex' : 'none';
-            if (handLegend) handLegend.style.display = this.viewMode === 'hand' ? 'flex' : 'none';
         }
+        this.syncWaterLevelControls();
+        if (handLegend) handLegend.style.display = 'flex';
 
         this.updateHandGpuState();
         this.updateFloodLayer();
@@ -1267,7 +1233,7 @@ class FloodMapClient {
         const source = this.map.getSource('elevation-tiles');
         if (!source) return;
 
-        if (this.viewMode === 'hand' && this.isHandGpuAvailableForRouting()) {
+        if (this.isHandGpuAvailableForRouting()) {
             this.updateHandGpuState();
             const nextTileUrl = this.getTileUrl();
             if (this.activeTileUrl !== nextTileUrl) {
@@ -1283,17 +1249,10 @@ class FloodMapClient {
         }
 
         const nextTileUrl = this.getTileUrl();
-        if (this.viewMode === 'flood' || this.viewMode === 'hand') {
-            // Clear the renderer cache to force re-render with new water level
-            if (this.elevationRenderer) {
-                this.elevationRenderer.clearRenderedCache();
-            }
-
-            // Use getTileUrl() to include water level in URL, busting MapLibre's cache
-            source.setTiles([nextTileUrl]);
-        } else {
-            source.setTiles([nextTileUrl]);
+        if (this.elevationRenderer) {
+            this.elevationRenderer.clearRenderedCache();
         }
+        source.setTiles([nextTileUrl]);
         this.activeTileUrl = nextTileUrl;
     }
 
@@ -1594,9 +1553,9 @@ class FloodMapClient {
         });
     }
 
-    async prefetchElevationTilesProgressively(
+    async prefetchTerrainTilesProgressively(
         tiles,
-        { shouldContinue = null, concurrency = 4 } = {}
+        { shouldContinue = null } = {}
     ) {
         const queue = Array.isArray(tiles)
             ? tiles.filter((tile) => Number.isInteger(tile?.z) && Number.isInteger(tile?.x) && Number.isInteger(tile?.y))
@@ -1605,39 +1564,12 @@ class FloodMapClient {
 
         if (typeof shouldContinue === 'function' && !shouldContinue()) return;
 
-        if (queue.length > 1) {
-            try {
-                await this.elevationRenderer.preloadTileBatch(queue);
-                return;
-            } catch (error) {
-                if (error?.name === 'AbortError') {
-                    return;
-                }
-                console.warn(
-                    'Destination batch prefetch failed; falling back to individual tile loads:',
-                    error
-                );
-            }
+        try {
+            await this.elevationRenderer.preloadTerrainTileBatch('hand', queue);
+        } catch (error) {
+            if (error?.name === 'AbortError') return;
+            console.warn('HAND terrain prefetch failed:', error);
         }
-
-        let index = 0;
-        const workerCount = Math.max(1, Math.min(concurrency, queue.length));
-        const worker = async () => {
-            while (index < queue.length) {
-                if (typeof shouldContinue === 'function' && !shouldContinue()) return;
-                const tile = queue[index];
-                index += 1;
-                try {
-                    await this.elevationRenderer.loadElevationTile(tile.z, tile.x, tile.y);
-                } catch (error) {
-                    if (error?.name !== 'AbortError') {
-                        console.warn('Destination tile prefetch failed:', error);
-                    }
-                }
-            }
-        };
-
-        await Promise.all(Array.from({ length: workerCount }, () => worker()));
     }
 
     buildProgressiveJumpPlanForTarget(targetCamera) {
@@ -1693,7 +1625,7 @@ class FloodMapClient {
             this.refinementNeighborPrefetchTimer = null;
             if (sequence !== this.progressiveJumpSequence) return;
 
-            void this.prefetchElevationTilesProgressively(tiles, {
+            void this.prefetchTerrainTilesProgressively(tiles, {
                 shouldContinue: () => sequence === this.progressiveJumpSequence
             });
         }, 120);
@@ -1749,11 +1681,10 @@ class FloodMapClient {
 
         const runPrefetch = () => {
             this.searchPrefetchDebounceTimer = null;
-            void this.prefetchElevationTilesProgressively(
+            void this.prefetchTerrainTilesProgressively(
                 prefetchTiles,
                 {
                     shouldContinue: () => sequence === this.searchPrefetchSequence,
-                    concurrency: 2
                 }
             );
         };
@@ -1813,7 +1744,7 @@ class FloodMapClient {
                         zoom = camera.zoom;
                     }
                 } catch (error) {
-                    console.warn('cameraForBounds failed; falling back to center average:', error);
+                    console.warn('cameraForBounds failed; using center average:', error);
                 }
             }
 
@@ -1891,7 +1822,7 @@ class FloodMapClient {
         this.showMapTransitionOverlay();
         this.suppressViewportSync = true;
 
-        const prefetchPromise = this.prefetchElevationTilesProgressively(
+        const prefetchPromise = this.prefetchTerrainTilesProgressively(
             plan.prefetchTiles,
             {
                 shouldContinue: () => sequence === this.progressiveJumpSequence
@@ -2316,36 +2247,8 @@ class FloodMapClient {
     }
 
     updateWaterLevelVibe(waterLevel, vibeElement) {
-        vibeElement.className = '';
-
-        let vibeText = '';
-        let vibeClass = '';
-
-        if (this.viewMode === 'hand') {
-            vibeElement.textContent = `${waterLevel}m`;
-            vibeElement.className = this.floodToyVibeClass(waterLevel);
-            return;
-        }
-
-        if (waterLevel <= 2) {
-            vibeText = 'Normal';
-            vibeClass = 'vibe-normal';
-        } else if (waterLevel <= 5) {
-            vibeText = 'Concerning';
-            vibeClass = 'vibe-concerning';
-        } else if (waterLevel <= 20) {
-            vibeText = 'Dangerous';
-            vibeClass = 'vibe-dangerous';
-        } else if (waterLevel <= 100) {
-            vibeText = 'EXTREME';
-            vibeClass = 'vibe-extreme';
-        } else {
-            vibeText = 'APOCALYPTIC';
-            vibeClass = 'vibe-apocalyptic';
-        }
-
-        vibeElement.textContent = vibeText;
-        vibeElement.className = vibeClass;
+        vibeElement.textContent = `${waterLevel}m`;
+        vibeElement.className = this.floodToyVibeClass(waterLevel);
     }
 
     floodToyLabel(waterLevel) {
@@ -2414,88 +2317,17 @@ class FloodMapClient {
         this.trackLocationView(lat, lng);
 
         try {
-            // Calculate tile coordinates for current zoom level if lngLat provided
             let tileInfo = '';
             if (lngLat && this.map) {
                 const zoom = Math.floor(this.map.getZoom());
                 const tileCoords = this.getTileCoordinates(lat, lng, zoom);
-                const handDataset = this.getTerrainLayerConfig('hand').datasetVersion;
-                const apiTilePath = this.viewMode === 'hand' && handDataset
-                    ? `/api/v2/terrain/hand/${handDataset}/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`
-                    : `/api/v1/tiles/elevation-data/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`;
+                const handDataset = this.requireHandTerrainLayer().datasetVersion;
+                const apiTilePath = `/api/v2/terrain/hand/${handDataset}/${zoom}/${tileCoords.x}/${tileCoords.y}.u16`;
                 const tilePath = requireFloodmapUrlHelper('floodmapApiUrl')(apiTilePath);
                 tileInfo = `🗂️ Tile: ${zoom}/${tileCoords.x}/${tileCoords.y} (${tilePath})`;
             }
 
-            if (this.viewMode === 'hand') {
-                await this.assessDrainageHeight(lat, lng, tileInfo);
-                return;
-            }
-
-            // Water/coastal context detection via rendered vector tiles (simple + fast).
-            // If we're clicking on a lake/ocean polygon, show "Water" rather than
-            // a misleading land-based risk from DEM artefacts.
-            let isWater = false;
-            let isCoastal = false;
-            if (this.map) {
-                const point = this.map.project([lng, lat]);
-                const pad = 2; // small tolerance for edge clicks / antialiasing
-                const bbox = [
-                    [point.x - pad, point.y - pad],
-                    [point.x + pad, point.y + pad]
-                ];
-                const waterFeatures = this.map.queryRenderedFeatures(bbox, { layers: ['water', 'water-ocean-hit'] });
-                const waterwayFeatures = this.map.queryRenderedFeatures(bbox, { layers: ['waterway'] });
-
-                isWater = (Array.isArray(waterFeatures) && waterFeatures.length > 0) ||
-                    (Array.isArray(waterwayFeatures) && waterwayFeatures.length > 0);
-
-                // Heuristic: classify as "coastal" when the feature hints ocean/sea.
-                const candidates = []
-                    .concat(Array.isArray(waterFeatures) ? waterFeatures : [])
-                    .concat(Array.isArray(waterwayFeatures) ? waterwayFeatures : [])
-                    .map(f => String(f?.properties?.class ?? f?.properties?.kind ?? f?.properties?.type ?? '').toLowerCase())
-                    .filter(Boolean);
-                isCoastal = candidates.some(v => v.includes('ocean') || v.includes('sea'));
-            }
-
-            this.updateModelNote({ nearWater: isWater, coastal: isCoastal });
-
-            if (isWater) {
-                const data = {
-                    latitude: lat,
-                    longitude: lng,
-                    elevation_m: null,
-                    flood_risk_level: 'water',
-                    water_level_m: this.currentWaterLevel,
-                    risk_description: 'Open water (vector mask)',
-                    tileInfo
-                };
-                this.updateRiskPanel(data);
-                this.updateLocationInfo(data);
-                this.addLocationMarker(lng, lat, data);
-                return;
-            }
-
-            const response = await fetch(requireFloodmapUrlHelper('floodmapApiUrl')('/risk/location'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    latitude: lat,
-                    longitude: lng,
-                    waterLevelM: this.currentWaterLevel,
-                    isWater
-                })
-            });
-
-            const data = await response.json();
-            // Add tile info to data for display
-            data.tileInfo = tileInfo;
-
-            this.updateRiskPanel(data);
-            this.updateLocationInfo(data);
-            this.addLocationMarker(lng, lat, data);
-
+            await this.assessDrainageHeight(lat, lng, tileInfo);
         } catch (error) {
             console.error('Risk assessment error:', error);
         }
@@ -2650,22 +2482,6 @@ class FloodMapClient {
         `;
     }
 
-    updateRiskPanel(data) {
-        const riskDetails = document.getElementById('risk-details');
-        const riskClass = `risk-${data.flood_risk_level}`;
-
-        riskDetails.innerHTML = `
-            <div class="risk-summary ${riskClass}">
-                <strong>Risk Level: ${data.flood_risk_level.toUpperCase()}</strong>
-            </div>
-            <p><strong>Location:</strong> ${data.latitude.toFixed(4)}°, ${data.longitude.toFixed(4)}°</p>
-            ${this.hasElevationValue(data.elevation_m) ? `<p><strong>Elevation:</strong> ${data.elevation_m}m</p>` : ''}
-            <p><strong>Water Level:</strong> ${data.water_level_m}m</p>
-            <p><strong>Assessment:</strong> ${data.risk_description}</p>
-            ${data.tileInfo ? `<p><strong>Debug:</strong> ${data.tileInfo}</p>` : ''}
-        `;
-    }
-
     /**
      * Track location click event in Umami analytics.
      * Fires when user clicks map or uses "Find My Location".
@@ -2726,20 +2542,6 @@ class FloodMapClient {
             .addTo(this.map);
     }
 
-    addLocationMarker(lng, lat, data) {
-        this.clearMapMarkers();
-
-        const marker = new maplibregl.Marker({ color: '#ef4444' })
-            .setLngLat([lng, lat])
-            .setPopup(new maplibregl.Popup().setHTML(`
-                <div>
-                    <strong>Flood Risk: ${this.escapeHtml(data.flood_risk_level)}</strong><br>
-                    Elevation: ${this.hasElevationValue(data.elevation_m) ? this.escapeHtml(data.elevation_m) : 'Unknown'}m<br>
-                    ${this.escapeHtml(data.risk_description)}
-                </div>
-            `))
-            .addTo(this.map);
-    }
 }
 
 function floodmapInit() {

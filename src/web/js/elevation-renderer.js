@@ -55,6 +55,9 @@ class ElevationRenderer {
             this.TILE_SIZE * this.TILE_SIZE * Uint16Array.BYTES_PER_ELEMENT;
         this.ELEVATION_BATCH_MAGIC = 'FMB1';
         this.ELEVATION_BATCH_VERSION = 1;
+        this.TERRAIN_BATCH_MAGIC = 'FMT2';
+        this.TERRAIN_BATCH_VERSION = 1;
+        this.TERRAIN_BATCH_TILE_META_BYTES = 9;
         this.ELEVATION_MIN = -500;
         this.ELEVATION_MAX = 9000;
         this.ELEVATION_RANGE = this.ELEVATION_MAX - this.ELEVATION_MIN;
@@ -65,10 +68,7 @@ class ElevationRenderer {
         // In flood mode, treat NODATA as water (not "flooded land").
         this.WATER_RGBA = [70, 130, 180, 220];
 
-        // HAND fallback visualization:
-        // Static blue water keyed by apparent depth. The GPU path adds animated
-        // shimmer and foam, but this keeps unsupported browsers in the same
-        // flood-toy visual language.
+        // HAND visualization used by both worker and main-thread rendering.
         this.HAND_VIZ_ASINH_SCALE_M = 1.5;
         this.HAND_VIZ_STOPS = [
             { t: 0.0, color: [80, 190, 240, 115] },   // shallow water
@@ -254,14 +254,40 @@ class ElevationRenderer {
         return url;
     }
 
+    async buildTerrainBatchRequestUrl(layer, signal = null) {
+        const config = this.getTerrainLayerConfig(layer);
+        let datasetVersion = typeof config.datasetVersion === 'string'
+            ? config.datasetVersion
+            : '';
+        if (!datasetVersion) {
+            const metadata = await this.getTerrainMetadata(layer, signal);
+            datasetVersion = metadata.dataset_version;
+        }
+        if (!datasetVersion) {
+            throw new Error(`No dataset version available for terrain layer ${layer}`);
+        }
+
+        const url = new URL(
+            requireFloodmapApiUrl()(`/v2/terrain/${layer}/${datasetVersion}/batch.u16`),
+            window.location.origin
+        );
+        const tileVersion =
+            (typeof window !== 'undefined'
+                && (window.FLOODMAP_TILE_VERSION || window.FLOODMAP_ASSET_VERSION))
+                ? (window.FLOODMAP_TILE_VERSION || window.FLOODMAP_ASSET_VERSION)
+                : null;
+        if (tileVersion) url.searchParams.set('v', tileVersion);
+        return url;
+    }
+
     async loadTerrainTile(layer, z, x, y, signal = null) {
-        if (layer === 'elevation') {
-            return this.loadElevationTile(z, x, y, signal);
+        if (layer !== 'hand') {
+            throw new Error(`Unsupported terrain layer: ${layer}`);
         }
 
         const config = this.getTerrainLayerConfig(layer);
         if (config.enabled === false) {
-            return this.makeNoDataTile();
+            throw new Error(`${layer} terrain layer is disabled`);
         }
 
         const key = `${layer}:${z}/${x}/${y}`;
@@ -283,7 +309,7 @@ class ElevationRenderer {
                     return { buffer: null, cacheable: true };
                 }
                 if (response.status === 503) {
-                    return { buffer: null, cacheable: false };
+                    throw new Error(`${layer} terrain service unavailable for tile ${key}`);
                 }
                 if (!response.ok) {
                     throw new Error(`Failed to load ${layer} terrain tile ${key}: ${response.status}`);
@@ -311,7 +337,7 @@ class ElevationRenderer {
                 }
                 console.error(`Error loading ${layer} terrain tile ${key}:`, error);
                 this.loadingTiles.delete(key);
-                return this.makeNoDataTile();
+                throw error;
             });
 
         this.loadingTiles.set(key, loadPromise);
@@ -390,6 +416,122 @@ class ElevationRenderer {
         }
 
         return entries;
+    }
+
+    parseTerrainTileBatch(buffer) {
+        const view = new DataView(buffer);
+        if (view.byteLength < 7) {
+            throw new Error('Terrain tile batch payload is too small');
+        }
+
+        const magic = String.fromCharCode(...new Uint8Array(buffer, 0, 4));
+        if (magic !== this.TERRAIN_BATCH_MAGIC) {
+            throw new Error(`Unexpected terrain batch magic: ${magic}`);
+        }
+
+        const version = view.getUint8(4);
+        if (version !== this.TERRAIN_BATCH_VERSION) {
+            throw new Error(`Unsupported terrain batch version: ${version}`);
+        }
+
+        const tileCount = view.getUint16(5, true);
+        const headerLength = 7 + (tileCount * this.TERRAIN_BATCH_TILE_META_BYTES);
+        const expectedLength = headerLength + (tileCount * this.ELEVATION_TILE_BYTE_LENGTH);
+        if (view.byteLength !== expectedLength) {
+            throw new Error(
+                `Unexpected terrain batch size: ${view.byteLength} (expected ${expectedLength})`
+            );
+        }
+
+        const entries = [];
+        let metaOffset = 7;
+        let dataOffset = headerLength;
+
+        for (let index = 0; index < tileCount; index += 1) {
+            const z = view.getUint8(metaOffset);
+            const x = view.getUint32(metaOffset + 1, true);
+            const y = view.getUint32(metaOffset + 5, true);
+            const tileBuffer = buffer.slice(dataOffset, dataOffset + this.ELEVATION_TILE_BYTE_LENGTH);
+
+            entries.push({
+                z,
+                x,
+                y,
+                terrainData: new Uint16Array(tileBuffer)
+            });
+
+            metaOffset += this.TERRAIN_BATCH_TILE_META_BYTES;
+            dataOffset += this.ELEVATION_TILE_BYTE_LENGTH;
+        }
+
+        return entries;
+    }
+
+    async preloadTerrainTileBatch(layer, tiles, signal = null) {
+        const seenKeys = new Set();
+        const uncachedTiles = [];
+
+        for (const tile of Array.isArray(tiles) ? tiles : []) {
+            if (!Number.isInteger(tile?.z) || !Number.isInteger(tile?.x) || !Number.isInteger(tile?.y)) {
+                continue;
+            }
+
+            const key = `${layer}:${tile.z}/${tile.x}/${tile.y}`;
+            if (seenKeys.has(key) || this.elevationCache.has(key)) {
+                continue;
+            }
+
+            seenKeys.add(key);
+            uncachedTiles.push({ z: tile.z, x: tile.x, y: tile.y, key });
+        }
+
+        if (!uncachedTiles.length) {
+            return [];
+        }
+
+        const url = await this.buildTerrainBatchRequestUrl(layer, signal);
+        const response = await fetch(url.toString(), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                tiles: uncachedTiles.map(({ z, x, y }) => ({ z, x, y }))
+            }),
+            signal
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to preload ${layer} terrain batch: ${response.status}`);
+        }
+
+        const entries = this.parseTerrainTileBatch(await response.arrayBuffer());
+        if (entries.length !== uncachedTiles.length) {
+            throw new Error(
+                `Terrain batch entry mismatch: received ${entries.length}, expected ${uncachedTiles.length}`
+            );
+        }
+
+        for (let index = 0; index < entries.length; index += 1) {
+            const expected = uncachedTiles[index];
+            const actual = entries[index];
+            if (
+                actual.z !== expected.z
+                || actual.x !== expected.x
+                || actual.y !== expected.y
+            ) {
+                throw new Error(
+                    `Unexpected terrain batch tile order at index ${index}: `
+                    + `received ${actual.z}/${actual.x}/${actual.y}, `
+                    + `expected ${expected.z}/${expected.x}/${expected.y}`
+                );
+            }
+
+            this.storeElevationTile(expected.key, actual.terrainData);
+            this.stats.tilesLoaded++;
+        }
+
+        return entries.map((entry) => entry.terrainData);
     }
 
     async preloadTileBatch(tiles, signal = null) {
@@ -571,16 +713,13 @@ class ElevationRenderer {
     }
 
     calculateTileColor(rawValue, mode, waterLevel, showHandNoData = false) {
-        if (mode === 'elevation') {
-            return this.calculateElevationColor(this.decodeElevation(rawValue));
+        if (mode !== 'hand') {
+            throw new Error(`Unsupported terrain render mode: ${mode}`);
         }
-        if (mode === 'hand') {
-            if (rawValue === this.NODATA_VALUE && showHandNoData) {
-                return this.HAND_NODATA_RGBA;
-            }
-            return this.calculateHandColor(this.decodeHandHeight(rawValue), waterLevel);
+        if (rawValue === this.NODATA_VALUE && showHandNoData) {
+            return this.HAND_NODATA_RGBA;
         }
-        return this.calculateFloodColor(this.decodeElevation(rawValue), waterLevel);
+        return this.calculateHandColor(this.decodeHandHeight(rawValue), waterLevel);
     }
 
     /**

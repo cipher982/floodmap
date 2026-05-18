@@ -100,17 +100,20 @@ async def context(browser: Browser) -> BrowserContext:
 async def page(context: BrowserContext, app_server: str) -> Page:
     page = await context.new_page()
     page.base_url = app_server
-    page.max_elevation_request_z = None
+    page.max_terrain_request_z = None
 
     def track_request(req):
         try:
-            marker = "/api/v1/tiles/elevation-data/"
+            marker = "/api/v2/terrain/hand/"
             if marker not in req.url:
                 return
             rest = req.url.split(marker, 1)[1]
-            z = int(rest.split("/", 1)[0])
-            if page.max_elevation_request_z is None or z > page.max_elevation_request_z:
-                page.max_elevation_request_z = z
+            parts = rest.split("/")
+            if len(parts) < 4 or parts[1] == "batch.u16":
+                return
+            z = int(parts[1])
+            if page.max_terrain_request_z is None or z > page.max_terrain_request_z:
+                page.max_terrain_request_z = z
         except Exception:
             return
 

@@ -9,7 +9,7 @@ class FloodmapViewState:
     lat: float
     lng: float
     zoom: float
-    view: str = "flood"
+    view: str = "hand"
     water: float = 3.0
 
     def as_dict(self) -> dict[str, float | str]:

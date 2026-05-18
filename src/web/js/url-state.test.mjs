@@ -50,7 +50,7 @@ test("buildFloodmapShareUrl preserves unrelated params and formats state", () =>
   assert.equal(parsed.searchParams.get("lat"), "27.94499");
   assert.equal(parsed.searchParams.get("lng"), "-82.45831");
   assert.equal(parsed.searchParams.get("zoom"), "8.46");
-  assert.equal(parsed.searchParams.get("view"), "flood");
+  assert.equal(parsed.searchParams.get("view"), "hand");
   assert.equal(parsed.searchParams.get("water"), "6.0");
 });
 
@@ -118,7 +118,7 @@ test("custom defaults let location pages stay query-free until state changes", (
     lat: 40.7128,
     lng: -74.006,
     zoom: 10.1,
-    view: "flood",
+    view: "hand",
     water: 3.0,
   };
 
@@ -130,7 +130,7 @@ test("custom defaults let location pages stay query-free until state changes", (
   assert.equal(parsed.lat, cityDefaults.lat);
   assert.equal(parsed.lng, cityDefaults.lng);
   assert.equal(parsed.zoom, cityDefaults.zoom);
-  assert.equal(parsed.view, cityDefaults.view);
+  assert.equal(parsed.view, "hand");
   assert.equal(parsed.water, cityDefaults.water);
   assert.equal(parsed.hasExplicitState, false);
   assert.equal(isDefaultViewState(parsed, cityDefaults), true);
