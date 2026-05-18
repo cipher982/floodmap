@@ -1,10 +1,11 @@
 /*
  * Real terrain 3D renderer for FloodMap.
  *
- * This milestone renders one real WebMercator terrain tile as a 3D mesh,
- * captures a matching vector basemap into a texture, and draws animated
- * HAND-seeded water above it. The next engine can replace the threshold water
- * surface with a stateful WebGPU solver without changing the data contract.
+ * This renderer is a multi-tile WebMercator scene: every visible tile gets real
+ * elevation, HAND, and a captured vector basemap texture. Water is still seeded
+ * from HAND thresholds, but its shader motion follows per-vertex HAND gradients
+ * so the current visually runs through drainage corridors instead of shimmering
+ * in place.
  */
 
 class FloodTerrain3dApp {
@@ -24,20 +25,36 @@ class FloodTerrain3dApp {
     this.lat = Number.parseFloat(this.params.get("lat") || "33.5186");
     this.lng = Number.parseFloat(this.params.get("lng") || "-86.8104");
     this.waterMeters = Number.parseFloat(this.params.get("water") || this.waterInput.value || "22");
-    this.exaggeration = Number.parseFloat(this.params.get("exaggeration") || this.exaggerationInput.value || "2");
-    this.meshSize = Terrain3dMath.clamp(Number.parseInt(this.params.get("mesh") || "224", 10), 64, 256);
-    this.defaultCamera = { rotationX: -0.82, rotationZ: -0.34, distance: 3.85 };
+    this.exaggeration = Terrain3dMath.clamp(
+      Number.parseFloat(this.params.get("exaggeration") || this.exaggerationInput.value || "2"),
+      0.4,
+      5
+    );
+    this.meshSize = Terrain3dMath.clamp(Number.parseInt(this.params.get("mesh") || "192", 10), 64, 224);
+    this.worldRadius = Terrain3dMath.clamp(Number.parseInt(this.params.get("radius") || "1", 10), 0, 1);
+    this.tileScale = 1.38;
+    this.defaultCamera = { rotationX: -0.86, rotationZ: -0.34, distance: 6.2, panX: 0, panZ: 0 };
     this.rotationX = this.defaultCamera.rotationX;
     this.rotationZ = this.defaultCamera.rotationZ;
     this.distance = this.defaultCamera.distance;
+    this.panX = this.defaultCamera.panX;
+    this.panZ = this.defaultCamera.panZ;
     this.dragging = false;
+    this.panning = false;
     this.lastPointer = null;
     this.frameCount = 0;
+    this.navigationCount = 0;
+    this.activeLoadId = 0;
     this.startedAt = performance.now();
+    this.tiles = [];
     this.stats = {
       ready: false,
-      visualModel: "map-draped-terrain-hand-water-v1",
+      visualModel: "map-draped-terrain-hand-water-world-v2",
+      centerTile: null,
       tile: null,
+      worldRadius: this.worldRadius,
+      tileCount: 0,
+      tilesLoaded: 0,
       terrainLoaded: false,
       elevationSource: null,
       handLoaded: false,
@@ -48,6 +65,7 @@ class FloodTerrain3dApp {
       minElevationM: null,
       maxElevationM: null,
       handDatasetVersion: null,
+      navigationCount: 0,
       frameCount: 0,
       lastFrameMs: 0,
       warnings: [],
@@ -67,36 +85,87 @@ class FloodTerrain3dApp {
     if (!this.gl) throw new Error("WebGL2 is required for terrain 3D");
     this.resize();
     window.addEventListener("resize", () => this.resize());
-
-    this.tile = Terrain3dMath.lonLatToTile(this.lng, this.lat, this.zoom);
-    this.stats.tile = this.tile;
-    this.publish("Loading terrain and map texture");
-    const basemap = new Terrain3dBasemapCapture({
-      container: this.captureEl,
-      tile: this.tile
-    });
-    const [terrainResult, handData, handMetadata, mapCanvas] = await Promise.all([
-      this.loadElevationSurfaceTile(),
-      this.renderer.loadTerrainTile("hand", this.tile.z, this.tile.x, this.tile.y),
-      this.renderer.getTerrainMetadata("hand").catch(() => null),
-      basemap.capture()
-    ]);
-    this.stats.errors.push(...basemap.errors);
-    this.handMetadata = handMetadata;
-    this.stats.handDatasetVersion = handMetadata?.dataset_version || null;
-    this.stats.basemapCaptured = true;
-    this.stats.elevationSource = terrainResult.source;
-    const terrainData = terrainResult.data;
-    this.stats.terrainLoaded = !this.isAllNoData(terrainData);
-    this.stats.handLoaded = !this.isAllNoData(handData);
-    this.initGlResources(mapCanvas);
-    this.buildMeshes(terrainData, handData);
-    this.stats.ready = true;
-    this.publish("Ready");
+    this.centerTile = Terrain3dMath.lonLatToTile(this.lng, this.lat, this.zoom);
+    this.initGlResources();
+    await this.loadWorld();
     requestAnimationFrame((time) => this.render(time));
   }
 
-  async loadElevationSurfaceTile() {
+  async loadWorld() {
+    const loadId = this.activeLoadId + 1;
+    this.activeLoadId = loadId;
+    this.stats.ready = false;
+    this.stats.errors = [];
+    this.stats.warnings = [];
+    this.publish("Loading terrain world");
+    const plan = Terrain3dWorld.buildGrid({
+      centerTile: this.centerTile,
+      radius: this.worldRadius,
+      tileScale: this.tileScale
+    });
+    this.centerTile = plan.centerTile;
+    this.stats.centerTile = plan.centerTile;
+    this.stats.tile = plan.centerTile;
+    this.stats.tileCount = plan.tiles.length;
+    this.stats.tilesLoaded = 0;
+
+    const handMetadata = await this.renderer.getTerrainMetadata("hand").catch(() => null);
+    this.handMetadata = handMetadata;
+    this.stats.handDatasetVersion = handMetadata?.dataset_version || null;
+
+    const loaded = await Promise.all(plan.tiles.map((tile) => this.loadTileData(tile)));
+    const globalStats = this.globalElevationStats(loaded);
+    const sceneTiles = [];
+    for (const tile of loaded) {
+      if (loadId !== this.activeLoadId) return;
+      const basemap = new Terrain3dBasemapCapture({
+        container: this.captureEl,
+        tile
+      });
+      try {
+        const mapCanvas = await basemap.capture();
+        tile.mapTexture = this.createTexture(mapCanvas);
+      } catch (error) {
+        this.stats.errors.push(`Basemap ${tile.key}: ${error?.message || String(error)}`);
+      }
+      this.stats.errors.push(...basemap.errors.map((message) => `Basemap ${tile.key}: ${message}`));
+      sceneTiles.push(this.createSceneTile(tile, globalStats));
+      this.stats.tilesLoaded = sceneTiles.length;
+      this.publish(`Loaded ${sceneTiles.length}/${plan.tiles.length} tiles`);
+    }
+    if (loadId !== this.activeLoadId) return;
+    this.destroyTiles(this.tiles);
+    this.tiles = sceneTiles;
+    this.stats.minElevationM = Number(globalStats.minElevationM.toFixed(2));
+    this.stats.maxElevationM = Number(globalStats.maxElevationM.toFixed(2));
+    this.stats.elevationSource = loaded.every((tile) => tile.elevationSource === "terrain-v2-elevation")
+      ? "terrain-v2-elevation"
+      : "mixed-or-fallback";
+    this.stats.basemapCaptured = sceneTiles.every((tile) => Boolean(tile.mapTexture));
+    this.stats.terrainLoaded = sceneTiles.some((tile) => tile.terrainLoaded);
+    this.stats.handLoaded = sceneTiles.some((tile) => tile.handLoaded);
+    this.updateAllWaterMeshes();
+    this.stats.ready = true;
+    this.publish("Ready");
+  }
+
+  async loadTileData(tile) {
+    const [terrainResult, handData] = await Promise.all([
+      this.loadElevationSurfaceTile(tile),
+      this.renderer.loadTerrainTile("hand", tile.z, tile.x, tile.y)
+    ]);
+    return {
+      ...tile,
+      terrainData: terrainResult.data,
+      elevationSource: terrainResult.source,
+      handData,
+      terrainLoaded: !this.isAllNoData(terrainResult.data),
+      handLoaded: !this.isAllNoData(handData),
+      mapTexture: null
+    };
+  }
+
+  async loadElevationSurfaceTile(tile) {
     try {
       const metadata = await this.renderer.getTerrainMetadata("elevation");
       if (!metadata?.dataset_version) {
@@ -104,7 +173,7 @@ class FloodTerrain3dApp {
       }
       const url = new URL(
         window.floodmapApiUrl(
-          `/v2/terrain/elevation/${metadata.dataset_version}/${this.tile.z}/${this.tile.x}/${this.tile.y}.u16`
+          `/v2/terrain/elevation/${metadata.dataset_version}/${tile.z}/${tile.x}/${tile.y}.u16`
         ),
         window.location.origin
       );
@@ -117,10 +186,28 @@ class FloodTerrain3dApp {
       }
       return { data: new Uint16Array(await response.arrayBuffer()), source: "terrain-v2-elevation" };
     } catch (error) {
-      this.stats.warnings.push(`Falling back to v1 elevation tiles: ${error?.message || String(error)}`);
-      const data = await this.renderer.loadElevationTile(this.tile.z, this.tile.x, this.tile.y);
+      this.stats.warnings.push(`Falling back to v1 elevation tiles for ${tile.key}: ${error?.message || String(error)}`);
+      const data = await this.renderer.loadElevationTile(tile.z, tile.x, tile.y);
       return { data, source: "v1-elevation" };
     }
+  }
+
+  globalElevationStats(tiles) {
+    let minElevationM = Infinity;
+    let maxElevationM = -Infinity;
+    for (const tile of tiles) {
+      const stats = Terrain3dMeshBuilder.elevationStats(this.renderer, tile.terrainData);
+      tile.localMinElevationM = stats.minElevationM;
+      tile.localMaxElevationM = stats.maxElevationM;
+      if (!tile.terrainLoaded) continue;
+      minElevationM = Math.min(minElevationM, stats.minElevationM);
+      maxElevationM = Math.max(maxElevationM, stats.maxElevationM);
+    }
+    if (!Number.isFinite(minElevationM) || !Number.isFinite(maxElevationM) || maxElevationM <= minElevationM) {
+      minElevationM = 0;
+      maxElevationM = 120;
+    }
+    return { minElevationM, maxElevationM };
   }
 
   installEvents() {
@@ -128,30 +215,38 @@ class FloodTerrain3dApp {
     this.exaggerationInput.value = String(this.exaggeration);
     this.waterInput.addEventListener("input", () => {
       this.waterMeters = Number.parseFloat(this.waterInput.value);
-      this.updateWaterMesh();
+      this.updateAllWaterMeshes();
       this.updateControls();
     });
     this.exaggerationInput.addEventListener("input", () => {
-      this.exaggeration = Number.parseFloat(this.exaggerationInput.value);
-      this.updateTerrainGeometry();
-      this.updateWaterMesh();
+      this.exaggeration = Terrain3dMath.clamp(Number.parseFloat(this.exaggerationInput.value), 0.4, 5);
+      this.updateAllTerrainGeometry();
+      this.updateAllWaterMeshes();
       this.updateControls();
     });
     this.canvas.addEventListener("pointerdown", (event) => {
       this.dragging = true;
+      this.panning = event.shiftKey || event.button === 1 || event.button === 2;
       this.lastPointer = { x: event.clientX, y: event.clientY };
       this.canvas.setPointerCapture(event.pointerId);
     });
+    this.canvas.addEventListener("contextmenu", (event) => event.preventDefault());
     this.canvas.addEventListener("pointermove", (event) => {
       if (!this.dragging || !this.lastPointer) return;
       const dx = event.clientX - this.lastPointer.x;
       const dy = event.clientY - this.lastPointer.y;
-      this.rotationZ += dx * 0.006;
-      this.rotationX = Terrain3dMath.clamp(this.rotationX + dy * 0.004, -1.32, -0.35);
+      if (this.panning) {
+        this.panX += dx * 0.006 * this.distance;
+        this.panZ -= dy * 0.006 * this.distance;
+      } else {
+        this.rotationZ += dx * 0.006;
+        this.rotationX = Terrain3dMath.clamp(this.rotationX + dy * 0.004, -1.32, -0.35);
+      }
       this.lastPointer = { x: event.clientX, y: event.clientY };
     });
     this.canvas.addEventListener("pointerup", (event) => {
       this.dragging = false;
+      this.panning = false;
       this.lastPointer = null;
       try {
         this.canvas.releasePointerCapture(event.pointerId);
@@ -159,23 +254,55 @@ class FloodTerrain3dApp {
     });
     this.canvas.addEventListener("wheel", (event) => {
       event.preventDefault();
-      this.distance = Terrain3dMath.clamp(this.distance + event.deltaY * 0.002, 1.7, 6.5);
+      this.distance = Terrain3dMath.clamp(this.distance + event.deltaY * 0.002, 2.2, 9.5);
     }, { passive: false });
     for (const button of document.querySelectorAll("[data-water-preset]")) {
       button.addEventListener("click", () => {
         this.waterMeters = Number.parseFloat(button.dataset.waterPreset || "20");
         this.waterInput.value = String(this.waterMeters);
-        this.updateWaterMesh();
+        this.updateAllWaterMeshes();
         this.updateControls();
       });
     }
+    for (const button of document.querySelectorAll("[data-pan-tile]")) {
+      button.addEventListener("click", () => this.moveWorld(button.dataset.panTile));
+    }
+    window.addEventListener("keydown", (event) => this.handleKey(event));
     this.resetCameraButton?.addEventListener("click", () => this.resetCamera());
+  }
+
+  handleKey(event) {
+    if (event.defaultPrevented) return;
+    const key = event.key.toLowerCase();
+    if (key === "w" || key === "arrowup") this.moveWorld("north");
+    if (key === "s" || key === "arrowdown") this.moveWorld("south");
+    if (key === "a" || key === "arrowleft") this.moveWorld("west");
+    if (key === "d" || key === "arrowright") this.moveWorld("east");
+  }
+
+  async moveWorld(direction) {
+    const deltas = {
+      north: [0, -1],
+      south: [0, 1],
+      west: [-1, 0],
+      east: [1, 0]
+    };
+    const delta = deltas[direction];
+    if (!delta || !this.centerTile) return;
+    this.navigationCount += 1;
+    this.stats.navigationCount = this.navigationCount;
+    this.centerTile = Terrain3dWorld.moveTile(this.centerTile, delta[0], delta[1]);
+    this.panX = 0;
+    this.panZ = 0;
+    await this.loadWorld();
   }
 
   resetCamera() {
     this.rotationX = this.defaultCamera.rotationX;
     this.rotationZ = this.defaultCamera.rotationZ;
     this.distance = this.defaultCamera.distance;
+    this.panX = this.defaultCamera.panX;
+    this.panZ = this.defaultCamera.panZ;
   }
 
   updateControls() {
@@ -183,7 +310,7 @@ class FloodTerrain3dApp {
     this.exaggerationReadout.textContent = `${this.exaggeration.toFixed(1)}x`;
   }
 
-  initGlResources(mapCanvas) {
+  initGlResources() {
     const gl = this.gl;
     this.terrainProgram = this.createProgram(
       Terrain3dShaders.terrainVertex,
@@ -193,8 +320,14 @@ class FloodTerrain3dApp {
       Terrain3dShaders.waterVertex,
       Terrain3dShaders.waterFragment
     );
-    this.mapTexture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, this.mapTexture);
+    gl.clearColor(0.015, 0.025, 0.045, 1);
+    gl.enable(gl.DEPTH_TEST);
+  }
+
+  createTexture(mapCanvas) {
+    const gl = this.gl;
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -202,54 +335,81 @@ class FloodTerrain3dApp {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mapCanvas);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    this.terrainVao = gl.createVertexArray();
-    this.terrainBuffer = gl.createBuffer();
-    this.terrainIndexBuffer = gl.createBuffer();
-    this.waterVao = gl.createVertexArray();
-    this.waterBuffer = gl.createBuffer();
-    this.waterIndexBuffer = gl.createBuffer();
-    gl.clearColor(0.015, 0.025, 0.045, 1);
-    gl.enable(gl.DEPTH_TEST);
+    return texture;
   }
 
-  buildMeshes(terrainData, handData) {
-    this.terrainData = terrainData;
-    this.handData = handData;
-    this.updateTerrainGeometry();
-    this.updateWaterMesh();
+  createSceneTile(tile, globalStats) {
+    const sceneTile = {
+      ...tile,
+      terrainVao: this.gl.createVertexArray(),
+      terrainBuffer: this.gl.createBuffer(),
+      terrainIndexBuffer: this.gl.createBuffer(),
+      waterVao: this.gl.createVertexArray(),
+      waterBuffer: this.gl.createBuffer(),
+      waterIndexBuffer: this.gl.createBuffer(),
+      terrainVertices: null,
+      terrainIndices: null,
+      waterVertices: null,
+      waterIndices: null,
+      waterVertexRatio: 0
+    };
+    this.updateTerrainGeometry(sceneTile, globalStats);
+    return sceneTile;
   }
 
-  updateTerrainGeometry() {
+  updateAllTerrainGeometry() {
+    const globalStats = {
+      minElevationM: this.stats.minElevationM,
+      maxElevationM: this.stats.maxElevationM
+    };
+    for (const tile of this.tiles) this.updateTerrainGeometry(tile, globalStats);
+  }
+
+  updateTerrainGeometry(tile, globalStats) {
     const mesh = Terrain3dMeshBuilder.buildTerrain({
       renderer: this.renderer,
-      terrainData: this.terrainData,
+      terrainData: tile.terrainData,
       meshSize: this.meshSize,
-      exaggeration: this.exaggeration
+      exaggeration: this.exaggeration,
+      originX: tile.originX,
+      originZ: tile.originZ,
+      tileScale: tile.tileScale,
+      minElevationM: globalStats.minElevationM,
+      maxElevationM: globalStats.maxElevationM
     });
-    this.minElevationM = mesh.minElevationM;
-    this.maxElevationM = mesh.maxElevationM;
-    this.stats.minElevationM = Number(this.minElevationM.toFixed(2));
-    this.stats.maxElevationM = Number(this.maxElevationM.toFixed(2));
-    this.terrainVertices = mesh.vertices;
-    this.terrainIndices = mesh.indices;
-    this.uploadTerrain();
+    tile.terrainVertices = mesh.vertices;
+    tile.terrainIndices = mesh.indices;
+    this.uploadTerrain(tile);
   }
 
-  updateWaterMesh() {
-    if (!this.terrainVertices || !this.handData) return;
+  updateAllWaterMeshes() {
+    let visible = false;
+    let ratioSum = 0;
+    for (const tile of this.tiles) {
+      this.updateWaterMesh(tile);
+      visible = visible || Boolean(tile.waterIndices?.length);
+      ratioSum += tile.waterVertexRatio || 0;
+    }
+    this.stats.waterVisible = visible;
+    this.stats.waterVertexRatio = this.tiles.length
+      ? Number((ratioSum / this.tiles.length).toFixed(4))
+      : 0;
+    this.publish(this.stats.ready ? "Ready" : "Building water");
+  }
+
+  updateWaterMesh(tile) {
+    if (!tile.terrainVertices || !tile.handData) return;
     const mesh = Terrain3dMeshBuilder.buildWater({
       renderer: this.renderer,
-      handData: this.handData,
-      terrainVertices: this.terrainVertices,
+      handData: tile.handData,
+      terrainVertices: tile.terrainVertices,
       meshSize: this.meshSize,
       waterMeters: this.waterMeters
     });
-    this.waterVertices = mesh.vertices;
-    this.waterIndices = mesh.indices;
-    this.stats.waterVisible = mesh.waterVisible;
-    this.stats.waterVertexRatio = mesh.waterVertexRatio;
-    this.uploadWater();
-    this.publish(this.stats.ready ? "Ready" : "Building water");
+    tile.waterVertices = mesh.vertices;
+    tile.waterIndices = mesh.indices;
+    tile.waterVertexRatio = mesh.waterVertexRatio;
+    this.uploadWater(tile);
   }
 
   isAllNoData(values) {
@@ -259,24 +419,24 @@ class FloodTerrain3dApp {
     return true;
   }
 
-  uploadTerrain() {
+  uploadTerrain(tile) {
     const gl = this.gl;
-    gl.bindVertexArray(this.terrainVao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.terrainBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, this.terrainVertices, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.terrainIndexBuffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.terrainIndices, gl.STATIC_DRAW);
+    gl.bindVertexArray(tile.terrainVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, tile.terrainBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, tile.terrainVertices, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tile.terrainIndexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, tile.terrainIndices, gl.STATIC_DRAW);
     this.configureTerrainAttributes();
     gl.bindVertexArray(null);
   }
 
-  uploadWater() {
+  uploadWater(tile) {
     const gl = this.gl;
-    gl.bindVertexArray(this.waterVao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.waterBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, this.waterVertices, gl.DYNAMIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.waterIndexBuffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.waterIndices, gl.DYNAMIC_DRAW);
+    gl.bindVertexArray(tile.waterVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, tile.waterBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, tile.waterVertices, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tile.waterIndexBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, tile.waterIndices, gl.DYNAMIC_DRAW);
     this.configureWaterAttributes();
     gl.bindVertexArray(null);
   }
@@ -297,16 +457,19 @@ class FloodTerrain3dApp {
 
   configureWaterAttributes() {
     const gl = this.gl;
-    const stride = 6 * 4;
+    const stride = 8 * 4;
     const pos = gl.getAttribLocation(this.waterProgram, "a_pos");
     const uv = gl.getAttribLocation(this.waterProgram, "a_uv");
     const depth = gl.getAttribLocation(this.waterProgram, "a_depth");
+    const flow = gl.getAttribLocation(this.waterProgram, "a_flow");
     gl.enableVertexAttribArray(pos);
     gl.vertexAttribPointer(pos, 3, gl.FLOAT, false, stride, 0);
     gl.enableVertexAttribArray(uv);
     gl.vertexAttribPointer(uv, 2, gl.FLOAT, false, stride, 3 * 4);
     gl.enableVertexAttribArray(depth);
     gl.vertexAttribPointer(depth, 1, gl.FLOAT, false, stride, 5 * 4);
+    gl.enableVertexAttribArray(flow);
+    gl.vertexAttribPointer(flow, 2, gl.FLOAT, false, stride, 6 * 4);
   }
 
   render(time) {
@@ -317,26 +480,29 @@ class FloodTerrain3dApp {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     const matrix = this.viewProjectionMatrix();
 
-    gl.useProgram(this.terrainProgram);
-    gl.bindVertexArray(this.terrainVao);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.mapTexture);
-    gl.uniform1i(gl.getUniformLocation(this.terrainProgram, "u_map"), 0);
-    gl.uniformMatrix4fv(gl.getUniformLocation(this.terrainProgram, "u_matrix"), false, matrix);
-    gl.uniform3f(gl.getUniformLocation(this.terrainProgram, "u_light"), -0.34, 0.86, 0.36);
-    gl.uniform3f(gl.getUniformLocation(this.terrainProgram, "u_fogColor"), 0.015, 0.025, 0.045);
-    gl.drawElements(gl.TRIANGLES, this.terrainIndices.length, gl.UNSIGNED_INT, 0);
+    for (const tile of this.tiles) {
+      gl.useProgram(this.terrainProgram);
+      gl.bindVertexArray(tile.terrainVao);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, tile.mapTexture);
+      gl.uniform1i(gl.getUniformLocation(this.terrainProgram, "u_map"), 0);
+      gl.uniformMatrix4fv(gl.getUniformLocation(this.terrainProgram, "u_matrix"), false, matrix);
+      gl.uniform3f(gl.getUniformLocation(this.terrainProgram, "u_light"), -0.34, 0.86, 0.36);
+      gl.uniform3f(gl.getUniformLocation(this.terrainProgram, "u_fogColor"), 0.015, 0.025, 0.045);
+      gl.drawElements(gl.TRIANGLES, tile.terrainIndices.length, gl.UNSIGNED_INT, 0);
+    }
 
-    if (this.waterIndices?.length) {
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    for (const tile of this.tiles) {
+      if (!tile.waterIndices?.length) continue;
       gl.useProgram(this.waterProgram);
-      gl.bindVertexArray(this.waterVao);
+      gl.bindVertexArray(tile.waterVao);
       gl.uniformMatrix4fv(gl.getUniformLocation(this.waterProgram, "u_matrix"), false, matrix);
       gl.uniform1f(gl.getUniformLocation(this.waterProgram, "u_time"), (time - this.startedAt) / 1000);
-      gl.drawElements(gl.TRIANGLES, this.waterIndices.length, gl.UNSIGNED_INT, 0);
-      gl.disable(gl.BLEND);
+      gl.drawElements(gl.TRIANGLES, tile.waterIndices.length, gl.UNSIGNED_INT, 0);
     }
+    gl.disable(gl.BLEND);
     gl.bindVertexArray(null);
     this.frameCount += 1;
     this.stats.frameCount = this.frameCount;
@@ -347,12 +513,13 @@ class FloodTerrain3dApp {
 
   viewProjectionMatrix() {
     const aspect = this.canvas.width / Math.max(1, this.canvas.height);
-    const proj = Mat4.perspective(Math.PI / 4.5, aspect, 0.05, 50);
+    const proj = Mat4.perspective(Math.PI / 4.5, aspect, 0.05, 80);
     let view = Mat4.identity();
-    view = Mat4.multiply(view, Mat4.translate(0, -0.10, -this.distance));
+    view = Mat4.multiply(view, Mat4.translate(this.panX, -0.12, -this.distance));
     view = Mat4.multiply(view, Mat4.rotateX(this.rotationX));
     view = Mat4.multiply(view, Mat4.rotateY(0.0));
     view = Mat4.multiply(view, Mat4.rotateZ(this.rotationZ));
+    view = Mat4.multiply(view, Mat4.translate(0, 0, this.panZ));
     return Mat4.multiply(proj, view);
   }
 
@@ -363,6 +530,19 @@ class FloodTerrain3dApp {
     if (this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width;
       this.canvas.height = height;
+    }
+  }
+
+  destroyTiles(tiles) {
+    const gl = this.gl;
+    for (const tile of tiles || []) {
+      if (tile.mapTexture) gl.deleteTexture(tile.mapTexture);
+      if (tile.terrainVao) gl.deleteVertexArray(tile.terrainVao);
+      if (tile.waterVao) gl.deleteVertexArray(tile.waterVao);
+      if (tile.terrainBuffer) gl.deleteBuffer(tile.terrainBuffer);
+      if (tile.terrainIndexBuffer) gl.deleteBuffer(tile.terrainIndexBuffer);
+      if (tile.waterBuffer) gl.deleteBuffer(tile.waterBuffer);
+      if (tile.waterIndexBuffer) gl.deleteBuffer(tile.waterIndexBuffer);
     }
   }
 

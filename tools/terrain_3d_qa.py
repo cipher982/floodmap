@@ -103,6 +103,8 @@ async def wait_for_terrain_ready(page, timeout_ms: int) -> None:
             stats?.handLoaded &&
             stats?.basemapCaptured &&
             stats?.waterVisible &&
+            stats?.tileCount >= 9 &&
+            stats?.tilesLoaded >= 9 &&
             stats?.frameCount > 8
           );
         }
@@ -218,13 +220,37 @@ async def run_terrain_3d_qa(
             }
             """
         )
+        center_before = await page.evaluate(
+            "() => window.floodTerrain3d.stats.centerTile"
+        )
 
         canvas = page.locator("#terrain-3d-canvas")
         first = screenshots_dir / "terrain-3d-first.png"
         second = screenshots_dir / "terrain-3d-animation.png"
+        moved = screenshots_dir / "terrain-3d-moved.png"
         await canvas.screenshot(path=str(first))
         await page.wait_for_timeout(900)
         await canvas.screenshot(path=str(second))
+        await page.locator('[data-pan-tile="east"]').click()
+        await page.wait_for_function(
+            """
+            (centerBefore) => {
+              const stats = window.floodTerrain3d?.stats;
+              return Boolean(
+                stats?.ready &&
+                stats?.tilesLoaded >= 9 &&
+                stats?.navigationCount >= 1 &&
+                stats?.centerTile?.x !== centerBefore?.x
+              );
+            }
+            """,
+            arg=center_before,
+            timeout=args.timeout_ms,
+        )
+        await canvas.screenshot(path=str(moved))
+        center_after = await page.evaluate(
+            "() => window.floodTerrain3d.stats.centerTile"
+        )
         stats = await page.evaluate("() => window.floodTerrain3d.stats")
         await page.goto(
             add_query_param(url, "debug=1"),
@@ -247,19 +273,25 @@ async def run_terrain_3d_qa(
     visual_metrics["debug_panel_visible_when_enabled"] = (
         debug_panel_visible_when_enabled
     )
+    visual_metrics["center_tile_moved"] = center_before != center_after
     visual_metrics.update(
         {f"animation_{k}": v for k, v in image_change_metrics(first, second).items()}
     )
+    visual_metrics.update(
+        {f"navigation_{k}": v for k, v in image_change_metrics(first, moved).items()}
+    )
 
     failures = []
-    if stats.get("visualModel") != "map-draped-terrain-hand-water-v1":
+    if stats.get("visualModel") != "map-draped-terrain-hand-water-world-v2":
         failures.append("Unexpected or missing 3D visual model marker")
     if not stats.get("terrainLoaded"):
         failures.append("Terrain/elevation tile did not load")
     if stats.get("elevationSource") != "terrain-v2-elevation":
         failures.append("3D terrain did not use ORNL terrain-v2 elevation")
     if stats.get("meshSize", 0) < 192:
-        failures.append("3D terrain mesh resolution is below the polished baseline")
+        failures.append("3D terrain mesh resolution is below the world baseline")
+    if stats.get("tileCount", 0) < 9 or stats.get("tilesLoaded", 0) < 9:
+        failures.append("3D scene did not load the expected multi-tile world")
     if not stats.get("handLoaded"):
         failures.append("HAND tile did not load")
     if not stats.get("basemapCaptured"):
@@ -274,6 +306,10 @@ async def run_terrain_3d_qa(
         failures.append("3D canvas appears mostly blank/dark")
     if visual_metrics["animation_changed_pixel_ratio"] < 0.0005:
         failures.append("3D water animation did not visibly change frames")
+    if not visual_metrics["center_tile_moved"]:
+        failures.append("3D navigation did not move the world center tile")
+    if visual_metrics["navigation_changed_pixel_ratio"] < 0.01:
+        failures.append("3D navigation did not visibly change the terrain scene")
     if visual_metrics["canvas_width_ratio"] < 0.92:
         failures.append("3D canvas is not the default full-stage presentation")
     if visual_metrics["canvas_height_ratio"] < 0.92:
@@ -300,7 +336,11 @@ async def run_terrain_3d_qa(
     return Terrain3dQaResult(
         pass_=not failures,
         url=url,
-        screenshots={"first": str(first), "animation": str(second)},
+        screenshots={
+            "first": str(first),
+            "animation": str(second),
+            "moved": str(moved),
+        },
         stats=stats,
         visual_metrics=visual_metrics,
         console_errors=console_errors,
@@ -322,6 +362,7 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- URL: `{result.url}`",
         f"- Visual model: `{result.stats.get('visualModel')}`",
         f"- Tile: `{result.stats.get('tile')}`",
+        f"- Tiles loaded: `{result.stats.get('tilesLoaded')}/{result.stats.get('tileCount')}`",
         f"- HAND dataset: `{result.stats.get('handDatasetVersion')}`",
         f"- Water vertex ratio: `{result.stats.get('waterVertexRatio')}`",
         f"- Unique sample colors: `{result.visual_metrics.get('unique_sample_colors')}`",
@@ -329,8 +370,10 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- Canvas width ratio: `{result.visual_metrics.get('canvas_width_ratio')}`",
         f"- Debug panel visible: `{result.visual_metrics.get('debug_panel_visible')}`",
         f"- Animation changed pixel ratio: `{result.visual_metrics.get('animation_changed_pixel_ratio')}`",
+        f"- Navigation changed pixel ratio: `{result.visual_metrics.get('navigation_changed_pixel_ratio')}`",
         f"- First screenshot: `{result.screenshots['first']}`",
         f"- Animation screenshot: `{result.screenshots['animation']}`",
+        f"- Moved screenshot: `{result.screenshots['moved']}`",
     ]
     if result.failures:
         lines.extend(

@@ -111,6 +111,73 @@ class Terrain3dBasemapCapture {
             ],
             "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 12, 2.2]
           }
+        },
+        {
+          id: "waterway-labels",
+          type: "symbol",
+          source: "vector-tiles",
+          "source-layer": "waterway",
+          minzoom: 10,
+          filter: ["has", "name"],
+          layout: {
+            "symbol-placement": "line",
+            "text-field": ["coalesce", ["get", "name:en"], ["get", "name"]],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": 11,
+            "text-letter-spacing": 0,
+            "text-rotation-alignment": "map"
+          },
+          paint: {
+            "text-color": "#2b7fa8",
+            "text-halo-color": "rgba(255, 255, 255, 0.88)",
+            "text-halo-width": 1.2
+          }
+        },
+        {
+          id: "road-labels",
+          type: "symbol",
+          source: "vector-tiles",
+          "source-layer": "transportation_name",
+          minzoom: 10,
+          filter: ["any", ["has", "name"], ["has", "ref"]],
+          layout: {
+            "symbol-placement": "line",
+            "text-field": ["coalesce", ["get", "name:en"], ["get", "name"], ["get", "ref"]],
+            "text-font": ["Noto Sans Regular"],
+            "text-size": ["match", ["get", "class"], ["motorway", "trunk"], 11, ["primary", "secondary"], 10, 9],
+            "text-letter-spacing": 0,
+            "text-rotation-alignment": "map"
+          },
+          paint: {
+            "text-color": "#4b5563",
+            "text-halo-color": "rgba(255, 255, 255, 0.92)",
+            "text-halo-width": 1.4
+          }
+        },
+        {
+          id: "place-labels",
+          type: "symbol",
+          source: "vector-tiles",
+          "source-layer": "place",
+          filter: [
+            "match",
+            ["get", "class"],
+            ["city", "town", "village", "suburb", "neighbourhood"],
+            true,
+            false
+          ],
+          layout: {
+            "text-field": ["coalesce", ["get", "name:en"], ["get", "name"]],
+            "text-font": ["Noto Sans Bold"],
+            "text-size": ["match", ["get", "class"], "city", 15, "town", 13, "village", 12, "suburb", 11, 10],
+            "text-letter-spacing": 0,
+            "text-transform": ["match", ["get", "class"], ["city", "town"], "uppercase", "none"]
+          },
+          paint: {
+            "text-color": "#323946",
+            "text-halo-color": "rgba(255, 255, 255, 0.9)",
+            "text-halo-width": 1.4
+          }
         }
       ]
     };

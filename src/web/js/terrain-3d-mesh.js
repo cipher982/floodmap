@@ -4,11 +4,27 @@
  */
 
 class Terrain3dMeshBuilder {
-  static buildTerrain({ renderer, terrainData, meshSize, exaggeration }) {
-    const { minElevationM, maxElevationM } = Terrain3dMeshBuilder.elevationStats(
+  static buildTerrain({
+    renderer,
+    terrainData,
+    meshSize,
+    exaggeration,
+    originX = 0,
+    originZ = 0,
+    tileScale = 2.4,
+    minElevationM: providedMinElevationM = null,
+    maxElevationM: providedMaxElevationM = null
+  }) {
+    const localStats = Terrain3dMeshBuilder.elevationStats(
       renderer,
       terrainData
     );
+    const minElevationM = Number.isFinite(providedMinElevationM)
+      ? providedMinElevationM
+      : localStats.minElevationM;
+    const maxElevationM = Number.isFinite(providedMaxElevationM)
+      ? providedMaxElevationM
+      : localStats.maxElevationM;
     const n = meshSize;
     const vertices = new Float32Array(n * n * 8);
     const heights = new Float32Array(n * n);
@@ -42,9 +58,9 @@ class Terrain3dMeshBuilder {
         const down = heights[Math.min(n - 1, y + 1) * n + x];
         const normal = Terrain3dMeshBuilder.normalize([left - right, 2.8 / n, up - down]);
         const o = i * 8;
-        vertices[o] = (x / (n - 1) - 0.5) * 2.4;
+        vertices[o] = originX + (x / (n - 1) - 0.5) * tileScale;
         vertices[o + 1] = heights[i];
-        vertices[o + 2] = (y / (n - 1) - 0.5) * -2.4;
+        vertices[o + 2] = originZ + (y / (n - 1) - 0.5) * -tileScale;
         vertices[o + 3] = x / (n - 1);
         vertices[o + 4] = y / (n - 1);
         vertices[o + 5] = normal[0];
@@ -62,28 +78,39 @@ class Terrain3dMeshBuilder {
 
   static buildWater({ renderer, handData, terrainVertices, meshSize, waterMeters }) {
     const n = meshSize;
-    const vertices = new Float32Array(n * n * 6);
+    const vertices = new Float32Array(n * n * 8);
     const wet = new Uint8Array(n * n);
     let wetVertices = 0;
+    const spillMeters = Math.max(0.6, Math.min(12, waterMeters * 0.08));
     for (let y = 0; y < n; y += 1) {
       for (let x = 0; x < n; x += 1) {
         const i = y * n + x;
         const srcX = x / (n - 1) * 255;
         const srcY = y / (n - 1) * 255;
         const hand = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, srcY);
+        const handLeft = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.max(0, srcX - 1.5), srcY);
+        const handRight = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.min(255, srcX + 1.5), srcY);
+        const handUp = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.max(0, srcY - 1.5));
+        const handDown = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.min(255, srcY + 1.5));
+        const flow = Terrain3dMeshBuilder.flowDirection(handLeft, handRight, handUp, handDown);
         const terrainO = i * 8;
         const depth = Number.isFinite(hand) ? Math.max(0, waterMeters - hand) : 0;
-        const depthT = Math.min(1, depth / Math.max(1, waterMeters * 0.18));
-        const isWet = depth > 0;
+        const spillDepth = Number.isFinite(hand)
+          ? Math.max(0, 1 - Math.max(0, hand - waterMeters) / spillMeters) * 0.18
+          : 0;
+        const depthT = Math.min(1, depth / Math.max(1, waterMeters * 0.18)) || spillDepth;
+        const isWet = depth > 0 || spillDepth > 0.015;
         if (isWet) wetVertices += 1;
         wet[i] = isWet ? 1 : 0;
-        const o = i * 6;
+        const o = i * 8;
         vertices[o] = terrainVertices[terrainO];
         vertices[o + 1] = terrainVertices[terrainO + 1] + 0.018 + depthT * 0.035;
         vertices[o + 2] = terrainVertices[terrainO + 2];
         vertices[o + 3] = x / (n - 1);
         vertices[o + 4] = y / (n - 1);
         vertices[o + 5] = depthT;
+        vertices[o + 6] = flow[0];
+        vertices[o + 7] = flow[1];
       }
     }
     const indices = [];
@@ -197,6 +224,21 @@ class Terrain3dMeshBuilder {
   static normalize(v) {
     const len = Math.hypot(v[0], v[1], v[2]) || 1;
     return [v[0] / len, v[1] / len, v[2] / len];
+  }
+
+  static flowDirection(left, right, up, down) {
+    const dx = Terrain3dMeshBuilder.safeDelta(left, right);
+    const dy = Terrain3dMeshBuilder.safeDelta(up, down);
+    const x = -dx;
+    const y = -dy;
+    const len = Math.hypot(x, y);
+    if (!Number.isFinite(len) || len < 0.0001) return [0.72, 0.36];
+    return [x / len, y / len];
+  }
+
+  static safeDelta(a, b) {
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+    return b - a;
   }
 }
 

@@ -4,6 +4,7 @@ import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const { Terrain3dMath, Mat4 } = require("./terrain-3d-math.js");
+const { Terrain3dWorld } = require("./terrain-3d-world.js");
 const { Terrain3dMeshBuilder } = require("./terrain-3d-mesh.js");
 const { Terrain3dShaders } = require("./terrain-3d-shaders.js");
 
@@ -33,7 +34,22 @@ test("shader bundle exposes terrain and water programs", () => {
   assert.match(Terrain3dShaders.terrainVertex, /#version 300 es/);
   assert.match(Terrain3dShaders.terrainFragment, /sampler2D u_map/);
   assert.match(Terrain3dShaders.waterVertex, /a_depth/);
+  assert.match(Terrain3dShaders.waterVertex, /a_flow/);
   assert.match(Terrain3dShaders.waterFragment, /wave/);
+  assert.match(Terrain3dShaders.waterFragment, /v_flow/);
+});
+
+test("terrain world planner builds a centered tile grid", () => {
+  const centerTile = { z: 12, x: 1060, y: 1642 };
+  const world = Terrain3dWorld.buildGrid({ centerTile, radius: 1, tileScale: 1.38 });
+
+  assert.equal(world.tiles.length, 9);
+  assert.deepEqual(world.centerTile, centerTile);
+  assert.equal(world.tiles[0].dx, -1);
+  assert.equal(world.tiles[0].dy, -1);
+  assert.equal(world.tiles[4].originX, 0);
+  assert.ok(Math.abs(world.tiles[4].originZ) < 0.000001);
+  assert.equal(Terrain3dWorld.tileKey(centerTile), "12/1060/1642");
 });
 
 test("terrain mesh builder returns stable grid geometry", () => {
@@ -77,5 +93,6 @@ test("water mesh builder uses HAND as the initial wet threshold", () => {
 
   assert.equal(mesh.waterVisible, true);
   assert.equal(mesh.waterVertexRatio, 0.0625);
+  assert.equal(mesh.vertices.length, 4 * 4 * 8);
   assert.ok(mesh.indices.length > 0);
 });

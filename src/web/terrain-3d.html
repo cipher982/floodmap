@@ -116,6 +116,12 @@
       display: flex;
       gap: 8px;
     }
+    .nav-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
     button {
       flex: 1 1 0;
       border: 1px solid rgba(148, 163, 184, 0.25);
@@ -205,6 +211,12 @@
         <button type="button" data-water-preset="35">Flood</button>
         <button type="button" id="reset-camera">Reset view</button>
       </div>
+      <div class="nav-row" aria-label="Move across the map">
+        <button type="button" data-pan-tile="west">West</button>
+        <button type="button" data-pan-tile="north">North</button>
+        <button type="button" data-pan-tile="east">East</button>
+        <button type="button" data-pan-tile="south">South</button>
+      </div>
     </section>
     <section class="debug-panel" aria-label="3D debug stats">
       <pre id="terrain-stats">{}</pre>
@@ -253,6 +265,7 @@
   </script>
   <script src="static/js/elevation-renderer.js?v=__FLOODMAP_ASSET_VERSION__"></script>
   <script src="static/js/terrain-3d-math.js?v=__FLOODMAP_ASSET_VERSION__"></script>
+  <script src="static/js/terrain-3d-world.js?v=__FLOODMAP_ASSET_VERSION__"></script>
   <script src="static/js/terrain-3d-shaders.js?v=__FLOODMAP_ASSET_VERSION__"></script>
   <script src="static/js/terrain-3d-basemap.js?v=__FLOODMAP_ASSET_VERSION__"></script>
   <script src="static/js/terrain-3d-mesh.js?v=__FLOODMAP_ASSET_VERSION__"></script>
