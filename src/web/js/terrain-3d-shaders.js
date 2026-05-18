@@ -34,13 +34,16 @@ in vec3 v_world;
 out vec4 fragColor;
 void main() {
   vec3 base = texture(u_map, v_uv).rgb;
-  float light = clamp(dot(normalize(v_normal), normalize(u_light)) * 0.38 + 0.82, 0.62, 1.16);
+  base = clamp((base - vec3(0.46)) * 1.18 + vec3(0.50), 0.0, 1.0);
+  float ink = 1.0 - smoothstep(0.18, 0.58, dot(base, vec3(0.299, 0.587, 0.114)));
+  float light = clamp(dot(normalize(v_normal), normalize(u_light)) * 0.30 + 0.86, 0.68, 1.08);
   float heightTint = smoothstep(-0.18, 0.42, v_height);
   vec3 color = base * light;
-  color = mix(color, color + vec3(0.05, 0.045, 0.03), heightTint * 0.20);
-  color = mix(color, vec3(0.78, 0.84, 0.90), smoothstep(0.58, 1.10, v_height) * 0.10);
+  color = mix(color, base * 0.54, ink * 0.72);
+  color = mix(color, color + vec3(0.026, 0.028, 0.018), heightTint * 0.12);
+  color = mix(color, vec3(0.70, 0.78, 0.84), smoothstep(0.66, 1.12, v_height) * 0.05);
   float edgeFog = smoothstep(0.94, 1.45, length(v_world.xz));
-  color = mix(color, u_fogColor, edgeFog * 0.38);
+  color = mix(color, u_fogColor, edgeFog * 0.30);
   fragColor = vec4(color, 1.0);
 }
 `,
@@ -86,12 +89,12 @@ void main() {
   float current = sin(along * 118.0 - u_time * 6.4 + sin(cross * 44.0) * 0.8) * 0.5 + 0.5;
   float stripe = smoothstep(0.62, 1.0, current);
   float foam = smoothstep(0.76, 1.0, stripe) * smoothstep(0.02, 0.22, v_depth);
-  vec3 shallow = vec3(0.28, 0.74, 0.92);
-  vec3 deep = vec3(0.03, 0.20, 0.55);
+  vec3 shallow = vec3(0.15, 0.78, 1.0);
+  vec3 deep = vec3(0.02, 0.17, 0.70);
   vec3 color = mix(shallow, deep, clamp(v_depth, 0.0, 1.0));
-  color = mix(color, vec3(0.86, 0.98, 1.0), foam * (0.20 + v_depth * 0.18));
-  color += w * vec3(0.025, 0.06, 0.08);
-  float alpha = clamp(0.28 + v_depth * 0.32 + foam * 0.12, 0.22, 0.74);
+  color = mix(color, vec3(0.90, 0.99, 1.0), foam * (0.28 + v_depth * 0.24));
+  color += w * vec3(0.035, 0.08, 0.12);
+  float alpha = clamp(0.34 + v_depth * 0.38 + foam * 0.16, 0.28, 0.82);
   fragColor = vec4(color, alpha);
 }
 `,
@@ -116,7 +119,7 @@ void main() {
   v_strength = a_strength;
   v_phase = pulse;
   gl_Position = u_matrix * vec4(pos, 1.0);
-  gl_PointSize = 1.8 + a_strength * 6.0;
+  gl_PointSize = 3.2 + a_strength * 10.0;
 }
 `,
 
@@ -131,8 +134,8 @@ void main() {
   if (d > 0.5) discard;
   float core = smoothstep(0.5, 0.08, d);
   float tail = smoothstep(0.96, 0.18, v_phase);
-  vec3 color = mix(vec3(0.20, 0.70, 1.0), vec3(0.88, 0.98, 1.0), core);
-  float alpha = core * tail * (0.24 + v_strength * 0.62);
+  vec3 color = mix(vec3(0.02, 0.50, 1.0), vec3(0.88, 0.99, 1.0), core);
+  float alpha = core * tail * (0.36 + v_strength * 0.72);
   fragColor = vec4(color, alpha);
 }
 `

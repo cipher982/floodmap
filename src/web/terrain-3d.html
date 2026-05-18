@@ -215,7 +215,7 @@
     <header class="topbar">
       <div class="brand">
         <h1>FloodMap 3D</h1>
-        <p>Real streets and terrain, raised into an interactive flood view.</p>
+        <p>Real streets, real terrain, and animated water across the map.</p>
       </div>
       <form id="terrain-place-search" class="place-search" role="search">
         <input id="terrain-place-query" type="search" placeholder="Search city or ZIP" autocomplete="off">
@@ -225,11 +225,11 @@
     </header>
     <section class="controls" aria-label="3D terrain controls">
       <label for="water-level">
-        <span>Water</span>
+        <span>Floodwater</span>
         <span id="water-readout">22.0m</span>
       </label>
       <input id="water-level" type="range" min="0" max="1000" step="1" value="22">
-      <div class="readout"><span>low</span><span>high</span></div>
+      <div class="readout"><span>creeks</span><span>everywhere</span></div>
 
       <label for="exaggeration">
         <span>Terrain</span>
@@ -237,8 +237,8 @@
       </label>
       <input id="exaggeration" type="range" min="0.4" max="5" step="0.1" value="2">
       <div class="button-row">
-        <button type="button" data-water-preset="8">Creeks</button>
-        <button type="button" data-water-preset="35">Flood</button>
+        <button type="button" data-water-preset="8">Fill creeks</button>
+        <button type="button" data-water-preset="35">Big flood</button>
         <button type="button" id="reset-camera">Reset view</button>
       </div>
       <div class="nav-row" aria-label="Move across the map">

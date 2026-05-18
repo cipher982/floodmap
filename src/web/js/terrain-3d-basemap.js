@@ -58,42 +58,42 @@ class Terrain3dBasemapCapture {
         }
       },
       layers: [
-        { id: "background", type: "background", paint: { "background-color": "#f2f0e9" } },
+        { id: "background", type: "background", paint: { "background-color": "#eef2e8" } },
         {
           id: "landcover-wood",
           type: "fill",
           source: "vector-tiles",
           "source-layer": "landcover",
           filter: ["==", ["get", "class"], "wood"],
-          paint: { "fill-color": "rgba(155, 194, 149, 0.58)" }
+          paint: { "fill-color": "rgba(113, 165, 112, 0.66)" }
         },
         {
           id: "landuse",
           type: "fill",
           source: "vector-tiles",
           "source-layer": "landuse",
-          paint: { "fill-color": "rgba(214, 211, 202, 0.28)" }
+          paint: { "fill-color": "rgba(205, 203, 194, 0.32)" }
         },
         {
           id: "park",
           type: "fill",
           source: "vector-tiles",
           "source-layer": "park",
-          paint: { "fill-color": "rgba(158, 204, 150, 0.42)" }
+          paint: { "fill-color": "rgba(130, 194, 128, 0.48)" }
         },
         {
           id: "water",
           type: "fill",
           source: "vector-tiles",
           "source-layer": "water",
-          paint: { "fill-color": "rgba(71, 143, 190, 0.78)" }
+          paint: { "fill-color": "rgba(42, 137, 202, 0.88)" }
         },
         {
           id: "waterway",
           type: "line",
           source: "vector-tiles",
           "source-layer": "waterway",
-          paint: { "line-color": "rgba(38, 126, 181, 0.88)", "line-width": 1.4 }
+          paint: { "line-color": "rgba(26, 118, 190, 0.95)", "line-width": 2.2 }
         },
         {
           id: "roads",
@@ -104,13 +104,13 @@ class Terrain3dBasemapCapture {
             "line-color": [
               "match",
               ["get", "class"],
-              "motorway", "#6b7280",
-              "trunk", "#777f89",
-              "primary", "#8a929d",
-              "secondary", "#a6adb6",
-              "#c2c7cf"
+              "motorway", "#4b5563",
+              "trunk", "#5f6875",
+              "primary", "#747d8a",
+              "secondary", "#9099a6",
+              "#adb4be"
             ],
-            "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 12, 2.2]
+            "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.9, 12, 3.0]
           }
         },
         {
@@ -124,14 +124,14 @@ class Terrain3dBasemapCapture {
             "symbol-placement": "line",
             "text-field": ["coalesce", ["get", "name:en"], ["get", "name"]],
             "text-font": ["Noto Sans Regular"],
-            "text-size": 11,
+            "text-size": 15,
             "text-letter-spacing": 0,
             "text-rotation-alignment": "map"
           },
           paint: {
-            "text-color": "#2b7fa8",
-            "text-halo-color": "rgba(255, 255, 255, 0.88)",
-            "text-halo-width": 1.2
+            "text-color": "#0369a1",
+            "text-halo-color": "rgba(255, 255, 255, 0.96)",
+            "text-halo-width": 2.0
           }
         },
         {
@@ -145,14 +145,14 @@ class Terrain3dBasemapCapture {
             "symbol-placement": "line",
             "text-field": ["coalesce", ["get", "name:en"], ["get", "name"], ["get", "ref"]],
             "text-font": ["Noto Sans Regular"],
-            "text-size": ["match", ["get", "class"], ["motorway", "trunk"], 11, ["primary", "secondary"], 10, 9],
+            "text-size": ["match", ["get", "class"], ["motorway", "trunk"], 14, ["primary", "secondary"], 12, 10],
             "text-letter-spacing": 0,
             "text-rotation-alignment": "map"
           },
           paint: {
-            "text-color": "#4b5563",
-            "text-halo-color": "rgba(255, 255, 255, 0.92)",
-            "text-halo-width": 1.4
+            "text-color": "#1f2937",
+            "text-halo-color": "rgba(255, 255, 255, 0.96)",
+            "text-halo-width": 2.0
           }
         },
         {
@@ -170,14 +170,14 @@ class Terrain3dBasemapCapture {
           layout: {
             "text-field": ["coalesce", ["get", "name:en"], ["get", "name"]],
             "text-font": ["Noto Sans Bold"],
-            "text-size": ["match", ["get", "class"], "city", 15, "town", 13, "village", 12, "suburb", 11, 10],
+            "text-size": ["match", ["get", "class"], "city", 22, "town", 18, "village", 15, "suburb", 13, 12],
             "text-letter-spacing": 0,
             "text-transform": ["match", ["get", "class"], ["city", "town"], "uppercase", "none"]
           },
           paint: {
-            "text-color": "#323946",
-            "text-halo-color": "rgba(255, 255, 255, 0.9)",
-            "text-halo-width": 1.4
+            "text-color": "#111827",
+            "text-halo-color": "rgba(255, 255, 255, 0.98)",
+            "text-halo-width": 2.4
           }
         }
       ]
