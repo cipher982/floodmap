@@ -6,7 +6,8 @@
  */
 
 class Terrain3dFloodPlayer {
-  constructor({ setValue, min = 0, max = 160, periodMs = 12000, minIntervalMs = 90 }) {
+  constructor({ getValue = () => 0, setValue, min = 0, max = 160, periodMs = 12000, minIntervalMs = 90 }) {
+    this.getValue = getValue;
     this.setValue = setValue;
     this.min = min;
     this.max = max;
@@ -29,7 +30,9 @@ class Terrain3dFloodPlayer {
 
   play(now) {
     this.playing = true;
-    this.startedAt = now;
+    const range = Math.max(1, this.max - this.min);
+    const currentT = Math.max(0, Math.min(1, (Number(this.getValue()) - this.min) / range));
+    this.startedAt = now - Terrain3dFloodPlayer.inverseSmoothstep(currentT) * this.periodMs * 0.78;
     this.lastTickAt = -Infinity;
     this.lastValue = null;
   }
@@ -56,6 +59,18 @@ class Terrain3dFloodPlayer {
   static smoothstep(value) {
     const t = Math.max(0, Math.min(1, value));
     return t * t * (3 - 2 * t);
+  }
+
+  static inverseSmoothstep(value) {
+    const target = Math.max(0, Math.min(1, value));
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 16; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (Terrain3dFloodPlayer.smoothstep(mid) < target) lo = mid;
+      else hi = mid;
+    }
+    return (lo + hi) / 2;
   }
 }
 

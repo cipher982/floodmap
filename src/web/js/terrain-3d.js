@@ -51,6 +51,7 @@ class FloodTerrain3dApp {
     this.startedAt = performance.now();
     this.tiles = [];
     this.floodPlayer = new Terrain3dFloodPlayer({
+      getValue: () => this.waterMeters,
       setValue: (value) => this.setWaterMeters(value)
     });
     this.tileCache = new Map();

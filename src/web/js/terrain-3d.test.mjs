@@ -57,8 +57,13 @@ test("terrain world planner builds a centered tile grid", () => {
 
 test("terrain flood player animates water level through a smooth loop", () => {
   const values = [];
+  let currentValue = 0;
   const player = new Terrain3dFloodPlayer({
-    setValue: (value) => values.push(value),
+    getValue: () => currentValue,
+    setValue: (value) => {
+      currentValue = value;
+      values.push(value);
+    },
     min: 0,
     max: 100,
     periodMs: 1000,
@@ -77,6 +82,23 @@ test("terrain flood player animates water level through a smooth loop", () => {
 
   assert.equal(player.toggle(1100), false);
   assert.equal(player.tick(1200), false);
+});
+
+test("terrain flood player starts playback from the current value", () => {
+  const values = [];
+  const player = new Terrain3dFloodPlayer({
+    getValue: () => 50,
+    setValue: (value) => values.push(value),
+    min: 0,
+    max: 100,
+    periodMs: 1000,
+    minIntervalMs: 0
+  });
+
+  player.play(2000);
+  assert.equal(player.tick(2000), true);
+  assert.ok(Math.abs(values[0] - 50) < 1);
+  assert.ok(Terrain3dFloodPlayer.inverseSmoothstep(0.5) > 0.49);
 });
 
 test("terrain mesh builder returns stable grid geometry", () => {
