@@ -467,11 +467,7 @@ class Terrain3dMeshBuilder {
   }
 
   static reliefHeight(elevation, minElevationM, elevationRange, exaggeration) {
-    const t = Terrain3dMeshBuilder.smoothstep(
-      0,
-      1,
-      (elevation - minElevationM) / elevationRange
-    );
+    const t = Math.max(0, Math.min(1, (elevation - minElevationM) / elevationRange));
     return (t - 0.42) * 0.58 * exaggeration;
   }
 
