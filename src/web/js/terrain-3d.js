@@ -95,6 +95,7 @@ class FloodTerrain3dApp {
     window.floodTerrain3d = this;
     this.updateControls();
     this.syncLocationLinks();
+    this.removeLegacyUrlParams();
     this.installEvents();
     this.gl = this.canvas.getContext("webgl2", {
       antialias: true,
@@ -418,6 +419,13 @@ class FloodTerrain3dApp {
     url.searchParams.delete("exaggeration");
     window.history.replaceState(window.history.state, "", url);
     this.syncLocationLinks();
+  }
+
+  removeLegacyUrlParams() {
+    if (!this.params.has("exaggeration")) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("exaggeration");
+    window.history.replaceState(window.history.state, "", url);
   }
 
   syncLocationLinks() {
