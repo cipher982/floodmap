@@ -282,6 +282,13 @@ class FloodTerrain3dApp {
     return { minElevationM, maxElevationM };
   }
 
+  metersToWorld() {
+    const min = this.stats.minElevationM ?? 0;
+    const max = this.stats.maxElevationM ?? 120;
+    const range = Math.max(8, max - min);
+    return (0.58 * this.exaggeration) / range;
+  }
+
   installEvents() {
     this.waterInput.value = String(this.waterMeters);
     this.exaggerationInput.value = String(this.exaggeration);
@@ -790,6 +797,7 @@ class FloodTerrain3dApp {
       gl.uniformMatrix4fv(gl.getUniformLocation(this.waterProgram, "u_matrix"), false, matrix);
       gl.uniform1f(gl.getUniformLocation(this.waterProgram, "u_time"), (time - this.startedAt) / 1000);
       gl.uniform1f(gl.getUniformLocation(this.waterProgram, "u_waterMeters"), this.waterMeters);
+      gl.uniform1f(gl.getUniformLocation(this.waterProgram, "u_metersToWorld"), this.metersToWorld());
       gl.drawElements(gl.TRIANGLES, tile.waterIndices.length, gl.UNSIGNED_INT, 0);
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
