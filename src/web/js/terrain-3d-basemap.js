@@ -49,6 +49,7 @@ class Terrain3dBasemapCapture {
   style() {
     return {
       version: 8,
+      glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
       sources: {
         "vector-tiles": {
           type: "vector",
