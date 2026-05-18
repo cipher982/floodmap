@@ -739,12 +739,13 @@ class FloodTerrain3dApp {
 
   configureFlowRibbonAttributes() {
     const gl = this.gl;
-    const stride = 8 * 4;
+    const stride = 9 * 4;
     const pos = gl.getAttribLocation(this.flowRibbonProgram, "a_pos");
     const flow = gl.getAttribLocation(this.flowRibbonProgram, "a_flow");
     const phase = gl.getAttribLocation(this.flowRibbonProgram, "a_phase");
     const strength = gl.getAttribLocation(this.flowRibbonProgram, "a_strength");
     const along = gl.getAttribLocation(this.flowRibbonProgram, "a_along");
+    const hand = gl.getAttribLocation(this.flowRibbonProgram, "a_hand");
     gl.enableVertexAttribArray(pos);
     gl.vertexAttribPointer(pos, 3, gl.FLOAT, false, stride, 0);
     gl.enableVertexAttribArray(flow);
@@ -755,6 +756,8 @@ class FloodTerrain3dApp {
     gl.vertexAttribPointer(strength, 1, gl.FLOAT, false, stride, 6 * 4);
     gl.enableVertexAttribArray(along);
     gl.vertexAttribPointer(along, 1, gl.FLOAT, false, stride, 7 * 4);
+    gl.enableVertexAttribArray(hand);
+    gl.vertexAttribPointer(hand, 1, gl.FLOAT, false, stride, 8 * 4);
   }
 
   render(time) {
@@ -796,6 +799,7 @@ class FloodTerrain3dApp {
       gl.bindVertexArray(tile.flowRibbonVao);
       gl.uniformMatrix4fv(gl.getUniformLocation(this.flowRibbonProgram, "u_matrix"), false, matrix);
       gl.uniform1f(gl.getUniformLocation(this.flowRibbonProgram, "u_time"), (time - this.startedAt) / 1000);
+      gl.uniform1f(gl.getUniformLocation(this.flowRibbonProgram, "u_waterMeters"), this.waterMeters);
       gl.drawArrays(gl.TRIANGLES, 0, tile.flowRibbonVertexCount);
     }
     for (const tile of this.tiles) {

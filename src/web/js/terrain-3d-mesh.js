@@ -197,11 +197,12 @@ class Terrain3dMeshBuilder {
   static buildFlowRibbons({ renderer, handData, terrainVertices, meshSize, waterMeters }) {
     const vertices = [];
     const step = Math.max(3, Math.floor(meshSize / 56));
-    const channelMeters = Math.max(3.5, Math.min(18, waterMeters * 0.30));
+    const flowSeedMeters = Math.max(waterMeters, 36);
+    const channelMeters = Math.max(3.5, Math.min(18, flowSeedMeters * 0.30));
     const simulation = Terrain3dMeshBuilder.simulateHandFlow({
       renderer,
       handData,
-      waterMeters,
+      waterMeters: flowSeedMeters,
       channelMeters
     });
     for (let y = 2; y < meshSize - 2; y += step) {
@@ -253,15 +254,16 @@ class Terrain3dMeshBuilder {
             flow[1],
             phase,
             strength,
-            point[3]
+            point[3],
+            hand
           );
         }
       }
     }
     return {
       vertices: new Float32Array(vertices),
-      ribbonCount: vertices.length / (8 * 6),
-      vertexCount: vertices.length / 8,
+      ribbonCount: vertices.length / (9 * 6),
+      vertexCount: vertices.length / 9,
       simulationModel: simulation ? "cpu-virtual-pipes-hand64" : "hand-gradient-fallback",
       simulationCells: simulation ? simulation.width * simulation.height : 0
     };

@@ -42,6 +42,8 @@ test("shader bundle exposes terrain and water programs", () => {
   assert.match(Terrain3dShaders.flowVertex, /gl_PointSize/);
   assert.match(Terrain3dShaders.flowFragment, /gl_PointCoord/);
   assert.match(Terrain3dShaders.flowRibbonVertex, /a_along/);
+  assert.match(Terrain3dShaders.flowRibbonVertex, /u_waterMeters/);
+  assert.match(Terrain3dShaders.flowRibbonVertex, /a_hand/);
   assert.match(Terrain3dShaders.flowRibbonFragment, /v_along/);
 });
 
@@ -227,7 +229,7 @@ test("flow ribbon builder extracts directional drainage streaks", () => {
 
   assert.ok(ribbons.ribbonCount > 0);
   assert.equal(ribbons.vertexCount, ribbons.ribbonCount * 6);
-  assert.equal(ribbons.vertices.length, ribbons.vertexCount * 8);
+  assert.equal(ribbons.vertices.length, ribbons.vertexCount * 9);
   assert.equal(ribbons.simulationModel, "cpu-virtual-pipes-hand64");
   assert.equal(ribbons.simulationCells, 64 * 64);
 });
