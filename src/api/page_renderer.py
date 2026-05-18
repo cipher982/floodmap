@@ -31,7 +31,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260518h"
+ASSET_VERSION: Final[str] = "20260518i"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )

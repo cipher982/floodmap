@@ -87,8 +87,8 @@ const Mat4 = {
       eye[1] - target[1],
       eye[2] - target[2]
     ]);
-    const x = Mat4.normalize(Mat4.cross(up, z));
-    const y = Mat4.cross(z, x);
+    const x = Mat4.normalize(Mat4.cross(z, up));
+    const y = Mat4.cross(x, z);
     return new Float32Array([
       x[0], y[0], z[0], 0,
       x[1], y[1], z[1], 0,

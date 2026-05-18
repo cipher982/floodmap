@@ -53,10 +53,12 @@ test("terrain camera keeps a world-up view while orbiting", () => {
   const target = multiplyVec4(view, [0, -0.12, 0, 1]);
   const up = multiplyVec4(view, [0, 0.88, 0, 1]);
   const north = multiplyVec4(view, [0, -0.12, 1, 1]);
+  const east = multiplyVec4(view, [1, -0.12, 0, 1]);
 
   assert.ok(target[2] < 0);
   assert.ok(up[1] > target[1]);
   assert.ok(north[1] > target[1]);
+  assert.ok(east[0] > target[0]);
 });
 
 test("shader bundle exposes terrain and water programs", () => {
