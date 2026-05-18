@@ -133,7 +133,8 @@
       font-weight: 800;
     }
     .button-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
     .nav-row {
@@ -154,6 +155,11 @@
     }
     button:hover {
       background: rgba(30, 41, 59, 0.92);
+    }
+    button.is-active {
+      border-color: rgba(56, 189, 248, 0.62);
+      background: rgba(14, 116, 144, 0.72);
+      color: #ecfeff;
     }
     .debug-panel {
       display: none;
@@ -239,6 +245,7 @@
       <div class="button-row">
         <button type="button" data-water-preset="8">Fill creeks</button>
         <button type="button" data-water-preset="35">Big flood</button>
+        <button type="button" id="play-flood">Play flood</button>
         <button type="button" id="reset-camera">Reset view</button>
       </div>
       <div class="nav-row" aria-label="Move across the map">
@@ -296,6 +303,7 @@
   <script src="static/js/elevation-renderer.js?v=__FLOODMAP_ASSET_VERSION__"></script>
   <script src="static/js/terrain-3d-math.js?v=__FLOODMAP_ASSET_VERSION__"></script>
   <script src="static/js/terrain-3d-world.js?v=__FLOODMAP_ASSET_VERSION__"></script>
+  <script src="static/js/terrain-3d-flood-player.js?v=__FLOODMAP_ASSET_VERSION__"></script>
   <script src="static/js/terrain-3d-shaders.js?v=__FLOODMAP_ASSET_VERSION__"></script>
   <script src="static/js/terrain-3d-basemap.js?v=__FLOODMAP_ASSET_VERSION__"></script>
   <script src="static/js/terrain-3d-mesh.js?v=__FLOODMAP_ASSET_VERSION__"></script>

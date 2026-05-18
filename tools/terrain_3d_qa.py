@@ -251,6 +251,23 @@ async def run_terrain_3d_qa(
         center_after = await page.evaluate(
             "() => window.floodTerrain3d.stats.centerTile"
         )
+        water_before_playback = await page.evaluate(
+            "() => window.floodTerrain3d.stats.waterMeters"
+        )
+        await page.locator("#play-flood").click()
+        await page.wait_for_function(
+            """
+            (waterBefore) => {
+              const stats = window.floodTerrain3d?.stats;
+              return Boolean(
+                stats?.floodPlaybackActive &&
+                Math.abs((stats?.waterMeters || 0) - waterBefore) > 0.5
+              );
+            }
+            """,
+            arg=water_before_playback,
+            timeout=args.timeout_ms,
+        )
         stats = await page.evaluate("() => window.floodTerrain3d.stats")
         await page.goto(
             add_query_param(url, "debug=1"),
@@ -306,6 +323,8 @@ async def run_terrain_3d_qa(
         failures.append("Water mesh was not visible")
     if stats.get("flowParticleCount", 0) < 100:
         failures.append("Drainage-flow particles were not generated")
+    if not stats.get("floodPlaybackActive"):
+        failures.append("3D flood playback control did not start")
     if visual_metrics["unique_sample_colors"] < 300:
         failures.append("3D canvas lacks visual richness")
     if visual_metrics["blueish_pixel_ratio"] < 0.015:
@@ -372,6 +391,7 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- Tile: `{result.stats.get('tile')}`",
         f"- Tiles loaded: `{result.stats.get('tilesLoaded')}/{result.stats.get('tileCount')}`",
         f"- Tile cache: `{result.stats.get('tileCacheSize')}` entries, `{result.stats.get('tileCacheHits')}` hits",
+        f"- Flood playback active: `{result.stats.get('floodPlaybackActive')}`",
         f"- HAND dataset: `{result.stats.get('handDatasetVersion')}`",
         f"- Water vertex ratio: `{result.stats.get('waterVertexRatio')}`",
         f"- Flow particles: `{result.stats.get('flowParticleCount')}`",

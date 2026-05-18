@@ -18,6 +18,7 @@ class FloodTerrain3dApp {
     this.exaggerationInput = document.getElementById("exaggeration");
     this.exaggerationReadout = document.getElementById("exaggeration-readout");
     this.resetCameraButton = document.getElementById("reset-camera");
+    this.playFloodButton = document.getElementById("play-flood");
     this.placeSearchForm = document.getElementById("terrain-place-search");
     this.placeSearchInput = document.getElementById("terrain-place-query");
     this.captureEl = document.getElementById("basemap-capture");
@@ -49,6 +50,9 @@ class FloodTerrain3dApp {
     this.activeLoadId = 0;
     this.startedAt = performance.now();
     this.tiles = [];
+    this.floodPlayer = new Terrain3dFloodPlayer({
+      setValue: (value) => this.setWaterMeters(value)
+    });
     this.tileCache = new Map();
     this.tileCacheClock = 0;
     this.maxTileCacheEntries = 45;
@@ -68,6 +72,8 @@ class FloodTerrain3dApp {
       tileCacheSize: 0,
       tileCacheHits: 0,
       tileCacheMisses: 0,
+      waterMeters: this.waterMeters,
+      floodPlaybackActive: false,
       waterVisible: false,
       waterVertexRatio: 0,
       flowParticleCount: 0,
@@ -272,9 +278,8 @@ class FloodTerrain3dApp {
     this.waterInput.value = String(this.waterMeters);
     this.exaggerationInput.value = String(this.exaggeration);
     this.waterInput.addEventListener("input", () => {
-      this.waterMeters = Number.parseFloat(this.waterInput.value);
-      this.updateAllWaterMeshes();
-      this.updateControls();
+      this.stopFloodPlayback();
+      this.setWaterMeters(Number.parseFloat(this.waterInput.value));
     });
     this.exaggerationInput.addEventListener("input", () => {
       this.exaggeration = Terrain3dMath.clamp(Number.parseFloat(this.exaggerationInput.value), 0.4, 5);
@@ -316,10 +321,8 @@ class FloodTerrain3dApp {
     }, { passive: false });
     for (const button of document.querySelectorAll("[data-water-preset]")) {
       button.addEventListener("click", () => {
-        this.waterMeters = Number.parseFloat(button.dataset.waterPreset || "20");
-        this.waterInput.value = String(this.waterMeters);
-        this.updateAllWaterMeshes();
-        this.updateControls();
+        this.stopFloodPlayback();
+        this.setWaterMeters(Number.parseFloat(button.dataset.waterPreset || "20"));
       });
     }
     for (const button of document.querySelectorAll("[data-pan-tile]")) {
@@ -331,6 +334,10 @@ class FloodTerrain3dApp {
       this.searchAndMoveToPlace();
     });
     this.resetCameraButton?.addEventListener("click", () => this.resetCamera());
+    this.playFloodButton?.addEventListener("click", () => {
+      this.floodPlayer.toggle(performance.now());
+      this.updateControls();
+    });
   }
 
   handleKey(event) {
@@ -413,6 +420,24 @@ class FloodTerrain3dApp {
   updateControls() {
     this.waterReadout.textContent = `${this.waterMeters.toFixed(this.waterMeters >= 100 ? 0 : 1)}m`;
     this.exaggerationReadout.textContent = `${this.exaggeration.toFixed(1)}x`;
+    this.stats.waterMeters = this.waterMeters;
+    this.stats.floodPlaybackActive = this.floodPlayer.playing;
+    if (this.playFloodButton) {
+      this.playFloodButton.textContent = this.floodPlayer.playing ? "Pause" : "Play flood";
+      this.playFloodButton.classList.toggle("is-active", this.floodPlayer.playing);
+    }
+  }
+
+  setWaterMeters(value) {
+    this.waterMeters = Terrain3dMath.clamp(Number(value), 0, Number(this.waterInput.max || 1000));
+    this.waterInput.value = String(this.waterMeters);
+    this.updateAllWaterMeshes();
+    this.updateControls();
+  }
+
+  stopFloodPlayback() {
+    this.floodPlayer.stop();
+    this.updateControls();
   }
 
   initGlResources() {
@@ -627,6 +652,7 @@ class FloodTerrain3dApp {
   render(time) {
     const gl = this.gl;
     const start = performance.now();
+    this.floodPlayer.tick(time);
     this.resize();
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);

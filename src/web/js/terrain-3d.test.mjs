@@ -5,6 +5,7 @@ import test from "node:test";
 const require = createRequire(import.meta.url);
 const { Terrain3dMath, Mat4 } = require("./terrain-3d-math.js");
 const { Terrain3dWorld } = require("./terrain-3d-world.js");
+const { Terrain3dFloodPlayer } = require("./terrain-3d-flood-player.js");
 const { Terrain3dMeshBuilder } = require("./terrain-3d-mesh.js");
 const { Terrain3dShaders } = require("./terrain-3d-shaders.js");
 
@@ -52,6 +53,30 @@ test("terrain world planner builds a centered tile grid", () => {
   assert.equal(world.tiles[4].originX, 0);
   assert.ok(Math.abs(world.tiles[4].originZ) < 0.000001);
   assert.equal(Terrain3dWorld.tileKey(centerTile), "12/1060/1642");
+});
+
+test("terrain flood player animates water level through a smooth loop", () => {
+  const values = [];
+  const player = new Terrain3dFloodPlayer({
+    setValue: (value) => values.push(value),
+    min: 0,
+    max: 100,
+    periodMs: 1000,
+    minIntervalMs: 0
+  });
+
+  assert.equal(player.toggle(0), true);
+  assert.equal(player.tick(0), true);
+  assert.equal(player.tick(390), true);
+  assert.equal(player.tick(780), true);
+  assert.equal(player.tick(1000), true);
+  assert.ok(values[0] <= 1);
+  assert.ok(values[1] > values[0]);
+  assert.ok(values[2] > 95);
+  assert.ok(values[3] <= 1);
+
+  assert.equal(player.toggle(1100), false);
+  assert.equal(player.tick(1200), false);
 });
 
 test("terrain mesh builder returns stable grid geometry", () => {
