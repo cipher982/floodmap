@@ -196,9 +196,11 @@ class Terrain3dMeshBuilder {
 
   static buildFlowRibbons({ renderer, handData, terrainVertices, meshSize, waterMeters }) {
     const vertices = [];
-    const step = Math.max(3, Math.floor(meshSize / 56));
+    const step = Math.max(6, Math.floor(meshSize / 30));
     const flowSeedMeters = Math.max(waterMeters, 36);
     const channelMeters = Math.max(3.5, Math.min(18, flowSeedMeters * 0.30));
+    const maxSegments = Math.max(6, Math.min(14, Math.round(5 + flowSeedMeters / 12)));
+    const pathStep = Math.max(2.8, meshSize / 52);
     const simulation = Terrain3dMeshBuilder.simulateHandFlow({
       renderer,
       handData,
@@ -207,56 +209,57 @@ class Terrain3dMeshBuilder {
     });
     for (let y = 2; y < meshSize - 2; y += step) {
       for (let x = 2; x < meshSize - 2; x += step) {
-        const srcX = x / (meshSize - 1) * 255;
-        const srcY = y / (meshSize - 1) * 255;
-        const hand = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, srcY);
-        if (!Number.isFinite(hand) || hand > channelMeters) continue;
-        const handLeft = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.max(0, srcX - 2), srcY);
-        const handRight = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.min(255, srcX + 2), srcY);
-        const handUp = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.max(0, srcY - 2));
-        const handDown = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.min(255, srcY + 2));
-        const gradientFlow = Terrain3dMeshBuilder.flowDirection(handLeft, handRight, handUp, handDown);
-        const simulatedFlow = Terrain3dMeshBuilder.sampleSimulatedFlow(
+        const seed = Terrain3dMeshBuilder.flowSampleAt({
+          renderer,
+          handData,
           simulation,
-          x / (meshSize - 1),
-          y / (meshSize - 1)
-        );
-        const flow = simulatedFlow.speed > 0.0004
-          ? [simulatedFlow.x, simulatedFlow.y]
-          : gradientFlow;
-        const terrainO = (y * meshSize + x) * 8;
-        const terrainStrength = (1 - hand / channelMeters) ** 1.45;
-        const simStrength = Math.min(1, simulatedFlow.speed * 16);
-        const strength = Math.max(0.10, terrainStrength * 0.70 + simStrength * 0.55);
+          meshSize,
+          x,
+          y,
+          channelMeters
+        });
+        if (!seed) continue;
         const phase = Terrain3dMeshBuilder.hash2(x + 41, y + 17);
-        const dirX = flow[0];
-        const dirZ = -flow[1];
-        const len = Math.hypot(dirX, dirZ) || 1;
-        const nx = dirX / len;
-        const nz = dirZ / len;
-        const ax = -nz;
-        const az = nx;
-        const length = 0.060 + strength * 0.100;
-        const width = 0.010 + strength * 0.020;
-        const cx = terrainVertices[terrainO];
-        const cy = terrainVertices[terrainO + 1] + 0.070 + strength * 0.026;
-        const cz = terrainVertices[terrainO + 2];
-        const p0 = [cx - nx * length - ax * width, cy, cz - nz * length - az * width, 0];
-        const p1 = [cx + nx * length - ax * width, cy, cz + nz * length - az * width, 1];
-        const p2 = [cx - nx * length + ax * width, cy, cz - nz * length + az * width, 0];
-        const p3 = [cx + nx * length + ax * width, cy, cz + nz * length + az * width, 1];
-        for (const point of [p0, p1, p2, p2, p1, p3]) {
-          vertices.push(
-            point[0],
-            point[1],
-            point[2],
-            flow[0],
-            flow[1],
+        let px = x + (phase - 0.5) * step * 0.38;
+        let py = y + (Terrain3dMeshBuilder.hash2(x + 9, y + 83) - 0.5) * step * 0.38;
+        for (let segment = 0; segment < maxSegments; segment += 1) {
+          const sample = Terrain3dMeshBuilder.flowSampleAt({
+            renderer,
+            handData,
+            simulation,
+            meshSize,
+            x: px,
+            y: py,
+            channelMeters
+          });
+          if (!sample) break;
+          const nextX = px + sample.flow[0] * pathStep;
+          const nextY = py + sample.flow[1] * pathStep;
+          if (
+            nextX < 1 ||
+            nextX > meshSize - 2 ||
+            nextY < 1 ||
+            nextY > meshSize - 2
+          ) {
+            break;
+          }
+          Terrain3dMeshBuilder.pushFlowSegment({
+            vertices,
+            terrainVertices,
+            meshSize,
+            x0: px,
+            y0: py,
+            x1: nextX,
+            y1: nextY,
+            flow: sample.flow,
+            hand: sample.hand,
+            strength: sample.strength,
             phase,
-            strength,
-            point[3],
-            hand
-          );
+            along0: segment / maxSegments,
+            along1: (segment + 1) / maxSegments
+          });
+          px = nextX;
+          py = nextY;
         }
       }
     }
@@ -267,6 +270,73 @@ class Terrain3dMeshBuilder {
       simulationModel: simulation ? "cpu-virtual-pipes-hand64" : "hand-gradient-fallback",
       simulationCells: simulation ? simulation.width * simulation.height : 0
     };
+  }
+
+  static flowSampleAt({ renderer, handData, simulation, meshSize, x, y, channelMeters }) {
+    const srcX = x / (meshSize - 1) * 255;
+    const srcY = y / (meshSize - 1) * 255;
+    const hand = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, srcY);
+    if (!Number.isFinite(hand) || hand > channelMeters) return null;
+    const handLeft = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.max(0, srcX - 2), srcY);
+    const handRight = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.min(255, srcX + 2), srcY);
+    const handUp = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.max(0, srcY - 2));
+    const handDown = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.min(255, srcY + 2));
+    const gradientFlow = Terrain3dMeshBuilder.flowDirection(handLeft, handRight, handUp, handDown);
+    const simulatedFlow = Terrain3dMeshBuilder.sampleSimulatedFlow(
+      simulation,
+      x / (meshSize - 1),
+      y / (meshSize - 1)
+    );
+    const flow = simulatedFlow.speed > 0.0004
+      ? [simulatedFlow.x, simulatedFlow.y]
+      : gradientFlow;
+    const terrainStrength = (1 - hand / channelMeters) ** 1.45;
+    const simStrength = Math.min(1, simulatedFlow.speed * 16);
+    const strength = Math.max(0.10, terrainStrength * 0.70 + simStrength * 0.55);
+    return { flow, hand, strength };
+  }
+
+  static pushFlowSegment({
+    vertices,
+    terrainVertices,
+    meshSize,
+    x0,
+    y0,
+    x1,
+    y1,
+    flow,
+    hand,
+    strength,
+    phase,
+    along0,
+    along1
+  }) {
+    const start = Terrain3dMeshBuilder.sampleTerrainPosition(terrainVertices, meshSize, x0, y0);
+    const end = Terrain3dMeshBuilder.sampleTerrainPosition(terrainVertices, meshSize, x1, y1);
+    const dx = end[0] - start[0];
+    const dz = end[2] - start[2];
+    const len = Math.hypot(dx, dz) || 1;
+    const ax = -dz / len;
+    const az = dx / len;
+    const width = 0.012 + strength * 0.026;
+    const lift = 0.075 + strength * 0.030;
+    const p0 = [start[0] - ax * width, start[1] + lift, start[2] - az * width, along0];
+    const p1 = [end[0] - ax * width, end[1] + lift, end[2] - az * width, along1];
+    const p2 = [start[0] + ax * width, start[1] + lift, start[2] + az * width, along0];
+    const p3 = [end[0] + ax * width, end[1] + lift, end[2] + az * width, along1];
+    for (const point of [p0, p1, p2, p2, p1, p3]) {
+      vertices.push(
+        point[0],
+        point[1],
+        point[2],
+        flow[0],
+        flow[1],
+        phase,
+        strength,
+        point[3],
+        hand
+      );
+    }
   }
 
   static simulateHandFlow({ renderer, handData, waterMeters, channelMeters }) {
@@ -338,6 +408,38 @@ class Terrain3dMeshBuilder {
     return Terrain3dMeshBuilder.bilinearSample(handData, x, y, (value) =>
       renderer.decodeHandHeight(value)
     );
+  }
+
+  static sampleTerrainPosition(terrainVertices, meshSize, x, y) {
+    const x0 = Math.max(0, Math.min(meshSize - 1, Math.floor(x)));
+    const y0 = Math.max(0, Math.min(meshSize - 1, Math.floor(y)));
+    const x1 = Math.min(meshSize - 1, x0 + 1);
+    const y1 = Math.min(meshSize - 1, y0 + 1);
+    const tx = x - x0;
+    const ty = y - y0;
+    const sample = (sx, sy) => {
+      const o = (sy * meshSize + sx) * 8;
+      return [terrainVertices[o], terrainVertices[o + 1], terrainVertices[o + 2]];
+    };
+    const a = sample(x0, y0);
+    const b = sample(x1, y0);
+    const c = sample(x0, y1);
+    const d = sample(x1, y1);
+    const top = [
+      a[0] * (1 - tx) + b[0] * tx,
+      a[1] * (1 - tx) + b[1] * tx,
+      a[2] * (1 - tx) + b[2] * tx
+    ];
+    const bottom = [
+      c[0] * (1 - tx) + d[0] * tx,
+      c[1] * (1 - tx) + d[1] * tx,
+      c[2] * (1 - tx) + d[2] * tx
+    ];
+    return [
+      top[0] * (1 - ty) + bottom[0] * ty,
+      top[1] * (1 - ty) + bottom[1] * ty,
+      top[2] * (1 - ty) + bottom[2] * ty
+    ];
   }
 
   static bilinearSample(values, x, y, decode) {

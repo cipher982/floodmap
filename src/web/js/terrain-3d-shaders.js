@@ -34,14 +34,14 @@ in vec3 v_world;
 out vec4 fragColor;
 void main() {
   vec3 base = texture(u_map, v_uv).rgb;
-  base = clamp((base - vec3(0.46)) * 1.18 + vec3(0.50), 0.0, 1.0);
+  base = clamp(base * 0.92 + vec3(0.035, 0.040, 0.046), 0.0, 1.0);
   float ink = 1.0 - smoothstep(0.18, 0.58, dot(base, vec3(0.299, 0.587, 0.114)));
-  float light = clamp(dot(normalize(v_normal), normalize(u_light)) * 0.30 + 0.86, 0.68, 1.08);
+  float light = clamp(dot(normalize(v_normal), normalize(u_light)) * 0.42 + 0.74, 0.50, 1.03);
   float heightTint = smoothstep(-0.18, 0.42, v_height);
   vec3 color = base * light;
-  color = mix(color, base * 0.54, ink * 0.72);
-  color = mix(color, color + vec3(0.026, 0.028, 0.018), heightTint * 0.12);
-  color = mix(color, vec3(0.70, 0.78, 0.84), smoothstep(0.66, 1.12, v_height) * 0.05);
+  color = mix(color, base * 0.62, ink * 0.58);
+  color = mix(color, color + vec3(0.018, 0.022, 0.012), heightTint * 0.08);
+  color = mix(color, vec3(0.64, 0.70, 0.75), smoothstep(0.66, 1.12, v_height) * 0.035);
   float edgeFog = smoothstep(0.94, 1.45, length(v_world.xz));
   color = mix(color, u_fogColor, edgeFog * 0.30);
   fragColor = vec4(color, 1.0);
@@ -95,13 +95,13 @@ void main() {
   float w = wave(v_uv + flow * u_time * 0.045, u_time);
   float current = sin(along * 118.0 - u_time * 6.4 + sin(cross * 44.0) * 0.8) * 0.5 + 0.5;
   float stripe = smoothstep(0.62, 1.0, current);
-  float foam = smoothstep(0.76, 1.0, stripe) * smoothstep(0.02, 0.22, v_depth);
-  vec3 shallow = vec3(0.15, 0.78, 1.0);
-  vec3 deep = vec3(0.02, 0.17, 0.70);
+  float foam = smoothstep(0.82, 1.0, stripe) * smoothstep(0.06, 0.30, v_depth);
+  vec3 shallow = vec3(0.05, 0.58, 0.95);
+  vec3 deep = vec3(0.01, 0.12, 0.52);
   vec3 color = mix(shallow, deep, clamp(v_depth, 0.0, 1.0));
-  color = mix(color, vec3(0.90, 0.99, 1.0), foam * (0.28 + v_depth * 0.24));
-  color += w * vec3(0.035, 0.08, 0.12);
-  float alpha = clamp(0.34 + v_depth * 0.38 + foam * 0.16, 0.28, 0.82);
+  color = mix(color, vec3(0.72, 0.94, 1.0), foam * (0.18 + v_depth * 0.16));
+  color += w * vec3(0.024, 0.060, 0.095);
+  float alpha = clamp(0.30 + v_depth * 0.34 + foam * 0.10, 0.24, 0.74);
   fragColor = vec4(color, alpha);
 }
 `,
