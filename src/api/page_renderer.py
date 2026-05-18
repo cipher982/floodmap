@@ -32,7 +32,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260518l"
+ASSET_VERSION: Final[str] = "20260518m"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )
@@ -285,13 +285,13 @@ def build_home_page_html() -> str:
         about_intro="FloodMap USA is a fast map toy for exploring what low ground looks like as the water rises. Search a place, drag the slider, and share the scenario you are looking at.",
         feature_items=(
             "Jump straight to a city or ZIP code instead of manually panning.",
-            "Flood Toy mode starts with animated water over real terrain data.",
+            "Animated water starts over real terrain data.",
             "Push the slider from puddles to ridiculous max-chaos levels.",
-            "Copy a permalink with the current center, zoom, view mode, and water level.",
+            "Copy a permalink with the current center, zoom, and water level.",
         ),
         how_to_items=(
             "Search for a U.S. city or ZIP code, or pan to the area you care about.",
-            "Drag Raise the water and watch the flow streaks move through low ground.",
+            "Drag the slider and watch low ground fill in.",
             "Click a specific point on the map for a quick flood check and share the permalink if you want the same view later.",
         ),
         model_summary="This is a visual scenario toy powered by elevation and drainage-relative terrain data. It is for exploration and sharing, not a forecast, FEMA product, insurance decision, or emergency instruction.",
@@ -344,7 +344,7 @@ def build_city_page_html(city_page: CityPage) -> str:
         ),
         how_to_items=(
             f"Start with the default {city_page.city_name} map view and pan toward the shoreline, river, or neighborhood you care about.",
-            "Use Flood Toy mode for animated water, or switch to elevation mode to inspect terrain.",
+            "Use the slider to raise the water and compare milder or more extreme scenarios.",
             "Click a specific point on the map for a location-based risk sample, then copy the permalink if you want the same view later.",
         ),
         model_summary=(
@@ -383,8 +383,8 @@ def build_zip_page_html(zip_page: ZipPage) -> str:
     )
     description = (
         f"Interactive flood map for ZIP {zip_page.zip_code} in "
-        f"{zip_page.city_name}, {zip_page.state_name}. Compare elevation and "
-        f"test a {scenario_label} water scenario from a tighter local map view."
+        f"{zip_page.city_name}, {zip_page.state_name}. Test a {scenario_label} "
+        "water scenario from a tighter local map view."
     )
     about_intro = (
         f"Use this ZIP {zip_page.zip_code} flood map to inspect "
@@ -399,21 +399,21 @@ def build_zip_page_html(zip_page: ZipPage) -> str:
         h1=f"Flood map for ZIP {zip_page.zip_code} in {zip_page.city_name}, {zip_page.state_name}",
         header_kicker=(
             f"Start from a tighter {zip_page.city_name} map view around "
-            f"{zip_page.area_label}, compare elevation with flood mode, and use "
-            f"the default {scenario_label} scenario as a quick local baseline."
+            f"{zip_page.area_label}, raise the water, and use the default "
+            f"{scenario_label} scenario as a quick local baseline."
         ),
         breadcrumb_nav_html=_build_zip_breadcrumb_html(zip_page),
-        about_title=f"ZIP {zip_page.zip_code} flood map and elevation view",
+        about_title=f"ZIP {zip_page.zip_code} flood map and water scenario",
         about_intro=about_intro,
         feature_items=(
             f"Open directly on {zip_page.area_label} instead of starting from the full {zip_page.city_name} metro view.",
-            f"Compare elevation and flood scenarios around {zip_page.focus_areas}.",
+            f"Compare flood scenarios around {zip_page.focus_areas}.",
             f"Start with a {scenario_label} flood setup, then adjust the slider for milder or more extreme water levels.",
             "Click the map for a point-specific risk sample once you have narrowed the view to the exact block or shoreline you care about.",
         ),
         how_to_items=(
             f"Start with the default ZIP {zip_page.zip_code} map view and pan around {zip_page.area_label}.",
-            "Use flood mode for scenario testing, or switch to elevation mode to inspect terrain and relative height differences.",
+            "Move the slider for milder or more extreme water levels.",
             "Move back to the broader city page if you want metro-wide context before drilling back down to a specific waterfront or neighborhood.",
         ),
         model_summary=(

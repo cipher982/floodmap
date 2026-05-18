@@ -69,13 +69,12 @@ async def test_homepage_uses_local_maplibre_assets(map_page: MapPage):
 
 
 @pytest.mark.asyncio
-async def test_max_zoom_matches_precompressed_tile_limit(map_page: MapPage):
+async def test_hand_mode_uses_dynamic_tile_zoom_cap(map_page: MapPage):
     await map_page.goto_homepage()
     await map_page.wait_for_app_ready()
-    await map_page.set_view_mode("elevation")
 
     max_zoom = await map_page.page.evaluate("() => window.floodMap.map.getMaxZoom()")
-    assert max_zoom <= 11
+    assert max_zoom == 14
 
     zoom_after = await map_page.page.evaluate(
         """async () => {
@@ -86,7 +85,3 @@ async def test_max_zoom_matches_precompressed_tile_limit(map_page: MapPage):
         }"""
     )
     assert zoom_after <= (max_zoom + 0.001)
-
-    req_max = getattr(map_page.page, "max_elevation_request_z", None)
-    assert req_max is not None
-    assert req_max <= 11

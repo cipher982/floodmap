@@ -117,12 +117,12 @@ class FloodMapClient {
         return this.getTerrainLayerConfig(layer).enabled === true;
     }
 
-    isViewModeAvailable(mode) {
-        return mode !== 'hand' || this.isTerrainLayerEnabled('hand');
+    preferredFloodViewMode() {
+        return this.isTerrainLayerEnabled('hand') ? 'hand' : 'flood';
     }
 
-    normalizeInitialViewMode(mode) {
-        return this.isViewModeAvailable(mode) ? mode : 'elevation';
+    normalizeInitialViewMode(_mode) {
+        return this.preferredFloodViewMode();
     }
 
     isHandGpuRequested() {
@@ -1064,24 +1064,6 @@ class FloodMapClient {
             });
         }
 
-        // View mode radio buttons
-        const viewModeRadios = document.querySelectorAll('input[name="view-mode"]');
-        this.configureViewModeAvailability();
-        this.syncViewModeControls();
-        viewModeRadios.forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                if (!this.isViewModeAvailable(e.target.value)) {
-                    this.syncViewModeControls();
-                    return;
-                }
-                this.viewMode = e.target.value;
-                this.updateViewMode();
-                this.updateModelNote(this.modelNoteState);
-                this.schedulePermalinkUpdate();
-                this.syncTerrain3dLink();
-            });
-        });
-
         // Water level slider
         const waterLevelSlider = document.getElementById('water-level');
         const waterLevelDisplay = document.getElementById('water-level-display');
@@ -1140,10 +1122,12 @@ class FloodMapClient {
         }
         this.syncTerrain3dLink();
 
-        // Find location button
-        document.getElementById('find-location').addEventListener('click', () => {
-            this.findUserLocation();
-        });
+        const findLocationButton = document.getElementById('find-location');
+        if (findLocationButton) {
+            findLocationButton.addEventListener('click', () => {
+                this.findUserLocation();
+            });
+        }
 
         window.addEventListener('popstate', () => {
             this.applyPermalinkStateFromCurrentUrl();
@@ -1158,33 +1142,6 @@ class FloodMapClient {
             this.map.on('load', () => {
                 this.updateViewMode();
             });
-        }
-    }
-
-    syncViewModeControls() {
-        this.configureViewModeAvailability();
-        document.querySelectorAll('input[name="view-mode"]').forEach((radio) => {
-            radio.checked = radio.value === this.viewMode;
-        });
-    }
-
-    configureViewModeAvailability() {
-        const handRadio = document.getElementById('hand-mode');
-        const handLabel = document.querySelector("label[for='hand-mode']");
-        if (!handRadio) return;
-
-        const enabled = this.isTerrainLayerEnabled('hand');
-        handRadio.disabled = !enabled;
-        if (handLabel) {
-            const config = this.getTerrainLayerConfig('hand');
-            const coverage = config.coverageLabel || 'prototype coverage';
-            handLabel.title = enabled
-                ? `Height above nearby mapped drainage: ${coverage}`
-                : 'Drainage mode is unavailable in this deployment.';
-        }
-
-        if (!enabled && this.viewMode === 'hand') {
-            this.viewMode = 'elevation';
         }
     }
 
@@ -1436,8 +1393,7 @@ class FloodMapClient {
 
         this.initialViewState = nextState;
         this.currentWaterLevel = nextState.water;
-        this.viewMode = nextState.view;
-        this.syncViewModeControls();
+        this.viewMode = this.normalizeInitialViewMode(nextState.view);
         this.syncWaterLevelControls();
         this.updateViewMode();
         this.syncTerrain3dLink();
@@ -2665,50 +2621,6 @@ class FloodMapClient {
 
     updateModelNote({ nearWater = false, coastal = false } = {}) {
         this.modelNoteState = { nearWater: !!nearWater, coastal: !!coastal };
-        const el = document.getElementById('model-note');
-        if (!el) return;
-
-        // Only show in Flood Risk mode (it explains the slider’s meaning).
-        if (this.viewMode === 'hand') {
-            el.style.display = 'block';
-            el.className = 'model-note model-note--ok';
-            el.innerHTML = `
-                <div class="model-note__title">Animated flood toy</div>
-                <div class="model-note__body">Drag the slider and watch water fill low ground. The flow streaks follow real terrain gradients; this is not a forecast.</div>
-            `;
-            return;
-        }
-
-        if (this.viewMode !== 'flood') {
-            el.style.display = 'none';
-            return;
-        }
-
-        el.style.display = 'block';
-
-        if (coastal) {
-            el.className = 'model-note model-note--ok';
-            el.innerHTML = `
-                <div class="model-note__title">Coastal surge model</div>
-                <div class="model-note__body">Slider ≈ sea level + storm surge (m above mean sea level).</div>
-            `;
-            return;
-        }
-
-        if (nearWater) {
-            el.className = 'model-note model-note--warning';
-            el.innerHTML = `
-                <div class="model-note__title">Inland water nearby</div>
-                <div class="model-note__body">Slider is absolute sea level/surge; river stage/levees aren’t modeled.</div>
-            `;
-            return;
-        }
-
-        el.className = 'model-note';
-        el.innerHTML = `
-            <div class="model-note__title">Storm surge model</div>
-            <div class="model-note__body">Slider is absolute sea level/surge (m above mean sea level).</div>
-        `;
     }
 
     hasElevationValue(value) {

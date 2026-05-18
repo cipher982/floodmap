@@ -22,14 +22,14 @@ async def test_city_slug_page_uses_route_defaults_without_query_params(
     state = await map_page.get_map_state()
     parsed = urlparse(map_page.page.url)
 
-    assert "Tampa Flood Map" in title
-    assert "Flood map for Tampa, Florida" in heading
+    assert "Tampa Flood Toy" in title
+    assert "Flood toy for Tampa, Florida" in heading
     assert "FloodMap USA" in breadcrumb
     assert "Tampa, Florida" in breadcrumb
     assert "Related city flood maps" in related_heading
     assert parsed.path == "/fl/tampa"
     assert parsed.query == ""
-    assert state["view"] == "flood"
+    assert state["view"] == "hand"
     assert abs(state["water"] - 3.0) < 0.01
     assert abs(state["lat"] - 27.9449854) < 0.03
     assert abs(state["lng"] - (-82.4583107)) < 0.03
@@ -53,7 +53,7 @@ async def test_city_slug_page_explicit_query_state_overrides_route_defaults(
     assert abs(state["lat"] - 25.76168) < 0.03
     assert abs(state["lng"] - (-80.19179)) < 0.03
     assert abs(state["zoom"] - 10.3) < 0.2
-    assert state["view"] == "flood"
+    assert state["view"] == "hand"
     assert abs(state["water"] - 6.0) < 0.01
-    assert parsed["view"] == ["flood"]
+    assert parsed["view"] == ["hand"]
     assert parsed["water"] == ["6.0"]

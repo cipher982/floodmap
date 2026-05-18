@@ -49,6 +49,10 @@ async def test_location_search_moves_map_and_updates_status(map_page: MapPage):
         timeout=10000,
     )
     await map_page.page.wait_for_timeout(1300)
+    await map_page.page.wait_for_function(
+        "() => new URL(window.location.href).searchParams.has('lat')",
+        timeout=10000,
+    )
 
     state = await map_page.get_map_state()
     query = parse_qs(urlparse(map_page.page.url).query)

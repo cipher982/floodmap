@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import importlib
 import sys
+from pathlib import Path
 
 from fastapi.testclient import TestClient
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def load_main_module(monkeypatch):
@@ -37,6 +40,11 @@ def test_homepage_contains_social_metadata_and_explanatory_copy(monkeypatch):
     assert "Push the slider from puddles to ridiculous max-chaos levels." in html
     assert 'id="open-3d-view"' not in html
     assert "Open 3D Map" not in html
+    assert 'id="view-mode"' not in html
+    assert 'id="elevation-mode"' not in html
+    assert 'id="flood-mode"' not in html
+    assert 'id="hand-mode"' not in html
+    assert "Animated flood toy" not in html
     assert "What you can do" in html
     assert "How to use it" in html
     assert "Model notes" in html
@@ -66,6 +74,17 @@ def test_homepage_search_input_allows_browser_history(monkeypatch):
     assert 'id="location-search"' in html
     assert 'name="location-query"' in html
     assert 'autocomplete="on"' in html
+    assert 'id="find-location"' in html
+    assert html.index('id="location-search"') < html.index('id="find-location"')
+    assert html.index('id="find-location"') < html.index('id="share-view-button"')
+
+
+def test_client_does_not_render_model_note_copy():
+    content = (REPO_ROOT / "src/web/js/map-client.js").read_text()
+
+    assert "Animated flood toy" not in content
+    assert "flow streaks follow" not in content
+    assert "model-note" not in content
 
 
 def test_homepage_uses_vendored_maplibre_assets(monkeypatch):

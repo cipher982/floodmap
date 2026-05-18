@@ -43,7 +43,7 @@ async def test_permalink_restores_map_state(page):
         }"""
     )
 
-    assert state["view"] == "flood"
+    assert state["view"] == "hand"
     assert abs(state["water"] - 6.0) < 0.01
     assert abs(state["lat"] - 40.7128) < 0.02
     assert abs(state["lng"] - (-74.0060)) < 0.02
@@ -54,7 +54,6 @@ async def test_permalink_restores_map_state(page):
 async def test_permalink_updates_when_map_state_changes(page):
     await wait_for_map_ready(page)
 
-    await page.click("label[for='flood-mode']")
     await page.locator("#water-level").evaluate(
         """(slider) => {
             slider.value = "44";
@@ -74,7 +73,7 @@ async def test_permalink_updates_when_map_state_changes(page):
     parsed = urlparse(page.url)
     query = parse_qs(parsed.query)
 
-    assert query["view"] == ["flood"]
+    assert query["view"] == ["hand"]
     assert query["water"] == ["5.8"]
     assert abs(float(query["lat"][0]) - 40.7589) < 0.02
     assert abs(float(query["lng"][0]) - (-73.98513)) < 0.02

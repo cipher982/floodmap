@@ -274,6 +274,7 @@
                             </div>
                             <p class="control-hint">Start typing a US ZIP code or city, pick a match, then click the map for a point-specific risk sample.</p>
                         </form>
+                        <button id="find-location" type="button">📍 Find My Location</button>
                         <div id="location-search-status" class="search-status" aria-live="polite"></div>
                         <div id="location-search-results" class="search-results" role="listbox" aria-label="Location suggestions"></div>
                     </div>
@@ -283,20 +284,9 @@
                     <div class="share-actions">
                         <button id="share-view-button" type="button">Copy Share Link</button>
                         __FLOODMAP_3D_LINK_HTML__
-                        <p class="control-hint">Includes the map center, zoom, mode, and slider level.</p>
+                        <p class="control-hint">Includes the map center, zoom, and slider level.</p>
                     </div>
                     <div id="share-view-status" class="share-status" aria-live="polite"></div>
-                </div>
-                <div class="control-group">
-                    <label>View Mode:</label>
-                    <div class="segmented-control" id="view-mode">
-                        <input type="radio" name="view-mode" id="elevation-mode" value="elevation" checked>
-                        <label for="elevation-mode">Elevation</label>
-                        <input type="radio" name="view-mode" id="flood-mode" value="flood">
-                        <label for="flood-mode">Coastal</label>
-                        <input type="radio" name="view-mode" id="hand-mode" value="hand">
-                        <label for="hand-mode">Flood Toy</label>
-                    </div>
                 </div>
                 <div class="control-group" id="water-level-controls">
                     <label id="water-level-label" for="water-level">Water Level:</label>
@@ -312,9 +302,7 @@
                         <button class="preset-chip" data-level="15.0">Extreme (15m)</button>
                         <button class="preset-chip" data-level="1.0" data-baseline="true">2100 Baseline (+1m)</button>
                     </div>
-                    <div id="model-note" class="model-note" style="display: none;"></div>
                 </div>
-                <button id="find-location">📍 Find My Location</button>
             </div>
 
             <div id="risk-panel">

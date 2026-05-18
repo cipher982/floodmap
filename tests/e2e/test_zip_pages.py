@@ -32,7 +32,7 @@ async def test_zip_slug_page_uses_route_defaults_without_query_params(
     assert robots == "noindex,follow"
     assert parsed.path == "/zip/33602"
     assert parsed.query == ""
-    assert state["view"] == "flood"
+    assert state["view"] == "hand"
     assert abs(state["water"] - 3.0) < 0.01
     assert abs(state["lat"] - 27.95058) < 0.03
     assert abs(state["lng"] - (-82.45843)) < 0.03
@@ -56,7 +56,7 @@ async def test_zip_slug_page_explicit_query_state_overrides_route_defaults(
     assert abs(state["lat"] - 25.76168) < 0.03
     assert abs(state["lng"] - (-80.19179)) < 0.03
     assert abs(state["zoom"] - 10.3) < 0.2
-    assert state["view"] == "flood"
+    assert state["view"] == "hand"
     assert abs(state["water"] - 6.0) < 0.01
-    assert parsed["view"] == ["flood"]
+    assert parsed["view"] == ["hand"]
     assert parsed["water"] == ["6.0"]

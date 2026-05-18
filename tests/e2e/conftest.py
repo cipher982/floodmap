@@ -156,10 +156,6 @@ class MapPage:
             }"""
         )
 
-    async def set_view_mode(self, mode: str):
-        await self.page.click(f"label[for='{mode}-mode']")
-        await self.page.wait_for_timeout(250)
-
     async def set_water_level_slider(self, slider_value: int):
         await self.page.locator("#water-level").evaluate(
             """(slider, value) => {
