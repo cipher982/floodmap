@@ -1387,13 +1387,24 @@ class FloodMapClient {
 
     buildTerrain3dUrl() {
         const currentViewState = this.getCurrentViewState();
-        const url = new URL(window.floodmapPublicUrl('/terrain-3d'), window.location.origin);
+        const url = this.buildTerrain3dBaseUrl();
         url.searchParams.set('lat', currentViewState.lat.toFixed(5));
         url.searchParams.set('lng', currentViewState.lng.toFixed(5));
         url.searchParams.set('zoom', String(Math.round(currentViewState.zoom)));
         url.searchParams.set('water', String(currentViewState.water));
         url.searchParams.set('exaggeration', '2.0');
-        return `${url.pathname}${url.search}`;
+        if (url.origin === window.location.origin) {
+            return `${url.pathname}${url.search}`;
+        }
+        return url.toString();
+    }
+
+    buildTerrain3dBaseUrl() {
+        const public3dHosts = new Set(['drose.io', 'www.drose.io', 'floodmap.drose.io']);
+        if (public3dHosts.has(window.location.hostname)) {
+            return new URL('https://floodmap3d.drose.io/terrain-3d');
+        }
+        return new URL(window.floodmapPublicUrl('/terrain-3d'), window.location.origin);
     }
 
     syncTerrain3dLink() {
