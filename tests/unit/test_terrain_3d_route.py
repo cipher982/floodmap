@@ -20,8 +20,8 @@ def test_terrain_3d_routes_are_served(monkeypatch):
     assert "FloodMap 3D" in response.text
     assert "/api${normalizedPath}" in response.text
     assert "maplibregl.setWorkerUrl(window.floodmapAssetUrl" in response.text
-    assert "static/js/terrain-3d-math.js?v=20260517aa" in response.text
-    assert "static/js/terrain-3d-world.js?v=20260517aa" in response.text
-    assert "static/js/terrain-3d-flood-player.js?v=20260517aa" in response.text
-    assert "static/js/terrain-3d-basemap.js?v=20260517aa" in response.text
-    assert "static/js/terrain-3d.js?v=20260517aa" in response.text
+    assert "static/js/terrain-3d-math.js?v=20260517ab" in response.text
+    assert "static/js/terrain-3d-world.js?v=20260517ab" in response.text
+    assert "static/js/terrain-3d-flood-player.js?v=20260517ab" in response.text
+    assert "static/js/terrain-3d-basemap.js?v=20260517ab" in response.text
+    assert "static/js/terrain-3d.js?v=20260517ab" in response.text

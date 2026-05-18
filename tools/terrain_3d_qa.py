@@ -251,6 +251,10 @@ async def run_terrain_3d_qa(
         center_after = await page.evaluate(
             "() => window.floodTerrain3d.stats.centerTile"
         )
+        moved_url = page.url
+        back_to_2d_href = await page.eval_on_selector(
+            "#terrain-2d-link", "el => el.href"
+        )
         water_before_playback = await page.evaluate(
             "() => window.floodTerrain3d.stats.waterMeters"
         )
@@ -291,6 +295,8 @@ async def run_terrain_3d_qa(
         debug_panel_visible_when_enabled
     )
     visual_metrics["center_tile_moved"] = center_before != center_after
+    visual_metrics["moved_url"] = moved_url
+    visual_metrics["back_to_2d_href"] = back_to_2d_href
     visual_metrics.update(
         {f"animation_{k}": v for k, v in image_change_metrics(first, second).items()}
     )
@@ -335,6 +341,14 @@ async def run_terrain_3d_qa(
         failures.append("3D water animation did not visibly change frames")
     if not visual_metrics["center_tile_moved"]:
         failures.append("3D navigation did not move the world center tile")
+    if "lat=" not in moved_url or "lng=" not in moved_url:
+        failures.append("3D navigation did not preserve location in the URL")
+    if "/terrain-3d" not in moved_url:
+        failures.append("3D navigation URL no longer points at the 3D page")
+    if "/terrain-3d" in back_to_2d_href or "view=hand" not in back_to_2d_href:
+        failures.append(
+            "3D page does not expose a valid return link to the 2D HAND map"
+        )
     if visual_metrics["navigation_changed_pixel_ratio"] < 0.01:
         failures.append("3D navigation did not visibly change the terrain scene")
     if visual_metrics["canvas_width_ratio"] < 0.92:

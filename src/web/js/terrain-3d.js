@@ -21,6 +21,7 @@ class FloodTerrain3dApp {
     this.playFloodButton = document.getElementById("play-flood");
     this.placeSearchForm = document.getElementById("terrain-place-search");
     this.placeSearchInput = document.getElementById("terrain-place-query");
+    this.backTo2dLink = document.getElementById("terrain-2d-link");
     this.captureEl = document.getElementById("basemap-capture");
     this.renderer = new ElevationRenderer();
     this.params = new URLSearchParams(window.location.search);
@@ -96,6 +97,7 @@ class FloodTerrain3dApp {
   async boot() {
     window.floodTerrain3d = this;
     this.updateControls();
+    this.syncLocationLinks();
     this.installEvents();
     this.gl = this.canvas.getContext("webgl2", {
       antialias: true,
@@ -364,8 +366,10 @@ class FloodTerrain3dApp {
     this.navigationCount += 1;
     this.stats.navigationCount = this.navigationCount;
     this.centerTile = Terrain3dWorld.moveTile(this.centerTile, delta[0], delta[1]);
+    this.setLocationFromTileCenter(this.centerTile);
     this.panX = 0;
     this.panZ = 0;
+    this.replaceUrlState();
     await this.loadWorld();
   }
 
@@ -402,6 +406,12 @@ class FloodTerrain3dApp {
     await this.loadWorld();
   }
 
+  setLocationFromTileCenter(tile) {
+    const [lng, lat] = Terrain3dMath.tileToLonLat(tile.x + 0.5, tile.y + 0.5, tile.z);
+    this.lng = lng;
+    this.lat = lat;
+  }
+
   replaceUrlState() {
     const url = new URL(window.location.href);
     url.searchParams.set("lat", this.lat.toFixed(5));
@@ -410,6 +420,21 @@ class FloodTerrain3dApp {
     url.searchParams.set("water", String(this.waterMeters));
     url.searchParams.set("exaggeration", String(this.exaggeration));
     window.history.replaceState(window.history.state, "", url);
+    this.syncLocationLinks();
+  }
+
+  syncLocationLinks() {
+    if (!this.backTo2dLink) return;
+    const publicRoot = typeof window.floodmapPublicUrl === "function"
+      ? window.floodmapPublicUrl("/")
+      : "/";
+    const url = new URL(publicRoot, window.location.origin);
+    url.searchParams.set("lat", this.lat.toFixed(5));
+    url.searchParams.set("lng", this.lng.toFixed(5));
+    url.searchParams.set("zoom", String(this.zoom));
+    url.searchParams.set("view", "hand");
+    url.searchParams.set("water", String(this.waterMeters));
+    this.backTo2dLink.href = url.toString();
   }
 
   resetCamera() {
@@ -425,6 +450,7 @@ class FloodTerrain3dApp {
     this.exaggerationReadout.textContent = `${this.exaggeration.toFixed(1)}x`;
     this.stats.waterMeters = this.waterMeters;
     this.stats.floodPlaybackActive = this.floodPlayer.playing;
+    this.syncLocationLinks();
     if (this.playFloodButton) {
       this.playFloodButton.textContent = this.floodPlayer.playing ? "Pause" : "Play flood";
       this.playFloodButton.classList.toggle("is-active", this.floodPlayer.playing);
@@ -436,6 +462,7 @@ class FloodTerrain3dApp {
     this.waterInput.value = String(this.waterMeters);
     if (refreshStats) this.updateWaterStats();
     this.updateControls();
+    if (refreshStats) this.replaceUrlState();
   }
 
   stopFloodPlayback() {

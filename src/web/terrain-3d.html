@@ -161,6 +161,26 @@
       background: rgba(14, 116, 144, 0.72);
       color: #ecfeff;
     }
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 auto;
+    }
+    .map-link {
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.76);
+      color: #dbeafe;
+      padding: 9px 10px;
+      font-size: 13px;
+      font-weight: 800;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .map-link:hover {
+      background: rgba(30, 41, 59, 0.92);
+    }
     .debug-panel {
       display: none;
       left: 24px;
@@ -227,7 +247,10 @@
         <input id="terrain-place-query" type="search" placeholder="Search city or ZIP" autocomplete="off">
         <button type="submit">Go</button>
       </form>
-      <div id="terrain-status" class="status">Loading</div>
+      <div class="topbar-actions">
+        <a id="terrain-2d-link" class="map-link" href="/">2D Map</a>
+        <div id="terrain-status" class="status">Loading</div>
+      </div>
     </header>
     <section class="controls" aria-label="3D terrain controls">
       <label for="water-level">
