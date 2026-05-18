@@ -96,12 +96,12 @@ void main() {
   float current = sin(along * 118.0 - u_time * 6.4 + sin(cross * 44.0) * 0.8) * 0.5 + 0.5;
   float stripe = smoothstep(0.62, 1.0, current);
   float foam = smoothstep(0.82, 1.0, stripe) * smoothstep(0.06, 0.30, v_depth);
-  vec3 shallow = vec3(0.05, 0.58, 0.95);
-  vec3 deep = vec3(0.01, 0.12, 0.52);
+  vec3 shallow = vec3(0.04, 0.64, 1.0);
+  vec3 deep = vec3(0.00, 0.16, 0.62);
   vec3 color = mix(shallow, deep, clamp(v_depth, 0.0, 1.0));
   color = mix(color, vec3(0.72, 0.94, 1.0), foam * (0.18 + v_depth * 0.16));
-  color += w * vec3(0.024, 0.060, 0.095);
-  float alpha = clamp(0.30 + v_depth * 0.34 + foam * 0.10, 0.24, 0.74);
+  color += w * vec3(0.030, 0.074, 0.118);
+  float alpha = clamp(0.38 + v_depth * 0.42 + foam * 0.12, 0.30, 0.86);
   fragColor = vec4(color, alpha);
 }
 `,
