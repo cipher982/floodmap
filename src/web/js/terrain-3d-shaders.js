@@ -65,7 +65,7 @@ void main() {
   float spillDepth = a_hand >= 0.0 ? max(0.0, 1.0 - max(0.0, a_hand - u_waterMeters) / spillMeters) * 0.18 : 0.0;
   float depthT = depth > 0.0 ? min(1.0, depth / max(1.0, u_waterMeters * 0.18)) : spillDepth;
   vec3 pos = a_pos;
-  pos.y += 0.018 + depthT * 0.035;
+  pos.y += 0.026 + depthT * 0.145;
   v_uv = a_uv;
   v_depth = depthT;
   v_flow = a_flow;
