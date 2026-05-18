@@ -8,7 +8,13 @@ from math import atan, degrees, exp, pi
 from pathlib import Path
 
 import numpy as np
-from terrain import TILE_SIZE, U16_NODATA, U16_TILE_BYTES
+from terrain import (
+    TILE_SIZE,
+    U16_NODATA,
+    U16_TILE_BYTES,
+    TerrainEncoding,
+    encode_elevation_meters,
+)
 
 WEBMERCATOR_HALF_WORLD = 20037508.342789244
 WEBMERCATOR_CRS = "EPSG:3857"
@@ -58,7 +64,13 @@ def tile_center_points_mercator(
     return np.meshgrid(xs, ys)
 
 
-def render_cog_tile(cog_path: Path, z: int, x: int, y: int) -> tuple[bytes, float]:
+def render_cog_tile(
+    cog_path: Path,
+    z: int,
+    x: int,
+    y: int,
+    encoding: TerrainEncoding = TerrainEncoding.HAND_DECIMETERS,
+) -> tuple[bytes, float]:
     try:
         import rasterio
         from rasterio.warp import transform
@@ -96,12 +108,20 @@ def render_cog_tile(cog_path: Path, z: int, x: int, y: int) -> tuple[bytes, floa
             window = Window.from_slices((row_min, row_max + 1), (col_min, col_max + 1))
             source = src.read(1, window=window)
             sampled = source[rows[inside] - row_min, cols[inside] - col_min]
-            nodata = int(U16_NODATA) if src.nodata is None else int(src.nodata)
-            valid_sample = sampled != nodata
+            if src.nodata is None:
+                valid_sample = np.isfinite(sampled)
+            else:
+                valid_sample = np.isfinite(sampled) & (sampled != src.nodata)
+            if encoding == TerrainEncoding.ELEVATION_METER_RANGE:
+                encoded = encode_elevation_meters(
+                    np.where(valid_sample, sampled, np.nan)
+                )
+            else:
+                encoded = sampled.astype(np.uint16, copy=False)
 
             output = destination.ravel()
             inside_indices = np.flatnonzero(inside)
-            output[inside_indices[valid_sample]] = sampled[valid_sample]
+            output[inside_indices[valid_sample]] = encoded[valid_sample]
 
     payload = destination.tobytes()
     if len(payload) != U16_TILE_BYTES:
@@ -112,20 +132,24 @@ def render_cog_tile(cog_path: Path, z: int, x: int, y: int) -> tuple[bytes, floa
 
 @lru_cache(maxsize=512)
 def render_cog_tile_cached(
-    cog_path: str, mtime_ns: int, z: int, x: int, y: int
+    cog_path: str, mtime_ns: int, z: int, x: int, y: int, encoding: TerrainEncoding
 ) -> bytes:
     del mtime_ns  # Cache key invalidates when the source file changes.
-    payload, _ = render_cog_tile(Path(cog_path), z, x, y)
+    payload, _ = render_cog_tile(Path(cog_path), z, x, y, encoding)
     return payload
 
 
 def render_cog_tile_with_cache(
-    cog_path: Path, z: int, x: int, y: int
+    cog_path: Path,
+    z: int,
+    x: int,
+    y: int,
+    encoding: TerrainEncoding = TerrainEncoding.HAND_DECIMETERS,
 ) -> tuple[bytes, str, float]:
     start = time.perf_counter()
     before = render_cog_tile_cached.cache_info().hits
     stat = cog_path.stat()
-    payload = render_cog_tile_cached(str(cog_path), stat.st_mtime_ns, z, x, y)
+    payload = render_cog_tile_cached(str(cog_path), stat.st_mtime_ns, z, x, y, encoding)
     after = render_cog_tile_cached.cache_info().hits
     elapsed_ms = (time.perf_counter() - start) * 1000
     cache_status = "HIT" if after > before else "MISS"

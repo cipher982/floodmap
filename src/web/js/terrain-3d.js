@@ -37,6 +37,7 @@ class FloodTerrain3dApp {
       visualModel: "map-draped-terrain-hand-water-v1",
       tile: null,
       terrainLoaded: false,
+      elevationSource: null,
       handLoaded: false,
       basemapCaptured: false,
       waterVisible: false,
@@ -46,6 +47,7 @@ class FloodTerrain3dApp {
       handDatasetVersion: null,
       frameCount: 0,
       lastFrameMs: 0,
+      warnings: [],
       errors: []
     };
   }
@@ -70,8 +72,8 @@ class FloodTerrain3dApp {
       container: this.captureEl,
       tile: this.tile
     });
-    const [terrainData, handData, handMetadata, mapCanvas] = await Promise.all([
-      this.renderer.loadElevationTile(this.tile.z, this.tile.x, this.tile.y),
+    const [terrainResult, handData, handMetadata, mapCanvas] = await Promise.all([
+      this.loadElevationSurfaceTile(),
       this.renderer.loadTerrainTile("hand", this.tile.z, this.tile.x, this.tile.y),
       this.renderer.getTerrainMetadata("hand").catch(() => null),
       basemap.capture()
@@ -80,6 +82,8 @@ class FloodTerrain3dApp {
     this.handMetadata = handMetadata;
     this.stats.handDatasetVersion = handMetadata?.dataset_version || null;
     this.stats.basemapCaptured = true;
+    this.stats.elevationSource = terrainResult.source;
+    const terrainData = terrainResult.data;
     this.stats.terrainLoaded = !this.isAllNoData(terrainData);
     this.stats.handLoaded = !this.isAllNoData(handData);
     this.initGlResources(mapCanvas);
@@ -87,6 +91,33 @@ class FloodTerrain3dApp {
     this.stats.ready = true;
     this.publish("Ready");
     requestAnimationFrame((time) => this.render(time));
+  }
+
+  async loadElevationSurfaceTile() {
+    try {
+      const metadata = await this.renderer.getTerrainMetadata("elevation");
+      if (!metadata?.dataset_version) {
+        throw new Error("Elevation terrain metadata has no dataset version");
+      }
+      const url = new URL(
+        window.floodmapApiUrl(
+          `/v2/terrain/elevation/${metadata.dataset_version}/${this.tile.z}/${this.tile.x}/${this.tile.y}.u16`
+        ),
+        window.location.origin
+      );
+      if (window.FLOODMAP_TILE_VERSION) {
+        url.searchParams.set("v", window.FLOODMAP_TILE_VERSION);
+      }
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`Elevation terrain tile failed: ${response.status}`);
+      }
+      return { data: new Uint16Array(await response.arrayBuffer()), source: "terrain-v2-elevation" };
+    } catch (error) {
+      this.stats.warnings.push(`Falling back to v1 elevation tiles: ${error?.message || String(error)}`);
+      const data = await this.renderer.loadElevationTile(this.tile.z, this.tile.x, this.tile.y);
+      return { data, source: "v1-elevation" };
+    }
   }
 
   installEvents() {

@@ -59,6 +59,24 @@ def test_build_combined_manifest_preserves_huc_order(tmp_path) -> None:
     ]
 
 
+def test_build_combined_manifest_can_include_elevation_layer(tmp_path) -> None:
+    write_huc_manifest(tmp_path, "031601", [-89, 32, -86, 35])
+
+    manifest = build_combined_manifest(
+        hucs=["031601"],
+        manifest_root=tmp_path,
+        dataset_version="ornl-cfim-v0p21-central-alabama",
+        elevation_data_root=tmp_path / "data",
+    )
+
+    elevation_layer = manifest["layers"]["elevation"]
+    assert elevation_layer["encoding"] == "elevation-meter-range"
+    assert elevation_layer["regions"][0]["url"].endswith(
+        "/hand-precomputed/ornl-cfim-v0.21/031601/031601-elevation.tif"
+    )
+    assert elevation_layer["regions"][0]["bbox"] == [-89, 32, -86, 35]
+
+
 @pytest.mark.parametrize("huc", ["03160", "0316012", "abcdef"])
 def test_validate_huc_rejects_non_huc6(huc: str) -> None:
     with pytest.raises(ValueError):

@@ -11,7 +11,9 @@ The user-facing mental model:
 ## Architecture
 
 - The 2D street/vector map is rendered first and captured as a texture.
-- Real elevation data displaces that texture into a terrain mesh.
+- Real elevation data displaces that texture into a terrain mesh. Prefer ORNL
+  CFIM elevation rasters through the v2 terrain manifest; use legacy v1
+  elevation tiles only as a fallback.
 - ORNL CFIM HAND data initializes creek, drainage, and flood water over the
   terrain.
 - The public 2D map remains the fallback and navigation shell.

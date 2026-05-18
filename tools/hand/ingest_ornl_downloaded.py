@@ -395,6 +395,7 @@ def main() -> None:
             hucs=hucs,
             manifest_root=manifest_root,
             dataset_version=args.combined_dataset_version,
+            elevation_data_root=args.data_root,
         )
         args.combined_output.parent.mkdir(parents=True, exist_ok=True)
         args.combined_output.write_text(

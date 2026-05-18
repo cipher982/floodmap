@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from terrain import TILE_SIZE, U16_TILE_BYTES
+from terrain import TILE_SIZE, U16_TILE_BYTES, TerrainEncoding, decode_elevation_meters
 from terrain_cog import (
     clear_cog_tile_cache,
     render_cog_tile,
@@ -36,6 +36,25 @@ def write_webmercator_raster(path):
     return values
 
 
+def write_webmercator_elevation_raster(path):
+    values = np.full((TILE_SIZE, TILE_SIZE), 250.0, dtype=np.float32)
+    values[0, 0] = -999999.0
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        width=TILE_SIZE,
+        height=TILE_SIZE,
+        count=1,
+        dtype="float32",
+        crs="EPSG:3857",
+        transform=tile_transform_mercator(0, 0, 0),
+        nodata=-999999.0,
+    ) as dataset:
+        dataset.write(values, 1)
+    return values
+
+
 def test_render_cog_tile_returns_exact_u16_tile_for_matching_grid(tmp_path):
     source_path = tmp_path / "source.tif"
     expected = write_webmercator_raster(source_path)
@@ -46,6 +65,24 @@ def test_render_cog_tile_returns_exact_u16_tile_for_matching_grid(tmp_path):
     assert len(payload) == U16_TILE_BYTES
     assert elapsed_ms >= 0
     np.testing.assert_array_equal(actual, expected)
+
+
+def test_render_cog_tile_encodes_float_elevation_sources(tmp_path):
+    source_path = tmp_path / "elevation.tif"
+    write_webmercator_elevation_raster(source_path)
+
+    payload, _ = render_cog_tile(
+        source_path,
+        z=0,
+        x=0,
+        y=0,
+        encoding=TerrainEncoding.ELEVATION_METER_RANGE,
+    )
+    actual = np.frombuffer(payload, dtype=np.uint16).reshape(TILE_SIZE, TILE_SIZE)
+    decoded = decode_elevation_meters(actual)
+
+    assert actual[0, 0] == 65535
+    assert decoded[0, 1] == pytest.approx(250.0, abs=0.2)
 
 
 def test_tile_bbox_lonlat_returns_expected_world_bounds():

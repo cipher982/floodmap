@@ -143,11 +143,12 @@ def render_regions_tile(
     mosaic: np.ndarray | None = None
     cache_statuses: list[str] = []
     elapsed_total_ms = 0.0
+    encoding = manifest.layers[layer].encoding
 
     for region in regions:
         source_path = require_region_source_path(manifest, layer, region)
         payload, cache_status, elapsed_ms = render_cog_tile_with_cache(
-            source_path, z, x, y
+            source_path, z, x, y, encoding
         )
         values = np.frombuffer(payload, dtype=np.uint16).reshape((256, 256)).copy()
         cache_statuses.append(cache_status)
