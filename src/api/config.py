@@ -154,6 +154,11 @@ TERRAIN_V2_ENABLED = os.getenv("TERRAIN_V2_ENABLED", "false").lower() in (
     "true",
     "yes",
 )
+TERRAIN_3D_ENABLED = os.getenv("TERRAIN_3D_ENABLED", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 TERRAIN_CACHE_WRITE_THROUGH = os.getenv(
     "TERRAIN_CACHE_WRITE_THROUGH", "true"
 ).lower() in (

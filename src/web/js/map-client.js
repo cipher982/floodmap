@@ -1392,7 +1392,6 @@ class FloodMapClient {
         url.searchParams.set('lng', currentViewState.lng.toFixed(5));
         url.searchParams.set('zoom', String(Math.round(currentViewState.zoom)));
         url.searchParams.set('water', String(currentViewState.water));
-        url.searchParams.set('exaggeration', '2.0');
         if (url.origin === window.location.origin) {
             return `${url.pathname}${url.search}`;
         }

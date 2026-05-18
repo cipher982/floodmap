@@ -166,6 +166,7 @@ from config import (
     ENABLE_DIAGNOSTICS,
     FORCE_HTTPS,
     IS_DEVELOPMENT,
+    TERRAIN_3D_ENABLED,
     TERRAIN_V2_ENABLED,
 )
 from location_catalog import get_city_page, get_zip_page
@@ -422,6 +423,8 @@ async def serve_sim_lab_floodmap():
 @app.api_route("/terrain-3d", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def serve_terrain_3d():
     """Serve the real-map 3D terrain flood toy review page."""
+    if not TERRAIN_3D_ENABLED:
+        raise HTTPException(status_code=404, detail="3D terrain page is disabled")
     if not TERRAIN_3D_HTML_PATH.exists():
         raise HTTPException(status_code=404, detail="3D terrain page not found")
     content = TERRAIN_3D_HTML_PATH.read_text(encoding="utf-8").replace(

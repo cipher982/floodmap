@@ -10,6 +10,8 @@ def load_main_module(monkeypatch):
     monkeypatch.setenv("ALLOW_MISSING_DATA", "true")
     monkeypatch.setenv("ENVIRONMENT", "development")
 
+    sys.modules.pop("config", None)
+    sys.modules.pop("page_renderer", None)
     sys.modules.pop("main", None)
     return importlib.import_module("main")
 
@@ -33,11 +35,24 @@ def test_homepage_contains_social_metadata_and_explanatory_copy(monkeypatch):
     assert 'twitter:card" content="summary_large_image"' in html
     assert "Real-world flood toy for any U.S. city or ZIP" in html
     assert "Push the slider from puddles to ridiculous max-chaos levels." in html
-    assert 'id="open-3d-view"' in html
-    assert "Open 3D Map" in html
+    assert 'id="open-3d-view"' not in html
+    assert "Open 3D Map" not in html
     assert "What you can do" in html
     assert "How to use it" in html
     assert "Model notes" in html
+
+
+def test_homepage_can_show_3d_link_when_feature_flag_enabled(monkeypatch):
+    monkeypatch.setenv("TERRAIN_3D_ENABLED", "true")
+    main = load_main_module(monkeypatch)
+    client = TestClient(main.app)
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    html = resp.text
+    assert 'id="open-3d-view"' in html
+    assert "Open 3D Map" in html
 
 
 def test_homepage_search_input_allows_browser_history(monkeypatch):

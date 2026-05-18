@@ -10,6 +10,7 @@ from typing import Final
 from config import (
     BIRMINGHAM_HAND_COG_PATH,
     BIRMINGHAM_HAND_DATASET_VERSION,
+    TERRAIN_3D_ENABLED,
     TERRAIN_MANIFEST_PATH,
     TERRAIN_V2_ENABLED,
 )
@@ -31,7 +32,7 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 INDEX_TEMPLATE_PATH = WEB_DIR / "index.html"
 INDEX_TEMPLATE = INDEX_TEMPLATE_PATH.read_text(encoding="utf-8")
 
-ASSET_VERSION: Final[str] = "20260518k"
+ASSET_VERSION: Final[str] = "20260518l"
 SOCIAL_IMAGE_URL: Final[str] = (
     f"https://drose.io/floodmap/static/images/social-card.jpg?v={ASSET_VERSION}"
 )
@@ -251,6 +252,7 @@ def _render_page(context: PageRenderContext) -> str:
         "__FLOODMAP_HOW_TO_ITEMS__": _render_list_items(context.how_to_items),
         "__FLOODMAP_MODEL_SUMMARY__": escape(context.model_summary),
         "__FLOODMAP_NEARBY_LINKS_SECTION__": context.nearby_links_html,
+        "__FLOODMAP_3D_LINK_HTML__": _terrain_3d_link_html(),
     }
 
     html = INDEX_TEMPLATE
@@ -263,6 +265,12 @@ def _render_page(context: PageRenderContext) -> str:
         raise RuntimeError(f"Unresolved Floodmap template tokens: {unresolved_str}")
 
     return html
+
+
+def _terrain_3d_link_html() -> str:
+    if not TERRAIN_3D_ENABLED:
+        return ""
+    return '<a id="open-3d-view" class="secondary-action" href="/terrain-3d">Open 3D Map</a>'
 
 
 def build_home_page_html() -> str:
