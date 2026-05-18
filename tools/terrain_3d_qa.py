@@ -14,7 +14,7 @@ from urllib.parse import urljoin, urlparse
 from PIL import Image, ImageChops, ImageStat
 from playwright.async_api import async_playwright
 
-DEFAULT_PATH = "/terrain-3d?lat=33.5186&lng=-86.8104&zoom=12&water=35&exaggeration=2.8"
+DEFAULT_PATH = "/terrain-3d?lat=33.5186&lng=-86.8104&zoom=12&water=28&exaggeration=2.0"
 
 
 @dataclass(frozen=True)
@@ -191,6 +191,28 @@ async def run_terrain_3d_qa(
 
         await page.goto(url, wait_until="domcontentloaded", timeout=args.timeout_ms)
         await wait_for_terrain_ready(page, args.timeout_ms)
+        ui_metrics = await page.evaluate(
+            """
+            () => {
+              const canvas = document.querySelector('#terrain-3d-canvas')?.getBoundingClientRect();
+              const debug = document.querySelector('.debug-panel');
+              const controls = document.querySelector('.controls');
+              const topbar = document.querySelector('.topbar');
+              const debugRect = debug?.getBoundingClientRect();
+              const controlsRect = controls?.getBoundingClientRect();
+              const topbarRect = topbar?.getBoundingClientRect();
+              return {
+                canvas_width_ratio: canvas ? canvas.width / window.innerWidth : 0,
+                canvas_height_ratio: canvas ? canvas.height / window.innerHeight : 0,
+                debug_panel_visible: Boolean(debugRect && debugRect.width > 0 && debugRect.height > 0),
+                controls_visible: Boolean(controlsRect && controlsRect.width > 0 && controlsRect.height > 0),
+                topbar_visible: Boolean(topbarRect && topbarRect.width > 0 && topbarRect.height > 0),
+                aside_count: document.querySelectorAll('aside').length,
+                exposed_debug_text: document.body.innerText.includes('"visualModel"')
+              };
+            }
+            """
+        )
 
         canvas = page.locator("#terrain-3d-canvas")
         first = screenshots_dir / "terrain-3d-first.png"
@@ -202,6 +224,7 @@ async def run_terrain_3d_qa(
         await browser.close()
 
     visual_metrics = visual_richness_metrics(first)
+    visual_metrics.update(ui_metrics)
     visual_metrics.update(
         {f"animation_{k}": v for k, v in image_change_metrics(first, second).items()}
     )
@@ -225,6 +248,16 @@ async def run_terrain_3d_qa(
         failures.append("3D canvas appears mostly blank/dark")
     if visual_metrics["animation_changed_pixel_ratio"] < 0.0005:
         failures.append("3D water animation did not visibly change frames")
+    if visual_metrics["canvas_width_ratio"] < 0.92:
+        failures.append("3D canvas is not the default full-stage presentation")
+    if visual_metrics["canvas_height_ratio"] < 0.92:
+        failures.append("3D canvas does not fill the viewport height")
+    if visual_metrics["debug_panel_visible"] or visual_metrics["exposed_debug_text"]:
+        failures.append("Default 3D page exposes debug UI")
+    if visual_metrics["aside_count"] != 0:
+        failures.append("Default 3D page still uses a lab-style sidebar")
+    if not visual_metrics["controls_visible"] or not visual_metrics["topbar_visible"]:
+        failures.append("Production controls/topbar are not visible")
     if stats.get("errors"):
         failures.append(f"3D app reported errors: {stats['errors']}")
     if console_errors:
@@ -265,6 +298,8 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- Water vertex ratio: `{result.stats.get('waterVertexRatio')}`",
         f"- Unique sample colors: `{result.visual_metrics.get('unique_sample_colors')}`",
         f"- Blueish pixel ratio: `{result.visual_metrics.get('blueish_pixel_ratio')}`",
+        f"- Canvas width ratio: `{result.visual_metrics.get('canvas_width_ratio')}`",
+        f"- Debug panel visible: `{result.visual_metrics.get('debug_panel_visible')}`",
         f"- Animation changed pixel ratio: `{result.visual_metrics.get('animation_changed_pixel_ratio')}`",
         f"- First screenshot: `{result.screenshots['first']}`",
         f"- Animation screenshot: `{result.screenshots['animation']}`",

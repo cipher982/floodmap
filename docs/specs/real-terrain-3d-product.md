@@ -61,3 +61,13 @@ Replace threshold water with a stateful viewport simulation:
 - Run bounded WebGPU shallow-water steps in the active viewport.
 - Allow water to spill beyond the initial HAND mask.
 - Read no large generated data from the repo; stream existing tiles.
+
+## Polish Milestone
+
+The public 3D path should look like a product showcase, not a debug harness:
+
+- The canvas owns the full viewport.
+- Default UI is a compact overlay; JSON stats are hidden unless `debug=1`.
+- Terrain uses full-resolution sampling and softened relief so roads, valleys,
+  and water remain readable.
+- Browser QA must fail if the debug panel/sidebar returns to the default view.

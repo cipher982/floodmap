@@ -16,18 +16,20 @@ class FloodTerrain3dApp {
     this.waterReadout = document.getElementById("water-readout");
     this.exaggerationInput = document.getElementById("exaggeration");
     this.exaggerationReadout = document.getElementById("exaggeration-readout");
+    this.resetCameraButton = document.getElementById("reset-camera");
     this.captureEl = document.getElementById("basemap-capture");
     this.renderer = new ElevationRenderer();
     this.params = new URLSearchParams(window.location.search);
     this.zoom = Terrain3dMath.clamp(Number.parseInt(this.params.get("zoom") || "12", 10), 8, 14);
     this.lat = Number.parseFloat(this.params.get("lat") || "33.5186");
     this.lng = Number.parseFloat(this.params.get("lng") || "-86.8104");
-    this.waterMeters = Number.parseFloat(this.params.get("water") || this.waterInput.value || "20");
-    this.exaggeration = Number.parseFloat(this.params.get("exaggeration") || this.exaggerationInput.value || "2.2");
-    this.meshSize = Terrain3dMath.clamp(Number.parseInt(this.params.get("mesh") || "128", 10), 48, 192);
-    this.rotationX = -0.98;
-    this.rotationZ = -0.42;
-    this.distance = 3.2;
+    this.waterMeters = Number.parseFloat(this.params.get("water") || this.waterInput.value || "22");
+    this.exaggeration = Number.parseFloat(this.params.get("exaggeration") || this.exaggerationInput.value || "2");
+    this.meshSize = Terrain3dMath.clamp(Number.parseInt(this.params.get("mesh") || "224", 10), 64, 256);
+    this.defaultCamera = { rotationX: -0.82, rotationZ: -0.34, distance: 3.85 };
+    this.rotationX = this.defaultCamera.rotationX;
+    this.rotationZ = this.defaultCamera.rotationZ;
+    this.distance = this.defaultCamera.distance;
     this.dragging = false;
     this.lastPointer = null;
     this.frameCount = 0;
@@ -42,6 +44,7 @@ class FloodTerrain3dApp {
       basemapCaptured: false,
       waterVisible: false,
       waterVertexRatio: 0,
+      meshSize: this.meshSize,
       minElevationM: null,
       maxElevationM: null,
       handDatasetVersion: null,
@@ -158,6 +161,21 @@ class FloodTerrain3dApp {
       event.preventDefault();
       this.distance = Terrain3dMath.clamp(this.distance + event.deltaY * 0.002, 1.7, 6.5);
     }, { passive: false });
+    for (const button of document.querySelectorAll("[data-water-preset]")) {
+      button.addEventListener("click", () => {
+        this.waterMeters = Number.parseFloat(button.dataset.waterPreset || "20");
+        this.waterInput.value = String(this.waterMeters);
+        this.updateWaterMesh();
+        this.updateControls();
+      });
+    }
+    this.resetCameraButton?.addEventListener("click", () => this.resetCamera());
+  }
+
+  resetCamera() {
+    this.rotationX = this.defaultCamera.rotationX;
+    this.rotationZ = this.defaultCamera.rotationZ;
+    this.distance = this.defaultCamera.distance;
   }
 
   updateControls() {
@@ -190,7 +208,7 @@ class FloodTerrain3dApp {
     this.waterVao = gl.createVertexArray();
     this.waterBuffer = gl.createBuffer();
     this.waterIndexBuffer = gl.createBuffer();
-    gl.clearColor(0.02, 0.035, 0.065, 1);
+    gl.clearColor(0.015, 0.025, 0.045, 1);
     gl.enable(gl.DEPTH_TEST);
   }
 
@@ -305,7 +323,8 @@ class FloodTerrain3dApp {
     gl.bindTexture(gl.TEXTURE_2D, this.mapTexture);
     gl.uniform1i(gl.getUniformLocation(this.terrainProgram, "u_map"), 0);
     gl.uniformMatrix4fv(gl.getUniformLocation(this.terrainProgram, "u_matrix"), false, matrix);
-    gl.uniform3f(gl.getUniformLocation(this.terrainProgram, "u_light"), -0.38, 0.82, 0.42);
+    gl.uniform3f(gl.getUniformLocation(this.terrainProgram, "u_light"), -0.34, 0.86, 0.36);
+    gl.uniform3f(gl.getUniformLocation(this.terrainProgram, "u_fogColor"), 0.015, 0.025, 0.045);
     gl.drawElements(gl.TRIANGLES, this.terrainIndices.length, gl.UNSIGNED_INT, 0);
 
     if (this.waterIndices?.length) {

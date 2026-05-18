@@ -15,8 +15,8 @@ class Terrain3dMeshBuilder {
     const elevationRange = Math.max(8, maxElevationM - minElevationM);
     for (let y = 0; y < n; y += 1) {
       for (let x = 0; x < n; x += 1) {
-        const srcX = Math.min(255, Math.round(x / (n - 1) * 255));
-        const srcY = Math.min(255, Math.round(y / (n - 1) * 255));
+        const srcX = x / (n - 1) * 255;
+        const srcY = y / (n - 1) * 255;
         const elevation = Terrain3dMeshBuilder.sampleElevation(
           renderer,
           terrainData,
@@ -24,7 +24,12 @@ class Terrain3dMeshBuilder {
           srcY,
           minElevationM
         );
-        const height = ((elevation - minElevationM) / elevationRange - 0.42) * 0.72 * exaggeration;
+        const height = Terrain3dMeshBuilder.reliefHeight(
+          elevation,
+          minElevationM,
+          elevationRange,
+          exaggeration
+        );
         heights[y * n + x] = height;
       }
     }
@@ -35,7 +40,7 @@ class Terrain3dMeshBuilder {
         const right = heights[y * n + Math.min(n - 1, x + 1)];
         const up = heights[Math.max(0, y - 1) * n + x];
         const down = heights[Math.min(n - 1, y + 1) * n + x];
-        const normal = Terrain3dMeshBuilder.normalize([left - right, 2.0 / n, up - down]);
+        const normal = Terrain3dMeshBuilder.normalize([left - right, 2.8 / n, up - down]);
         const o = i * 8;
         vertices[o] = (x / (n - 1) - 0.5) * 2.4;
         vertices[o + 1] = heights[i];
@@ -63,9 +68,9 @@ class Terrain3dMeshBuilder {
     for (let y = 0; y < n; y += 1) {
       for (let x = 0; x < n; x += 1) {
         const i = y * n + x;
-        const srcX = Math.min(255, Math.round(x / (n - 1) * 255));
-        const srcY = Math.min(255, Math.round(y / (n - 1) * 255));
-        const hand = renderer.decodeHandHeight(handData[srcY * 256 + srcX]);
+        const srcX = x / (n - 1) * 255;
+        const srcY = y / (n - 1) * 255;
+        const hand = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, srcY);
         const terrainO = i * 8;
         const depth = Number.isFinite(hand) ? Math.max(0, waterMeters - hand) : 0;
         const depthT = Math.min(1, depth / Math.max(1, waterMeters * 0.18));
@@ -74,7 +79,7 @@ class Terrain3dMeshBuilder {
         wet[i] = isWet ? 1 : 0;
         const o = i * 6;
         vertices[o] = terrainVertices[terrainO];
-        vertices[o + 1] = terrainVertices[terrainO + 1] + 0.025 + depthT * 0.08;
+        vertices[o + 1] = terrainVertices[terrainO + 1] + 0.018 + depthT * 0.035;
         vertices[o + 2] = terrainVertices[terrainO + 2];
         vertices[o + 3] = x / (n - 1);
         vertices[o + 4] = y / (n - 1);
@@ -118,10 +123,55 @@ class Terrain3dMeshBuilder {
   }
 
   static sampleElevation(renderer, terrainData, x, y, fallback) {
-    const raw = terrainData[y * 256 + x];
-    const elevation = renderer.decodeElevation(raw);
+    const elevation = Terrain3dMeshBuilder.bilinearSample(terrainData, x, y, (value) =>
+      renderer.decodeElevation(value)
+    );
     if (!Number.isFinite(elevation) || elevation < -1000) return fallback;
     return elevation;
+  }
+
+  static sampleHand(renderer, handData, x, y) {
+    return Terrain3dMeshBuilder.bilinearSample(handData, x, y, (value) =>
+      renderer.decodeHandHeight(value)
+    );
+  }
+
+  static bilinearSample(values, x, y, decode) {
+    const x0 = Math.max(0, Math.min(255, Math.floor(x)));
+    const y0 = Math.max(0, Math.min(255, Math.floor(y)));
+    const x1 = Math.min(255, x0 + 1);
+    const y1 = Math.min(255, y0 + 1);
+    const tx = x - x0;
+    const ty = y - y0;
+    const samples = [
+      [decode(values[y0 * 256 + x0]), (1 - tx) * (1 - ty)],
+      [decode(values[y0 * 256 + x1]), tx * (1 - ty)],
+      [decode(values[y1 * 256 + x0]), (1 - tx) * ty],
+      [decode(values[y1 * 256 + x1]), tx * ty]
+    ];
+    let sum = 0;
+    let weight = 0;
+    for (const [value, w] of samples) {
+      if (Number.isFinite(value)) {
+        sum += value * w;
+        weight += w;
+      }
+    }
+    return weight > 0 ? sum / weight : NaN;
+  }
+
+  static reliefHeight(elevation, minElevationM, elevationRange, exaggeration) {
+    const t = Terrain3dMeshBuilder.smoothstep(
+      0,
+      1,
+      (elevation - minElevationM) / elevationRange
+    );
+    return (t - 0.42) * 0.58 * exaggeration;
+  }
+
+  static smoothstep(edge0, edge1, x) {
+    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
   }
 
   static gridIndices(n) {
