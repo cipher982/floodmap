@@ -292,6 +292,12 @@ async def run_terrain_3d_qa(
         failures.append("3D terrain mesh resolution is below the world baseline")
     if stats.get("tileCount", 0) < 9 or stats.get("tilesLoaded", 0) < 9:
         failures.append("3D scene did not load the expected multi-tile world")
+    if stats.get("tileCacheHits", 0) < 6:
+        failures.append("3D navigation did not reuse overlapping cached world tiles")
+    if stats.get("tileCacheSize", 0) < 12:
+        failures.append(
+            "3D tile cache did not retain loaded world tiles after navigation"
+        )
     if not stats.get("handLoaded"):
         failures.append("HAND tile did not load")
     if not stats.get("basemapCaptured"):
@@ -365,6 +371,7 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- Visual model: `{result.stats.get('visualModel')}`",
         f"- Tile: `{result.stats.get('tile')}`",
         f"- Tiles loaded: `{result.stats.get('tilesLoaded')}/{result.stats.get('tileCount')}`",
+        f"- Tile cache: `{result.stats.get('tileCacheSize')}` entries, `{result.stats.get('tileCacheHits')}` hits",
         f"- HAND dataset: `{result.stats.get('handDatasetVersion')}`",
         f"- Water vertex ratio: `{result.stats.get('waterVertexRatio')}`",
         f"- Flow particles: `{result.stats.get('flowParticleCount')}`",

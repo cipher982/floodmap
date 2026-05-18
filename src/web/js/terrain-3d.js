@@ -49,6 +49,10 @@ class FloodTerrain3dApp {
     this.activeLoadId = 0;
     this.startedAt = performance.now();
     this.tiles = [];
+    this.tileCache = new Map();
+    this.tileCacheClock = 0;
+    this.maxTileCacheEntries = 45;
+    this.targetTileCacheEntries = 36;
     this.stats = {
       ready: false,
       visualModel: "map-draped-terrain-hand-water-world-v2",
@@ -61,6 +65,9 @@ class FloodTerrain3dApp {
       elevationSource: null,
       handLoaded: false,
       basemapCaptured: false,
+      tileCacheSize: 0,
+      tileCacheHits: 0,
+      tileCacheMisses: 0,
       waterVisible: false,
       waterVertexRatio: 0,
       flowParticleCount: 0,
@@ -117,22 +124,26 @@ class FloodTerrain3dApp {
     this.handMetadata = handMetadata;
     this.stats.handDatasetVersion = handMetadata?.dataset_version || null;
 
+    const activeKeys = new Set(plan.tiles.map((tile) => tile.key));
     const loaded = await Promise.all(plan.tiles.map((tile) => this.loadTileData(tile)));
     const globalStats = this.globalElevationStats(loaded);
     const sceneTiles = [];
     for (const tile of loaded) {
       if (loadId !== this.activeLoadId) return;
-      const basemap = new Terrain3dBasemapCapture({
-        container: this.captureEl,
-        tile
-      });
-      try {
-        const mapCanvas = await basemap.capture();
-        tile.mapTexture = this.createTexture(mapCanvas);
-      } catch (error) {
-        this.stats.errors.push(`Basemap ${tile.key}: ${error?.message || String(error)}`);
+      if (!tile.mapTexture) {
+        const basemap = new Terrain3dBasemapCapture({
+          container: this.captureEl,
+          tile
+        });
+        try {
+          const mapCanvas = await basemap.capture();
+          tile.mapTexture = this.createTexture(mapCanvas);
+          this.updateCachedMapTexture(tile);
+        } catch (error) {
+          this.stats.errors.push(`Basemap ${tile.key}: ${error?.message || String(error)}`);
+        }
+        this.stats.errors.push(...basemap.errors.map((message) => `Basemap ${tile.key}: ${message}`));
       }
-      this.stats.errors.push(...basemap.errors.map((message) => `Basemap ${tile.key}: ${message}`));
       sceneTiles.push(this.createSceneTile(tile, globalStats));
       this.stats.tilesLoaded = sceneTiles.length;
       this.publish(`Loaded ${sceneTiles.length}/${plan.tiles.length} tiles`);
@@ -149,24 +160,67 @@ class FloodTerrain3dApp {
     this.stats.terrainLoaded = sceneTiles.some((tile) => tile.terrainLoaded);
     this.stats.handLoaded = sceneTiles.some((tile) => tile.handLoaded);
     this.updateAllWaterMeshes();
+    this.evictTileCache(activeKeys);
     this.stats.ready = true;
     this.publish("Ready");
   }
 
   async loadTileData(tile) {
+    const cached = this.tileCache.get(tile.key);
+    if (cached) {
+      cached.lastUsed = ++this.tileCacheClock;
+      this.stats.tileCacheHits += 1;
+      this.stats.tileCacheSize = this.tileCache.size;
+      return {
+        ...tile,
+        terrainData: cached.terrainData,
+        elevationSource: cached.elevationSource,
+        handData: cached.handData,
+        terrainLoaded: cached.terrainLoaded,
+        handLoaded: cached.handLoaded,
+        mapTexture: cached.mapTexture
+      };
+    }
+    this.stats.tileCacheMisses += 1;
     const [terrainResult, handData] = await Promise.all([
       this.loadElevationSurfaceTile(tile),
       this.renderer.loadTerrainTile("hand", tile.z, tile.x, tile.y)
     ]);
-    return {
-      ...tile,
+    const entry = {
+      key: tile.key,
       terrainData: terrainResult.data,
       elevationSource: terrainResult.source,
       handData,
       terrainLoaded: !this.isAllNoData(terrainResult.data),
       handLoaded: !this.isAllNoData(handData),
-      mapTexture: null
+      mapTexture: null,
+      lastUsed: ++this.tileCacheClock
     };
+    this.tileCache.set(tile.key, entry);
+    this.stats.tileCacheSize = this.tileCache.size;
+    return { ...tile, ...entry };
+  }
+
+  updateCachedMapTexture(tile) {
+    const cached = this.tileCache.get(tile.key);
+    if (!cached) return;
+    cached.mapTexture = tile.mapTexture;
+    cached.lastUsed = ++this.tileCacheClock;
+  }
+
+  evictTileCache(activeKeys) {
+    const gl = this.gl;
+    if (this.tileCache.size > this.maxTileCacheEntries) {
+      const evictionCandidates = [...this.tileCache.entries()]
+        .filter(([key]) => !activeKeys.has(key))
+        .sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+      for (const [key, entry] of evictionCandidates) {
+        if (this.tileCache.size <= this.targetTileCacheEntries) break;
+        if (entry.mapTexture) gl.deleteTexture(entry.mapTexture);
+        this.tileCache.delete(key);
+      }
+    }
+    this.stats.tileCacheSize = this.tileCache.size;
   }
 
   async loadElevationSurfaceTile(tile) {
@@ -643,7 +697,6 @@ class FloodTerrain3dApp {
   destroyTiles(tiles) {
     const gl = this.gl;
     for (const tile of tiles || []) {
-      if (tile.mapTexture) gl.deleteTexture(tile.mapTexture);
       if (tile.terrainVao) gl.deleteVertexArray(tile.terrainVao);
       if (tile.waterVao) gl.deleteVertexArray(tile.waterVao);
       if (tile.terrainBuffer) gl.deleteBuffer(tile.terrainBuffer);
