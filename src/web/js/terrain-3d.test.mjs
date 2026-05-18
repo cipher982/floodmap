@@ -37,6 +37,12 @@ test("terrain camera clamps pitch to a non-inverting orbit", () => {
   assert.equal(Terrain3dMath.clampTerrainPitch(-1), -1);
 });
 
+test("terrain camera clamps yaw so the map cannot be spun upside down", () => {
+  assert.equal(Terrain3dMath.clampTerrainYaw(-4), -0.65);
+  assert.equal(Terrain3dMath.clampTerrainYaw(4), 0.65);
+  assert.equal(Terrain3dMath.clampTerrainYaw(0.2), 0.2);
+});
+
 test("terrain camera keeps a world-up view while orbiting", () => {
   const view = Mat4.orbitView({
     pitch: -1.05,

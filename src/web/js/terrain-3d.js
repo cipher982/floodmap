@@ -317,7 +317,7 @@ class FloodTerrain3dApp {
         this.panX += dx * 0.006 * this.distance;
         this.panZ -= dy * 0.006 * this.distance;
       } else {
-        this.rotationY += dx * 0.006;
+        this.rotationY = Terrain3dMath.clampTerrainYaw(this.rotationY + dx * 0.006);
         this.rotationX = Terrain3dMath.clampTerrainPitch(this.rotationX + dy * 0.004);
       }
       this.lastPointer = { x: event.clientX, y: event.clientY };

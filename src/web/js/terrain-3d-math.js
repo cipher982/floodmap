@@ -36,6 +36,10 @@ const Terrain3dMath = {
 
   clampTerrainPitch(value) {
     return Terrain3dMath.clamp(value, -1.35, -0.28);
+  },
+
+  clampTerrainYaw(value) {
+    return Terrain3dMath.clamp(value, -0.65, 0.65);
   }
 };
 
@@ -95,11 +99,12 @@ const Mat4 = {
 
   orbitView({ pitch, yaw, distance, targetX = 0, targetY = 0, targetZ = 0 }) {
     const clampedPitch = Terrain3dMath.clampTerrainPitch(pitch);
+    const clampedYaw = Terrain3dMath.clampTerrainYaw(yaw);
     const horizontalDistance = Math.cos(-clampedPitch) * distance;
     const eye = [
-      targetX + Math.sin(yaw) * horizontalDistance,
+      targetX + Math.sin(clampedYaw) * horizontalDistance,
       targetY + Math.sin(-clampedPitch) * distance,
-      targetZ - Math.cos(yaw) * horizontalDistance
+      targetZ - Math.cos(clampedYaw) * horizontalDistance
     ];
     return Mat4.lookAt(eye, [targetX, targetY, targetZ], [0, 1, 0]);
   },
