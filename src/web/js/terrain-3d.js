@@ -38,7 +38,7 @@ class FloodTerrain3dApp {
     this.meshSize = Terrain3dMath.clamp(Number.parseInt(this.params.get("mesh") || "192", 10), 64, 224);
     this.worldRadius = Terrain3dMath.clamp(Number.parseInt(this.params.get("radius") || "1", 10), 0, 1);
     this.tileScale = 1.38;
-    this.defaultCamera = { rotationX: -1.05, rotationY: -0.28, distance: 5.4, panX: 0, panZ: 0 };
+    this.defaultCamera = { rotationX: -1.05, rotationY: 0, distance: 5.4, panX: 0, panZ: 0 };
     this.rotationX = this.defaultCamera.rotationX;
     this.rotationY = this.defaultCamera.rotationY;
     this.distance = this.defaultCamera.distance;
@@ -318,7 +318,7 @@ class FloodTerrain3dApp {
         this.panZ -= dy * 0.006 * this.distance;
       } else {
         this.rotationY += dx * 0.006;
-        this.rotationX = Terrain3dMath.clamp(this.rotationX + dy * 0.004, -1.55, -0.12);
+        this.rotationX = Terrain3dMath.clampTerrainPitch(this.rotationX + dy * 0.004);
       }
       this.lastPointer = { x: event.clientX, y: event.clientY };
     });
@@ -506,7 +506,7 @@ class FloodTerrain3dApp {
     const gl = this.gl;
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -831,11 +831,14 @@ class FloodTerrain3dApp {
   viewProjectionMatrix() {
     const aspect = this.canvas.width / Math.max(1, this.canvas.height);
     const proj = Mat4.perspective(Math.PI / 4.5, aspect, 0.05, 80);
-    let view = Mat4.identity();
-    view = Mat4.multiply(view, Mat4.translate(this.panX, -0.12, -this.distance));
-    view = Mat4.multiply(view, Mat4.rotateX(this.rotationX));
-    view = Mat4.multiply(view, Mat4.rotateY(this.rotationY));
-    view = Mat4.multiply(view, Mat4.translate(0, 0, this.panZ));
+    const view = Mat4.orbitView({
+      pitch: this.rotationX,
+      yaw: this.rotationY,
+      distance: this.distance,
+      targetX: this.panX,
+      targetY: -0.12,
+      targetZ: this.panZ
+    });
     return Mat4.multiply(proj, view);
   }
 

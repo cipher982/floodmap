@@ -31,6 +31,28 @@ test("matrix multiply preserves identity transforms", () => {
   assert.deepEqual(Array.from(multiplied), Array.from(translated));
 });
 
+test("terrain camera clamps pitch to a non-inverting orbit", () => {
+  assert.equal(Terrain3dMath.clampTerrainPitch(-4), -1.35);
+  assert.equal(Terrain3dMath.clampTerrainPitch(1), -0.28);
+  assert.equal(Terrain3dMath.clampTerrainPitch(-1), -1);
+});
+
+test("terrain camera keeps a world-up view while orbiting", () => {
+  const view = Mat4.orbitView({
+    pitch: -1.05,
+    yaw: 0,
+    distance: 5.4,
+    targetY: -0.12
+  });
+  const target = multiplyVec4(view, [0, -0.12, 0, 1]);
+  const up = multiplyVec4(view, [0, 0.88, 0, 1]);
+  const north = multiplyVec4(view, [0, -0.12, 1, 1]);
+
+  assert.ok(target[2] < 0);
+  assert.ok(up[1] > target[1]);
+  assert.ok(north[1] > target[1]);
+});
+
 test("shader bundle exposes terrain and water programs", () => {
   assert.match(Terrain3dShaders.terrainVertex, /#version 300 es/);
   assert.match(Terrain3dShaders.terrainFragment, /sampler2D u_map/);
@@ -233,3 +255,15 @@ test("flow ribbon builder extracts directional drainage streaks", () => {
   assert.equal(ribbons.simulationModel, "cpu-virtual-pipes-hand64");
   assert.equal(ribbons.simulationCells, 64 * 64);
 });
+
+function multiplyVec4(matrix, vector) {
+  const out = [];
+  for (let row = 0; row < 4; row += 1) {
+    out[row] =
+      matrix[0 * 4 + row] * vector[0] +
+      matrix[1 * 4 + row] * vector[1] +
+      matrix[2 * 4 + row] * vector[2] +
+      matrix[3 * 4 + row] * vector[3];
+  }
+  return out;
+}

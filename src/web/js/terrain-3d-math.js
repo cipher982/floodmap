@@ -32,6 +32,10 @@ const Terrain3dMath = {
 
   clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  },
+
+  clampTerrainPitch(value) {
+    return Terrain3dMath.clamp(value, -1.35, -0.28);
   }
 };
 
@@ -71,6 +75,50 @@ const Mat4 = {
     const c = Math.cos(rad);
     const s = Math.sin(rad);
     return new Float32Array([c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+  },
+
+  lookAt(eye, target, up) {
+    const z = Mat4.normalize([
+      eye[0] - target[0],
+      eye[1] - target[1],
+      eye[2] - target[2]
+    ]);
+    const x = Mat4.normalize(Mat4.cross(up, z));
+    const y = Mat4.cross(z, x);
+    return new Float32Array([
+      x[0], y[0], z[0], 0,
+      x[1], y[1], z[1], 0,
+      x[2], y[2], z[2], 0,
+      -Mat4.dot(x, eye), -Mat4.dot(y, eye), -Mat4.dot(z, eye), 1
+    ]);
+  },
+
+  orbitView({ pitch, yaw, distance, targetX = 0, targetY = 0, targetZ = 0 }) {
+    const clampedPitch = Terrain3dMath.clampTerrainPitch(pitch);
+    const horizontalDistance = Math.cos(-clampedPitch) * distance;
+    const eye = [
+      targetX + Math.sin(yaw) * horizontalDistance,
+      targetY + Math.sin(-clampedPitch) * distance,
+      targetZ - Math.cos(yaw) * horizontalDistance
+    ];
+    return Mat4.lookAt(eye, [targetX, targetY, targetZ], [0, 1, 0]);
+  },
+
+  cross(a, b) {
+    return [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0]
+    ];
+  },
+
+  dot(a, b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  },
+
+  normalize(v) {
+    const length = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / length, v[1] / length, v[2] / length];
   },
 
   multiply(a, b) {
