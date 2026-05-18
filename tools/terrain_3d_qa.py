@@ -153,6 +153,21 @@ def image_change_metrics(a_path: Path, b_path: Path) -> dict[str, float]:
         }
 
 
+def request_failure_text(request) -> str:
+    failure = request.failure
+    if callable(failure):
+        failure = failure()
+    if isinstance(failure, dict):
+        return failure.get("errorText", "")
+    if failure is None:
+        return ""
+    return str(failure)
+
+
+def is_ignorable_failed_request(url: str) -> bool:
+    return "/cdn-cgi/rum" in url
+
+
 async def run_terrain_3d_qa(
     args: argparse.Namespace, out_dir: Path
 ) -> Terrain3dQaResult:
@@ -183,8 +198,12 @@ async def run_terrain_3d_qa(
         )
         page.on(
             "requestfailed",
-            lambda request: failed_requests.append(
-                f"{request.url} {request.failure.get('errorText') if request.failure else ''}"
+            lambda request: (
+                None
+                if is_ignorable_failed_request(request.url)
+                else failed_requests.append(
+                    f"{request.url} {request_failure_text(request)}"
+                )
             ),
         )
         page.on(
