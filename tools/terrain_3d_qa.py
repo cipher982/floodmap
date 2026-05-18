@@ -331,6 +331,10 @@ async def run_terrain_3d_qa(
         failures.append("Drainage-flow particles were not generated")
     if stats.get("flowRibbonCount", 0) < 100:
         failures.append("Drainage-flow ribbons were not generated")
+    if stats.get("flowSimulationModel") != "cpu-virtual-pipes-hand64":
+        failures.append("3D flow ribbons are not using the virtual-pipes simulation")
+    if stats.get("flowSimulationCells", 0) < 9 * 64 * 64:
+        failures.append("3D flow simulation did not run for the loaded tile world")
     if not stats.get("floodPlaybackActive"):
         failures.append("3D flood playback control did not start")
     if visual_metrics["unique_sample_colors"] < 300:
@@ -412,6 +416,7 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- Water vertex ratio: `{result.stats.get('waterVertexRatio')}`",
         f"- Flow particles: `{result.stats.get('flowParticleCount')}`",
         f"- Flow ribbons: `{result.stats.get('flowRibbonCount')}`",
+        f"- Flow simulation: `{result.stats.get('flowSimulationModel')}` / `{result.stats.get('flowSimulationCells')}` cells",
         f"- Unique sample colors: `{result.visual_metrics.get('unique_sample_colors')}`",
         f"- Blueish pixel ratio: `{result.visual_metrics.get('blueish_pixel_ratio')}`",
         f"- Canvas width ratio: `{result.visual_metrics.get('canvas_width_ratio')}`",

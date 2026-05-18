@@ -4,6 +4,16 @@
  * surface once; the active flood level is a shader uniform.
  */
 
+const Terrain3dFlowSimCpu = typeof FloodSimCpu !== "undefined"
+  ? FloodSimCpu
+  : (() => {
+      try {
+        return require("./flood-sim-core.js").FloodSimCpu;
+      } catch {
+        return null;
+      }
+    })();
+
 class Terrain3dMeshBuilder {
   static buildTerrain({
     renderer,
@@ -188,6 +198,12 @@ class Terrain3dMeshBuilder {
     const vertices = [];
     const step = Math.max(3, Math.floor(meshSize / 56));
     const channelMeters = Math.max(3.5, Math.min(18, waterMeters * 0.30));
+    const simulation = Terrain3dMeshBuilder.simulateHandFlow({
+      renderer,
+      handData,
+      waterMeters,
+      channelMeters
+    });
     for (let y = 2; y < meshSize - 2; y += step) {
       for (let x = 2; x < meshSize - 2; x += step) {
         const srcX = x / (meshSize - 1) * 255;
@@ -198,9 +214,19 @@ class Terrain3dMeshBuilder {
         const handRight = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.min(255, srcX + 2), srcY);
         const handUp = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.max(0, srcY - 2));
         const handDown = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.min(255, srcY + 2));
-        const flow = Terrain3dMeshBuilder.flowDirection(handLeft, handRight, handUp, handDown);
+        const gradientFlow = Terrain3dMeshBuilder.flowDirection(handLeft, handRight, handUp, handDown);
+        const simulatedFlow = Terrain3dMeshBuilder.sampleSimulatedFlow(
+          simulation,
+          x / (meshSize - 1),
+          y / (meshSize - 1)
+        );
+        const flow = simulatedFlow.speed > 0.0004
+          ? [simulatedFlow.x, simulatedFlow.y]
+          : gradientFlow;
         const terrainO = (y * meshSize + x) * 8;
-        const strength = Math.max(0.10, (1 - hand / channelMeters) ** 1.45);
+        const terrainStrength = (1 - hand / channelMeters) ** 1.45;
+        const simStrength = Math.min(1, simulatedFlow.speed * 16);
+        const strength = Math.max(0.10, terrainStrength * 0.70 + simStrength * 0.55);
         const phase = Terrain3dMeshBuilder.hash2(x + 41, y + 17);
         const dirX = flow[0];
         const dirZ = -flow[1];
@@ -235,8 +261,51 @@ class Terrain3dMeshBuilder {
     return {
       vertices: new Float32Array(vertices),
       ribbonCount: vertices.length / (8 * 6),
-      vertexCount: vertices.length / 8
+      vertexCount: vertices.length / 8,
+      simulationModel: simulation ? "cpu-virtual-pipes-hand64" : "hand-gradient-fallback",
+      simulationCells: simulation ? simulation.width * simulation.height : 0
     };
+  }
+
+  static simulateHandFlow({ renderer, handData, waterMeters, channelMeters }) {
+    if (!Terrain3dFlowSimCpu || !Number.isFinite(waterMeters) || waterMeters <= 0) return null;
+    const width = 64;
+    const height = 64;
+    const bed = new Float32Array(width * height);
+    const water = new Float32Array(width * height);
+    const fallbackBed = channelMeters * 2.5;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const srcX = x / (width - 1) * 255;
+        const srcY = y / (height - 1) * 255;
+        const hand = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, srcY);
+        const i = y * width + x;
+        bed[i] = Number.isFinite(hand) ? Math.min(fallbackBed, Math.max(0, hand)) : fallbackBed;
+        if (Number.isFinite(hand) && hand <= channelMeters) {
+          water[i] = Math.max(0, waterMeters - hand) * 0.030;
+        }
+      }
+    }
+    const sim = new Terrain3dFlowSimCpu({ width, height, bed, water, cellSize: 1 });
+    sim.run(10, {
+      dt: 0.22,
+      conductance: 0.22,
+      friction: 0.88,
+      rainRate: waterMeters > 8 ? 0.004 : 0.0015
+    });
+    return sim;
+  }
+
+  static sampleSimulatedFlow(simulation, u, v) {
+    if (!simulation) return { x: 0, y: 0, speed: 0 };
+    const x = Math.max(0, Math.min(simulation.width - 1, Math.round(u * (simulation.width - 1))));
+    const y = Math.max(0, Math.min(simulation.height - 1, Math.round(v * (simulation.height - 1))));
+    const i = y * simulation.width + x;
+    const vx = simulation.velocityX[i] || 0;
+    const vy = simulation.velocityY[i] || 0;
+    const speed = Math.hypot(vx, vy);
+    if (!Number.isFinite(speed) || speed < 0.000001) return { x: 0, y: 0, speed: 0 };
+    return { x: vx / speed, y: vy / speed, speed };
   }
 
   static elevationStats(renderer, terrainData) {

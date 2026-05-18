@@ -228,4 +228,6 @@ test("flow ribbon builder extracts directional drainage streaks", () => {
   assert.ok(ribbons.ribbonCount > 0);
   assert.equal(ribbons.vertexCount, ribbons.ribbonCount * 6);
   assert.equal(ribbons.vertices.length, ribbons.vertexCount * 8);
+  assert.equal(ribbons.simulationModel, "cpu-virtual-pipes-hand64");
+  assert.equal(ribbons.simulationCells, 64 * 64);
 });

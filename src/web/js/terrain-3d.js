@@ -81,6 +81,8 @@ class FloodTerrain3dApp {
       waterVertexRatio: 0,
       flowParticleCount: 0,
       flowRibbonCount: 0,
+      flowSimulationModel: null,
+      flowSimulationCells: 0,
       meshSize: this.meshSize,
       minElevationM: null,
       maxElevationM: null,
@@ -563,13 +565,19 @@ class FloodTerrain3dApp {
   updateAllWaterMeshes() {
     let flowParticleCount = 0;
     let flowRibbonCount = 0;
+    let flowSimulationCells = 0;
+    let flowSimulationModel = null;
     for (const tile of this.tiles) {
       this.updateWaterMesh(tile);
       flowParticleCount += tile.flowParticleCount || 0;
       flowRibbonCount += tile.flowRibbonCount || 0;
+      flowSimulationCells += tile.flowSimulationCells || 0;
+      flowSimulationModel = flowSimulationModel || tile.flowSimulationModel || null;
     }
     this.stats.flowParticleCount = flowParticleCount;
     this.stats.flowRibbonCount = flowRibbonCount;
+    this.stats.flowSimulationCells = flowSimulationCells;
+    this.stats.flowSimulationModel = flowSimulationModel;
     this.updateWaterStats();
     this.publish(this.stats.ready ? "Ready" : "Building water");
   }
@@ -608,6 +616,8 @@ class FloodTerrain3dApp {
     tile.flowRibbonVertices = ribbons.vertices;
     tile.flowRibbonVertexCount = ribbons.vertexCount;
     tile.flowRibbonCount = ribbons.ribbonCount;
+    tile.flowSimulationModel = ribbons.simulationModel;
+    tile.flowSimulationCells = ribbons.simulationCells;
     this.uploadFlowRibbons(tile);
   }
 
