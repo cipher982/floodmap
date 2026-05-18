@@ -38,9 +38,9 @@ class FloodTerrain3dApp {
     this.meshSize = Terrain3dMath.clamp(Number.parseInt(this.params.get("mesh") || "192", 10), 64, 224);
     this.worldRadius = Terrain3dMath.clamp(Number.parseInt(this.params.get("radius") || "1", 10), 0, 1);
     this.tileScale = 1.38;
-    this.defaultCamera = { rotationX: -0.86, rotationZ: -0.34, distance: 6.2, panX: 0, panZ: 0 };
+    this.defaultCamera = { rotationX: -0.78, rotationY: -0.34, distance: 6.2, panX: 0, panZ: 0 };
     this.rotationX = this.defaultCamera.rotationX;
-    this.rotationZ = this.defaultCamera.rotationZ;
+    this.rotationY = this.defaultCamera.rotationY;
     this.distance = this.defaultCamera.distance;
     this.panX = this.defaultCamera.panX;
     this.panZ = this.defaultCamera.panZ;
@@ -310,8 +310,8 @@ class FloodTerrain3dApp {
         this.panX += dx * 0.006 * this.distance;
         this.panZ -= dy * 0.006 * this.distance;
       } else {
-        this.rotationZ += dx * 0.006;
-        this.rotationX = Terrain3dMath.clamp(this.rotationX + dy * 0.004, -1.32, -0.35);
+        this.rotationY += dx * 0.006;
+        this.rotationX = Terrain3dMath.clamp(this.rotationX + dy * 0.004, -1.45, -0.12);
       }
       this.lastPointer = { x: event.clientX, y: event.clientY };
     });
@@ -442,7 +442,7 @@ class FloodTerrain3dApp {
 
   resetCamera() {
     this.rotationX = this.defaultCamera.rotationX;
-    this.rotationZ = this.defaultCamera.rotationZ;
+    this.rotationY = this.defaultCamera.rotationY;
     this.distance = this.defaultCamera.distance;
     this.panX = this.defaultCamera.panX;
     this.panZ = this.defaultCamera.panZ;
@@ -826,8 +826,7 @@ class FloodTerrain3dApp {
     let view = Mat4.identity();
     view = Mat4.multiply(view, Mat4.translate(this.panX, -0.12, -this.distance));
     view = Mat4.multiply(view, Mat4.rotateX(this.rotationX));
-    view = Mat4.multiply(view, Mat4.rotateY(0.0));
-    view = Mat4.multiply(view, Mat4.rotateZ(this.rotationZ));
+    view = Mat4.multiply(view, Mat4.rotateY(this.rotationY));
     view = Mat4.multiply(view, Mat4.translate(0, 0, this.panZ));
     return Mat4.multiply(proj, view);
   }
