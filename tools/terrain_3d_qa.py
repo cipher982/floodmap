@@ -228,9 +228,31 @@ async def run_terrain_3d_qa(
         first = screenshots_dir / "terrain-3d-first.png"
         second = screenshots_dir / "terrain-3d-animation.png"
         moved = screenshots_dir / "terrain-3d-moved.png"
+        low_water = screenshots_dir / "terrain-3d-low-water.png"
+        raised_water = screenshots_dir / "terrain-3d-raised-water.png"
         await canvas.screenshot(path=str(first))
         await page.wait_for_timeout(900)
         await canvas.screenshot(path=str(second))
+        await page.evaluate(
+            """
+            () => {
+              window.floodTerrain3d.stopFloodPlayback();
+              window.floodTerrain3d.setWaterMeters(0);
+            }
+            """
+        )
+        await page.wait_for_timeout(120)
+        await canvas.screenshot(path=str(low_water))
+        await page.evaluate(
+            """
+            () => {
+              const current = window.floodTerrain3d.waterMeters || 0;
+              window.floodTerrain3d.setWaterMeters(Math.max(35, current + 35));
+            }
+            """
+        )
+        await page.wait_for_timeout(120)
+        await canvas.screenshot(path=str(raised_water))
         await page.locator('[data-pan-tile="east"]').click()
         await page.wait_for_function(
             """
@@ -301,6 +323,21 @@ async def run_terrain_3d_qa(
         {f"animation_{k}": v for k, v in image_change_metrics(first, second).items()}
     )
     visual_metrics.update(
+        {
+            f"slider_{k}": v
+            for k, v in image_change_metrics(low_water, raised_water).items()
+        }
+    )
+    visual_metrics.update(
+        {f"low_water_{k}": v for k, v in visual_richness_metrics(low_water).items()}
+    )
+    visual_metrics.update(
+        {
+            f"raised_water_{k}": v
+            for k, v in visual_richness_metrics(raised_water).items()
+        }
+    )
+    visual_metrics.update(
         {f"navigation_{k}": v for k, v in image_change_metrics(first, moved).items()}
     )
 
@@ -345,6 +382,13 @@ async def run_terrain_3d_qa(
         failures.append("3D canvas appears mostly blank/dark")
     if visual_metrics["animation_changed_pixel_ratio"] < 0.0005:
         failures.append("3D water animation did not visibly change frames")
+    if visual_metrics["slider_changed_pixel_ratio"] < 0.01:
+        failures.append("3D water slider did not visibly change the scene")
+    if (
+        visual_metrics["raised_water_blueish_pixel_ratio"]
+        <= visual_metrics["low_water_blueish_pixel_ratio"]
+    ):
+        failures.append("3D water slider did not increase visible water/current color")
     if not visual_metrics["center_tile_moved"]:
         failures.append("3D navigation did not move the world center tile")
     if "lat=" not in moved_url or "lng=" not in moved_url:
@@ -387,6 +431,8 @@ async def run_terrain_3d_qa(
             "first": str(first),
             "animation": str(second),
             "moved": str(moved),
+            "low_water": str(low_water),
+            "raised_water": str(raised_water),
         },
         stats=stats,
         visual_metrics=visual_metrics,
@@ -422,11 +468,14 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- Canvas width ratio: `{result.visual_metrics.get('canvas_width_ratio')}`",
         f"- Debug panel visible: `{result.visual_metrics.get('debug_panel_visible')}`",
         f"- Animation changed pixel ratio: `{result.visual_metrics.get('animation_changed_pixel_ratio')}`",
+        f"- Slider changed pixel ratio: `{result.visual_metrics.get('slider_changed_pixel_ratio')}`",
         f"- Navigation changed pixel ratio: `{result.visual_metrics.get('navigation_changed_pixel_ratio')}`",
         f"- Max frame time: `{result.stats.get('maxFrameMs')}` ms",
         f"- First screenshot: `{result.screenshots['first']}`",
         f"- Animation screenshot: `{result.screenshots['animation']}`",
         f"- Moved screenshot: `{result.screenshots['moved']}`",
+        f"- Low-water screenshot: `{result.screenshots['low_water']}`",
+        f"- Raised-water screenshot: `{result.screenshots['raised_water']}`",
     ]
     if result.failures:
         lines.extend(
