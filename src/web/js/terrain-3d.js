@@ -62,7 +62,7 @@ class FloodTerrain3dApp {
     this.targetTileCacheEntries = 36;
     this.stats = {
       ready: false,
-      visualModel: "map-draped-terrain-hand-water-world-v2",
+      visualModel: "map-draped-terrain-hand-water-world-v3",
       centerTile: null,
       tile: null,
       worldRadius: this.worldRadius,
@@ -80,6 +80,7 @@ class FloodTerrain3dApp {
       waterVisible: false,
       waterVertexRatio: 0,
       flowParticleCount: 0,
+      flowRibbonCount: 0,
       meshSize: this.meshSize,
       minElevationM: null,
       maxElevationM: null,
@@ -484,6 +485,10 @@ class FloodTerrain3dApp {
       Terrain3dShaders.flowVertex,
       Terrain3dShaders.flowFragment
     );
+    this.flowRibbonProgram = this.createProgram(
+      Terrain3dShaders.flowRibbonVertex,
+      Terrain3dShaders.flowRibbonFragment
+    );
     gl.clearColor(0.015, 0.025, 0.045, 1);
     gl.enable(gl.DEPTH_TEST);
   }
@@ -513,13 +518,18 @@ class FloodTerrain3dApp {
       waterIndexBuffer: this.gl.createBuffer(),
       flowVao: this.gl.createVertexArray(),
       flowBuffer: this.gl.createBuffer(),
+      flowRibbonVao: this.gl.createVertexArray(),
+      flowRibbonBuffer: this.gl.createBuffer(),
       terrainVertices: null,
       terrainIndices: null,
       waterVertices: null,
       waterIndices: null,
       waterVertexRatio: 0,
       flowVertices: null,
-      flowParticleCount: 0
+      flowParticleCount: 0,
+      flowRibbonVertices: null,
+      flowRibbonVertexCount: 0,
+      flowRibbonCount: 0
     };
     this.updateTerrainGeometry(sceneTile, globalStats);
     return sceneTile;
@@ -552,11 +562,14 @@ class FloodTerrain3dApp {
 
   updateAllWaterMeshes() {
     let flowParticleCount = 0;
+    let flowRibbonCount = 0;
     for (const tile of this.tiles) {
       this.updateWaterMesh(tile);
       flowParticleCount += tile.flowParticleCount || 0;
+      flowRibbonCount += tile.flowRibbonCount || 0;
     }
     this.stats.flowParticleCount = flowParticleCount;
+    this.stats.flowRibbonCount = flowRibbonCount;
     this.updateWaterStats();
     this.publish(this.stats.ready ? "Ready" : "Building water");
   }
@@ -585,6 +598,17 @@ class FloodTerrain3dApp {
     tile.flowVertices = flow.vertices;
     tile.flowParticleCount = flow.particleCount;
     this.uploadFlow(tile);
+    const ribbons = Terrain3dMeshBuilder.buildFlowRibbons({
+      renderer: this.renderer,
+      handData: tile.handData,
+      terrainVertices: tile.terrainVertices,
+      meshSize: this.meshSize,
+      waterMeters: this.waterMeters
+    });
+    tile.flowRibbonVertices = ribbons.vertices;
+    tile.flowRibbonVertexCount = ribbons.vertexCount;
+    tile.flowRibbonCount = ribbons.ribbonCount;
+    this.uploadFlowRibbons(tile);
   }
 
   updateWaterStats() {
@@ -646,6 +670,15 @@ class FloodTerrain3dApp {
     gl.bindVertexArray(null);
   }
 
+  uploadFlowRibbons(tile) {
+    const gl = this.gl;
+    gl.bindVertexArray(tile.flowRibbonVao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, tile.flowRibbonBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, tile.flowRibbonVertices, gl.DYNAMIC_DRAW);
+    this.configureFlowRibbonAttributes();
+    gl.bindVertexArray(null);
+  }
+
   configureTerrainAttributes() {
     const gl = this.gl;
     const stride = 8 * 4;
@@ -694,6 +727,26 @@ class FloodTerrain3dApp {
     gl.vertexAttribPointer(strength, 1, gl.FLOAT, false, stride, 6 * 4);
   }
 
+  configureFlowRibbonAttributes() {
+    const gl = this.gl;
+    const stride = 8 * 4;
+    const pos = gl.getAttribLocation(this.flowRibbonProgram, "a_pos");
+    const flow = gl.getAttribLocation(this.flowRibbonProgram, "a_flow");
+    const phase = gl.getAttribLocation(this.flowRibbonProgram, "a_phase");
+    const strength = gl.getAttribLocation(this.flowRibbonProgram, "a_strength");
+    const along = gl.getAttribLocation(this.flowRibbonProgram, "a_along");
+    gl.enableVertexAttribArray(pos);
+    gl.vertexAttribPointer(pos, 3, gl.FLOAT, false, stride, 0);
+    gl.enableVertexAttribArray(flow);
+    gl.vertexAttribPointer(flow, 2, gl.FLOAT, false, stride, 3 * 4);
+    gl.enableVertexAttribArray(phase);
+    gl.vertexAttribPointer(phase, 1, gl.FLOAT, false, stride, 5 * 4);
+    gl.enableVertexAttribArray(strength);
+    gl.vertexAttribPointer(strength, 1, gl.FLOAT, false, stride, 6 * 4);
+    gl.enableVertexAttribArray(along);
+    gl.vertexAttribPointer(along, 1, gl.FLOAT, false, stride, 7 * 4);
+  }
+
   render(time) {
     const gl = this.gl;
     const start = performance.now();
@@ -727,6 +780,14 @@ class FloodTerrain3dApp {
       gl.drawElements(gl.TRIANGLES, tile.waterIndices.length, gl.UNSIGNED_INT, 0);
     }
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    for (const tile of this.tiles) {
+      if (!tile.flowRibbonVertexCount) continue;
+      gl.useProgram(this.flowRibbonProgram);
+      gl.bindVertexArray(tile.flowRibbonVao);
+      gl.uniformMatrix4fv(gl.getUniformLocation(this.flowRibbonProgram, "u_matrix"), false, matrix);
+      gl.uniform1f(gl.getUniformLocation(this.flowRibbonProgram, "u_time"), (time - this.startedAt) / 1000);
+      gl.drawArrays(gl.TRIANGLES, 0, tile.flowRibbonVertexCount);
+    }
     for (const tile of this.tiles) {
       if (!tile.flowParticleCount) continue;
       gl.useProgram(this.flowProgram);
@@ -778,6 +839,8 @@ class FloodTerrain3dApp {
       if (tile.waterIndexBuffer) gl.deleteBuffer(tile.waterIndexBuffer);
       if (tile.flowVao) gl.deleteVertexArray(tile.flowVao);
       if (tile.flowBuffer) gl.deleteBuffer(tile.flowBuffer);
+      if (tile.flowRibbonVao) gl.deleteVertexArray(tile.flowRibbonVao);
+      if (tile.flowRibbonBuffer) gl.deleteBuffer(tile.flowRibbonBuffer);
     }
   }
 

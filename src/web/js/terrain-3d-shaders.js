@@ -145,6 +145,47 @@ void main() {
   float alpha = core * tail * (0.36 + v_strength * 0.72);
   fragColor = vec4(color, alpha);
 }
+`,
+
+  flowRibbonVertex: `#version 300 es
+precision highp float;
+in vec3 a_pos;
+in vec2 a_flow;
+in float a_phase;
+in float a_strength;
+in float a_along;
+uniform mat4 u_matrix;
+out vec2 v_flow;
+out float v_phase;
+out float v_strength;
+out float v_along;
+void main() {
+  v_flow = a_flow;
+  v_phase = a_phase;
+  v_strength = a_strength;
+  v_along = a_along;
+  gl_Position = u_matrix * vec4(a_pos, 1.0);
+}
+`,
+
+  flowRibbonFragment: `#version 300 es
+precision highp float;
+uniform float u_time;
+in vec2 v_flow;
+in float v_phase;
+in float v_strength;
+in float v_along;
+out vec4 fragColor;
+void main() {
+  float speed = 0.32 + v_strength * 0.58;
+  float pulse = fract(v_along * 2.4 - u_time * speed + v_phase);
+  float dash = smoothstep(0.02, 0.20, pulse) * (1.0 - smoothstep(0.46, 0.96, pulse));
+  float body = smoothstep(0.0, 0.12, v_along) * (1.0 - smoothstep(0.88, 1.0, v_along));
+  float glint = smoothstep(0.60, 1.0, dash) * (0.35 + v_strength * 0.65);
+  vec3 base = mix(vec3(0.02, 0.42, 0.95), vec3(0.70, 0.96, 1.0), glint);
+  float alpha = body * dash * (0.16 + v_strength * 0.48);
+  fragColor = vec4(base, alpha);
+}
 `
 };
 

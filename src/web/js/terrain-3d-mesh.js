@@ -184,6 +184,61 @@ class Terrain3dMeshBuilder {
     };
   }
 
+  static buildFlowRibbons({ renderer, handData, terrainVertices, meshSize, waterMeters }) {
+    const vertices = [];
+    const step = Math.max(3, Math.floor(meshSize / 56));
+    const channelMeters = Math.max(3.5, Math.min(18, waterMeters * 0.30));
+    for (let y = 2; y < meshSize - 2; y += step) {
+      for (let x = 2; x < meshSize - 2; x += step) {
+        const srcX = x / (meshSize - 1) * 255;
+        const srcY = y / (meshSize - 1) * 255;
+        const hand = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, srcY);
+        if (!Number.isFinite(hand) || hand > channelMeters) continue;
+        const handLeft = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.max(0, srcX - 2), srcY);
+        const handRight = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.min(255, srcX + 2), srcY);
+        const handUp = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.max(0, srcY - 2));
+        const handDown = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.min(255, srcY + 2));
+        const flow = Terrain3dMeshBuilder.flowDirection(handLeft, handRight, handUp, handDown);
+        const terrainO = (y * meshSize + x) * 8;
+        const strength = Math.max(0.10, (1 - hand / channelMeters) ** 1.45);
+        const phase = Terrain3dMeshBuilder.hash2(x + 41, y + 17);
+        const dirX = flow[0];
+        const dirZ = -flow[1];
+        const len = Math.hypot(dirX, dirZ) || 1;
+        const nx = dirX / len;
+        const nz = dirZ / len;
+        const ax = -nz;
+        const az = nx;
+        const length = 0.060 + strength * 0.100;
+        const width = 0.010 + strength * 0.020;
+        const cx = terrainVertices[terrainO];
+        const cy = terrainVertices[terrainO + 1] + 0.070 + strength * 0.026;
+        const cz = terrainVertices[terrainO + 2];
+        const p0 = [cx - nx * length - ax * width, cy, cz - nz * length - az * width, 0];
+        const p1 = [cx + nx * length - ax * width, cy, cz + nz * length - az * width, 1];
+        const p2 = [cx - nx * length + ax * width, cy, cz - nz * length + az * width, 0];
+        const p3 = [cx + nx * length + ax * width, cy, cz + nz * length + az * width, 1];
+        for (const point of [p0, p1, p2, p2, p1, p3]) {
+          vertices.push(
+            point[0],
+            point[1],
+            point[2],
+            flow[0],
+            flow[1],
+            phase,
+            strength,
+            point[3]
+          );
+        }
+      }
+    }
+    return {
+      vertices: new Float32Array(vertices),
+      ribbonCount: vertices.length / (8 * 6),
+      vertexCount: vertices.length / 8
+    };
+  }
+
   static elevationStats(renderer, terrainData) {
     let min = Infinity;
     let max = -Infinity;

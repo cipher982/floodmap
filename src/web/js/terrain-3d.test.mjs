@@ -41,6 +41,8 @@ test("shader bundle exposes terrain and water programs", () => {
   assert.match(Terrain3dShaders.waterFragment, /v_flow/);
   assert.match(Terrain3dShaders.flowVertex, /gl_PointSize/);
   assert.match(Terrain3dShaders.flowFragment, /gl_PointCoord/);
+  assert.match(Terrain3dShaders.flowRibbonVertex, /a_along/);
+  assert.match(Terrain3dShaders.flowRibbonFragment, /v_along/);
 });
 
 test("terrain world planner builds a centered tile grid", () => {
@@ -197,4 +199,33 @@ test("flow particle builder extracts moving drainage points", () => {
 
   assert.ok(particles.particleCount > 0);
   assert.equal(particles.vertices.length, particles.particleCount * 7);
+});
+
+test("flow ribbon builder extracts directional drainage streaks", () => {
+  const renderer = { decodeHandHeight: (value) => (value === 65535 ? NaN : value / 10) };
+  const handData = new Uint16Array(256 * 256);
+  handData.fill(120);
+  for (let y = 0; y < 256; y += 1) {
+    for (let x = 80; x <= 176; x += 1) {
+      handData[y * 256 + x] = Math.abs(x - 128) / 10;
+    }
+  }
+  const terrainVertices = new Float32Array(16 * 16 * 8);
+  for (let i = 0; i < 16 * 16; i += 1) {
+    terrainVertices[i * 8] = i % 16;
+    terrainVertices[i * 8 + 1] = 0.2;
+    terrainVertices[i * 8 + 2] = Math.floor(i / 16);
+  }
+
+  const ribbons = Terrain3dMeshBuilder.buildFlowRibbons({
+    renderer,
+    handData,
+    terrainVertices,
+    meshSize: 16,
+    waterMeters: 14
+  });
+
+  assert.ok(ribbons.ribbonCount > 0);
+  assert.equal(ribbons.vertexCount, ribbons.ribbonCount * 6);
+  assert.equal(ribbons.vertices.length, ribbons.vertexCount * 8);
 });

@@ -305,7 +305,7 @@ async def run_terrain_3d_qa(
     )
 
     failures = []
-    if stats.get("visualModel") != "map-draped-terrain-hand-water-world-v2":
+    if stats.get("visualModel") != "map-draped-terrain-hand-water-world-v3":
         failures.append("Unexpected or missing 3D visual model marker")
     if not stats.get("terrainLoaded"):
         failures.append("Terrain/elevation tile did not load")
@@ -329,6 +329,8 @@ async def run_terrain_3d_qa(
         failures.append("Water mesh was not visible")
     if stats.get("flowParticleCount", 0) < 100:
         failures.append("Drainage-flow particles were not generated")
+    if stats.get("flowRibbonCount", 0) < 100:
+        failures.append("Drainage-flow ribbons were not generated")
     if not stats.get("floodPlaybackActive"):
         failures.append("3D flood playback control did not start")
     if visual_metrics["unique_sample_colors"] < 300:
@@ -409,6 +411,7 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- HAND dataset: `{result.stats.get('handDatasetVersion')}`",
         f"- Water vertex ratio: `{result.stats.get('waterVertexRatio')}`",
         f"- Flow particles: `{result.stats.get('flowParticleCount')}`",
+        f"- Flow ribbons: `{result.stats.get('flowRibbonCount')}`",
         f"- Unique sample colors: `{result.visual_metrics.get('unique_sample_colors')}`",
         f"- Blueish pixel ratio: `{result.visual_metrics.get('blueish_pixel_ratio')}`",
         f"- Canvas width ratio: `{result.visual_metrics.get('canvas_width_ratio')}`",
