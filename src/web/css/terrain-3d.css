@@ -1,0 +1,260 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #05070d;
+  color: #e5edf8;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 25% 10%, rgba(37, 99, 235, 0.24), transparent 32%),
+    linear-gradient(180deg, #06111f 0%, #030711 58%, #02040a 100%);
+}
+
+.stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #020617;
+}
+
+#terrain-3d-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+
+#terrain-3d-canvas:active {
+  cursor: grabbing;
+}
+
+.topbar,
+.controls,
+.debug-panel {
+  position: absolute;
+  z-index: 2;
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.30);
+}
+
+.topbar {
+  left: 24px;
+  right: 24px;
+  top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.56);
+}
+
+.brand {
+  min-width: 0;
+}
+
+h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+p {
+  margin: 5px 0 0;
+  color: #c2cbd9;
+  line-height: 1.3;
+  font-size: 13px;
+}
+
+.status {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.16);
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.place-search {
+  flex: 0 1 390px;
+  display: flex;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.place-search input {
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.72);
+  color: #e5edf8;
+  padding: 9px 10px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.place-search button {
+  flex: 0 0 auto;
+  min-width: 64px;
+}
+
+.controls {
+  right: 24px;
+  bottom: 24px;
+  width: min(360px, calc(100vw - 48px));
+  border-radius: 12px;
+  background: rgba(5, 10, 20, 0.72);
+  padding: 16px;
+}
+
+label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 8px;
+  color: #d8e2f1;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: #60a5fa;
+}
+
+.readout {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 16px;
+  color: #93c5fd;
+  font-weight: 800;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.nav-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+button {
+  flex: 1 1 0;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.82);
+  color: #dbeafe;
+  padding: 9px 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+button:hover {
+  background: rgba(30, 41, 59, 0.92);
+}
+
+button.is-active {
+  border-color: rgba(56, 189, 248, 0.62);
+  background: rgba(14, 116, 144, 0.72);
+  color: #ecfeff;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.map-link {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.76);
+  color: #dbeafe;
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.map-link:hover {
+  background: rgba(30, 41, 59, 0.92);
+}
+
+.debug-panel {
+  display: none;
+  left: 24px;
+  bottom: 24px;
+  width: min(390px, calc(100vw - 48px));
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.84);
+  padding: 12px;
+}
+
+pre {
+  margin: 0;
+  max-height: 38vh;
+  overflow: auto;
+  color: #d1fae5;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+html[data-debug="true"] .debug-panel {
+  display: block;
+}
+
+#basemap-capture {
+  position: fixed;
+  left: -1200px;
+  top: 0;
+  width: 1024px;
+  height: 1024px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    left: 12px;
+    right: 12px;
+    top: 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  p {
+    display: none;
+  }
+
+  .place-search {
+    order: 3;
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .controls {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
+  }
+}
