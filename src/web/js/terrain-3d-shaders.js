@@ -64,7 +64,10 @@ void main() {
   float depthMeters = a_hand >= 0.0 ? max(0.0, u_waterMeters - a_hand) : 0.0;
   float depthT = min(1.0, depthMeters / max(1.0, u_waterMeters * 0.25));
   vec3 pos = a_pos;
-  pos.y += depthMeters * u_metersToWorld + 0.004;
+  // Lift water by depth, but soft-cap so isolated low-HAND cells don't spike up
+  // past their neighbours and produce vertical pillars across basin boundaries.
+  float liftMeters = depthMeters * 0.55;
+  pos.y += liftMeters * u_metersToWorld + 0.006;
   v_uv = a_uv;
   v_depth = depthT;
   v_flow = a_flow;
@@ -95,12 +98,12 @@ void main() {
   float current = sin(along * 118.0 - u_time * 6.4 + sin(cross * 44.0) * 0.8) * 0.5 + 0.5;
   float stripe = smoothstep(0.62, 1.0, current);
   float foam = smoothstep(0.82, 1.0, stripe) * smoothstep(0.06, 0.30, v_depth);
-  vec3 shallow = vec3(0.04, 0.64, 1.0);
-  vec3 deep = vec3(0.00, 0.16, 0.62);
+  vec3 shallow = vec3(0.18, 0.72, 1.0);
+  vec3 deep = vec3(0.00, 0.30, 0.78);
   vec3 color = mix(shallow, deep, clamp(v_depth, 0.0, 1.0));
-  color = mix(color, vec3(0.72, 0.94, 1.0), foam * (0.18 + v_depth * 0.16));
-  color += w * vec3(0.030, 0.074, 0.118);
-  float alpha = clamp(0.38 + v_depth * 0.42 + foam * 0.12, 0.30, 0.86);
+  color = mix(color, vec3(0.82, 0.97, 1.0), foam * (0.22 + v_depth * 0.18));
+  color += w * vec3(0.040, 0.080, 0.130);
+  float alpha = clamp(0.62 + v_depth * 0.30 + foam * 0.10, 0.55, 0.94);
   fragColor = vec4(color, alpha);
 }
 `,
