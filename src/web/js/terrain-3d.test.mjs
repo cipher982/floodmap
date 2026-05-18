@@ -37,6 +37,8 @@ test("shader bundle exposes terrain and water programs", () => {
   assert.match(Terrain3dShaders.waterVertex, /a_flow/);
   assert.match(Terrain3dShaders.waterFragment, /wave/);
   assert.match(Terrain3dShaders.waterFragment, /v_flow/);
+  assert.match(Terrain3dShaders.flowVertex, /gl_PointSize/);
+  assert.match(Terrain3dShaders.flowFragment, /gl_PointCoord/);
 });
 
 test("terrain world planner builds a centered tile grid", () => {
@@ -95,4 +97,32 @@ test("water mesh builder uses HAND as the initial wet threshold", () => {
   assert.equal(mesh.waterVertexRatio, 0.0625);
   assert.equal(mesh.vertices.length, 4 * 4 * 8);
   assert.ok(mesh.indices.length > 0);
+});
+
+test("flow particle builder extracts moving drainage points", () => {
+  const renderer = { decodeHandHeight: (value) => (value === 65535 ? NaN : value / 10) };
+  const handData = new Uint16Array(256 * 256);
+  handData.fill(120);
+  for (let y = 0; y < 256; y += 1) {
+    for (let x = 112; x <= 144; x += 1) {
+      handData[y * 256 + x] = 2;
+    }
+  }
+  const terrainVertices = new Float32Array(16 * 16 * 8);
+  for (let i = 0; i < 16 * 16; i += 1) {
+    terrainVertices[i * 8] = i % 16;
+    terrainVertices[i * 8 + 1] = 0.2;
+    terrainVertices[i * 8 + 2] = Math.floor(i / 16);
+  }
+
+  const particles = Terrain3dMeshBuilder.buildFlowParticles({
+    renderer,
+    handData,
+    terrainVertices,
+    meshSize: 16,
+    waterMeters: 8
+  });
+
+  assert.ok(particles.particleCount > 0);
+  assert.equal(particles.vertices.length, particles.particleCount * 7);
 });

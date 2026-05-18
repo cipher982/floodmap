@@ -298,6 +298,8 @@ async def run_terrain_3d_qa(
         failures.append("Basemap texture was not captured")
     if not stats.get("waterVisible"):
         failures.append("Water mesh was not visible")
+    if stats.get("flowParticleCount", 0) < 100:
+        failures.append("Drainage-flow particles were not generated")
     if visual_metrics["unique_sample_colors"] < 300:
         failures.append("3D canvas lacks visual richness")
     if visual_metrics["blueish_pixel_ratio"] < 0.015:
@@ -365,6 +367,7 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- Tiles loaded: `{result.stats.get('tilesLoaded')}/{result.stats.get('tileCount')}`",
         f"- HAND dataset: `{result.stats.get('handDatasetVersion')}`",
         f"- Water vertex ratio: `{result.stats.get('waterVertexRatio')}`",
+        f"- Flow particles: `{result.stats.get('flowParticleCount')}`",
         f"- Unique sample colors: `{result.visual_metrics.get('unique_sample_colors')}`",
         f"- Blueish pixel ratio: `{result.visual_metrics.get('blueish_pixel_ratio')}`",
         f"- Canvas width ratio: `{result.visual_metrics.get('canvas_width_ratio')}`",

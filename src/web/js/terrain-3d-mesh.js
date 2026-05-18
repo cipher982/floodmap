@@ -133,6 +133,41 @@ class Terrain3dMeshBuilder {
     };
   }
 
+  static buildFlowParticles({ renderer, handData, terrainVertices, meshSize, waterMeters }) {
+    const vertices = [];
+    const step = Math.max(3, Math.floor(meshSize / 48));
+    const channelMeters = Math.max(4, Math.min(40, waterMeters * 0.65));
+    for (let y = 1; y < meshSize - 1; y += step) {
+      for (let x = 1; x < meshSize - 1; x += step) {
+        const srcX = x / (meshSize - 1) * 255;
+        const srcY = y / (meshSize - 1) * 255;
+        const hand = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, srcY);
+        if (!Number.isFinite(hand) || hand > channelMeters) continue;
+        const handLeft = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.max(0, srcX - 2), srcY);
+        const handRight = Terrain3dMeshBuilder.sampleHand(renderer, handData, Math.min(255, srcX + 2), srcY);
+        const handUp = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.max(0, srcY - 2));
+        const handDown = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.min(255, srcY + 2));
+        const flow = Terrain3dMeshBuilder.flowDirection(handLeft, handRight, handUp, handDown);
+        const terrainO = (y * meshSize + x) * 8;
+        const strength = Math.max(0.12, 1 - hand / channelMeters);
+        const phase = Terrain3dMeshBuilder.hash2(x, y);
+        vertices.push(
+          terrainVertices[terrainO],
+          terrainVertices[terrainO + 1] + 0.055 + strength * 0.025,
+          terrainVertices[terrainO + 2],
+          flow[0],
+          flow[1],
+          phase,
+          strength
+        );
+      }
+    }
+    return {
+      vertices: new Float32Array(vertices),
+      particleCount: vertices.length / 7
+    };
+  }
+
   static elevationStats(renderer, terrainData) {
     let min = Infinity;
     let max = -Infinity;
@@ -239,6 +274,11 @@ class Terrain3dMeshBuilder {
   static safeDelta(a, b) {
     if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
     return b - a;
+  }
+
+  static hash2(x, y) {
+    const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return s - Math.floor(s);
   }
 }
 
