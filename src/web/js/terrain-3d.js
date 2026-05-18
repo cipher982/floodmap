@@ -18,6 +18,8 @@ class FloodTerrain3dApp {
     this.exaggerationInput = document.getElementById("exaggeration");
     this.exaggerationReadout = document.getElementById("exaggeration-readout");
     this.resetCameraButton = document.getElementById("reset-camera");
+    this.placeSearchForm = document.getElementById("terrain-place-search");
+    this.placeSearchInput = document.getElementById("terrain-place-query");
     this.captureEl = document.getElementById("basemap-capture");
     this.renderer = new ElevationRenderer();
     this.params = new URLSearchParams(window.location.search);
@@ -66,6 +68,7 @@ class FloodTerrain3dApp {
       minElevationM: null,
       maxElevationM: null,
       handDatasetVersion: null,
+      placeLabel: null,
       navigationCount: 0,
       frameCount: 0,
       lastFrameMs: 0,
@@ -269,6 +272,10 @@ class FloodTerrain3dApp {
       button.addEventListener("click", () => this.moveWorld(button.dataset.panTile));
     }
     window.addEventListener("keydown", (event) => this.handleKey(event));
+    this.placeSearchForm?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this.searchAndMoveToPlace();
+    });
     this.resetCameraButton?.addEventListener("click", () => this.resetCamera());
   }
 
@@ -296,6 +303,49 @@ class FloodTerrain3dApp {
     this.panX = 0;
     this.panZ = 0;
     await this.loadWorld();
+  }
+
+  async searchAndMoveToPlace() {
+    const query = this.placeSearchInput?.value?.trim();
+    if (!query) return;
+    this.publish("Searching");
+    const url = new URL(window.floodmapApiUrl("/places/search"), window.location.origin);
+    url.searchParams.set("q", query);
+    url.searchParams.set("limit", "1");
+    const response = await fetch(url.toString(), { headers: { "Accept": "application/json" } });
+    if (!response.ok) {
+      this.stats.errors.push(`Place search failed: ${response.status}`);
+      this.publish("Search failed");
+      return;
+    }
+    const payload = await response.json();
+    const result = payload?.results?.[0];
+    const lat = Number(result?.latitude);
+    const lng = Number(result?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      this.stats.errors.push(`No place result for ${query}`);
+      this.publish("No match");
+      return;
+    }
+    this.lat = lat;
+    this.lng = lng;
+    this.centerTile = Terrain3dMath.lonLatToTile(this.lng, this.lat, this.zoom);
+    this.navigationCount += 1;
+    this.stats.navigationCount = this.navigationCount;
+    this.stats.placeLabel = result.name || result.label || query;
+    this.replaceUrlState();
+    this.resetCamera();
+    await this.loadWorld();
+  }
+
+  replaceUrlState() {
+    const url = new URL(window.location.href);
+    url.searchParams.set("lat", this.lat.toFixed(5));
+    url.searchParams.set("lng", this.lng.toFixed(5));
+    url.searchParams.set("zoom", String(this.zoom));
+    url.searchParams.set("water", String(this.waterMeters));
+    url.searchParams.set("exaggeration", String(this.exaggeration));
+    window.history.replaceState(window.history.state, "", url);
   }
 
   resetCamera() {

@@ -56,7 +56,6 @@
       padding: 14px 16px;
       border-radius: 12px;
       background: rgba(2, 6, 23, 0.56);
-      pointer-events: none;
     }
     .brand {
       min-width: 0;
@@ -81,6 +80,27 @@
       color: #bfdbfe;
       font-size: 12px;
       font-weight: 800;
+    }
+    .place-search {
+      flex: 0 1 390px;
+      display: flex;
+      gap: 8px;
+      min-width: 260px;
+    }
+    .place-search input {
+      min-width: 0;
+      flex: 1 1 auto;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 8px;
+      background: rgba(2, 6, 23, 0.72);
+      color: #e5edf8;
+      padding: 9px 10px;
+      font: inherit;
+      font-weight: 700;
+    }
+    .place-search button {
+      flex: 0 0 auto;
+      min-width: 64px;
     }
     .controls {
       right: 24px;
@@ -170,9 +190,15 @@
         right: 12px;
         top: 12px;
         align-items: flex-start;
+        flex-wrap: wrap;
       }
       p {
         display: none;
+      }
+      .place-search {
+        order: 3;
+        flex-basis: 100%;
+        min-width: 0;
       }
       .controls {
         left: 12px;
@@ -191,6 +217,10 @@
         <h1>FloodMap 3D</h1>
         <p>Real streets and terrain, raised into an interactive flood view.</p>
       </div>
+      <form id="terrain-place-search" class="place-search" role="search">
+        <input id="terrain-place-query" type="search" placeholder="Search city or ZIP" autocomplete="off">
+        <button type="submit">Go</button>
+      </form>
       <div id="terrain-status" class="status">Loading</div>
     </header>
     <section class="controls" aria-label="3D terrain controls">
