@@ -52,17 +52,24 @@ void main() {
 precision highp float;
 in vec3 a_pos;
 in vec2 a_uv;
-in float a_depth;
+in float a_hand;
 in vec2 a_flow;
 uniform mat4 u_matrix;
+uniform float u_waterMeters;
 out vec2 v_uv;
 out float v_depth;
 out vec2 v_flow;
 void main() {
+  float depth = a_hand >= 0.0 ? max(0.0, u_waterMeters - a_hand) : 0.0;
+  float spillMeters = max(0.6, min(12.0, u_waterMeters * 0.08));
+  float spillDepth = a_hand >= 0.0 ? max(0.0, 1.0 - max(0.0, a_hand - u_waterMeters) / spillMeters) * 0.18 : 0.0;
+  float depthT = depth > 0.0 ? min(1.0, depth / max(1.0, u_waterMeters * 0.18)) : spillDepth;
+  vec3 pos = a_pos;
+  pos.y += 0.018 + depthT * 0.035;
   v_uv = a_uv;
-  v_depth = a_depth;
+  v_depth = depthT;
   v_flow = a_flow;
-  gl_Position = u_matrix * vec4(a_pos, 1.0);
+  gl_Position = u_matrix * vec4(pos, 1.0);
 }
 `,
 

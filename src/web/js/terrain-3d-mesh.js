@@ -1,6 +1,7 @@
 /*
- * CPU mesh builders for the first 3D milestone. This is intentionally isolated
- * so the next water engine can replace it with a GPU simulation surface.
+ * CPU mesh builders for the 3D terrain scene. Terrain geometry is static until
+ * the camera tile or exaggeration changes. Water geometry is built as a HAND
+ * surface once; the active flood level is a shader uniform.
  */
 
 class Terrain3dMeshBuilder {
@@ -76,12 +77,12 @@ class Terrain3dMeshBuilder {
     };
   }
 
-  static buildWater({ renderer, handData, terrainVertices, meshSize, waterMeters }) {
+  static buildWater({ renderer, handData, terrainVertices, meshSize, waterMeters, maxWaterMeters = 1000 }) {
     const n = meshSize;
     const vertices = new Float32Array(n * n * 8);
-    const wet = new Uint8Array(n * n);
+    const finite = new Uint8Array(n * n);
     let wetVertices = 0;
-    const spillMeters = Math.max(0.6, Math.min(12, waterMeters * 0.08));
+    const spillMeters = Math.max(0.6, Math.min(12, maxWaterMeters * 0.015));
     for (let y = 0; y < n; y += 1) {
       for (let x = 0; x < n; x += 1) {
         const i = y * n + x;
@@ -94,21 +95,18 @@ class Terrain3dMeshBuilder {
         const handDown = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, Math.min(255, srcY + 1.5));
         const flow = Terrain3dMeshBuilder.flowDirection(handLeft, handRight, handUp, handDown);
         const terrainO = i * 8;
-        const depth = Number.isFinite(hand) ? Math.max(0, waterMeters - hand) : 0;
-        const spillDepth = Number.isFinite(hand)
-          ? Math.max(0, 1 - Math.max(0, hand - waterMeters) / spillMeters) * 0.18
-          : 0;
-        const depthT = Math.min(1, depth / Math.max(1, waterMeters * 0.18)) || spillDepth;
-        const isWet = depth > 0 || spillDepth > 0.015;
+        const isFiniteHand = Number.isFinite(hand);
+        const depth = isFiniteHand ? Math.max(0, waterMeters - hand) : 0;
+        const isWet = depth > 0;
         if (isWet) wetVertices += 1;
-        wet[i] = isWet ? 1 : 0;
+        finite[i] = isFiniteHand && hand <= maxWaterMeters + spillMeters ? 1 : 0;
         const o = i * 8;
         vertices[o] = terrainVertices[terrainO];
-        vertices[o + 1] = terrainVertices[terrainO + 1] + 0.018 + depthT * 0.035;
+        vertices[o + 1] = terrainVertices[terrainO + 1];
         vertices[o + 2] = terrainVertices[terrainO + 2];
         vertices[o + 3] = x / (n - 1);
         vertices[o + 4] = y / (n - 1);
-        vertices[o + 5] = depthT;
+        vertices[o + 5] = isFiniteHand ? hand : -1;
         vertices[o + 6] = flow[0];
         vertices[o + 7] = flow[1];
       }
@@ -120,7 +118,7 @@ class Terrain3dMeshBuilder {
         const b = a + 1;
         const c = a + n;
         const d = c + 1;
-        if (wet[a] || wet[b] || wet[c] || wet[d]) {
+        if (finite[a] || finite[b] || finite[c] || finite[d]) {
           indices.push(a, c, b, b, c, d);
         }
       }
@@ -130,6 +128,24 @@ class Terrain3dMeshBuilder {
       indices: new Uint32Array(indices),
       waterVisible: indices.length > 0,
       waterVertexRatio: Number((wetVertices / (n * n)).toFixed(4))
+    };
+  }
+
+  static waterStats({ renderer, handData, meshSize, waterMeters }) {
+    const n = meshSize;
+    let wetVertices = 0;
+    for (let y = 0; y < n; y += 1) {
+      for (let x = 0; x < n; x += 1) {
+        const srcX = x / (n - 1) * 255;
+        const srcY = y / (n - 1) * 255;
+        const hand = Terrain3dMeshBuilder.sampleHand(renderer, handData, srcX, srcY);
+        if (Number.isFinite(hand) && hand < waterMeters) wetVertices += 1;
+      }
+    }
+    const waterVertexRatio = Number((wetVertices / (n * n)).toFixed(4));
+    return {
+      waterVisible: wetVertices > 0,
+      waterVertexRatio
     };
   }
 

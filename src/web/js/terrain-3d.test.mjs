@@ -34,7 +34,8 @@ test("matrix multiply preserves identity transforms", () => {
 test("shader bundle exposes terrain and water programs", () => {
   assert.match(Terrain3dShaders.terrainVertex, /#version 300 es/);
   assert.match(Terrain3dShaders.terrainFragment, /sampler2D u_map/);
-  assert.match(Terrain3dShaders.waterVertex, /a_depth/);
+  assert.match(Terrain3dShaders.waterVertex, /a_hand/);
+  assert.match(Terrain3dShaders.waterVertex, /u_waterMeters/);
   assert.match(Terrain3dShaders.waterVertex, /a_flow/);
   assert.match(Terrain3dShaders.waterFragment, /wave/);
   assert.match(Terrain3dShaders.waterFragment, /v_flow/);
@@ -144,6 +145,30 @@ test("water mesh builder uses HAND as the initial wet threshold", () => {
   assert.equal(mesh.waterVertexRatio, 0.0625);
   assert.equal(mesh.vertices.length, 4 * 4 * 8);
   assert.ok(mesh.indices.length > 0);
+});
+
+test("water stats can update without rebuilding water geometry", () => {
+  const renderer = { decodeHandHeight: (value) => (value === 65535 ? NaN : value / 10) };
+  const handData = new Uint16Array(256 * 256);
+  handData.fill(65535);
+  handData[0] = 5;
+  handData[255] = 20;
+
+  const low = Terrain3dMeshBuilder.waterStats({
+    renderer,
+    handData,
+    meshSize: 4,
+    waterMeters: 1
+  });
+  const high = Terrain3dMeshBuilder.waterStats({
+    renderer,
+    handData,
+    meshSize: 4,
+    waterMeters: 3
+  });
+
+  assert.equal(low.waterVisible, true);
+  assert.ok(high.waterVertexRatio > low.waterVertexRatio);
 });
 
 test("flow particle builder extracts moving drainage points", () => {

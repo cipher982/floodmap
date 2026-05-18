@@ -401,6 +401,7 @@ def write_summary(out_dir: Path, result: Terrain3dQaResult) -> None:
         f"- Debug panel visible: `{result.visual_metrics.get('debug_panel_visible')}`",
         f"- Animation changed pixel ratio: `{result.visual_metrics.get('animation_changed_pixel_ratio')}`",
         f"- Navigation changed pixel ratio: `{result.visual_metrics.get('navigation_changed_pixel_ratio')}`",
+        f"- Max frame time: `{result.stats.get('maxFrameMs')}` ms",
         f"- First screenshot: `{result.screenshots['first']}`",
         f"- Animation screenshot: `{result.screenshots['animation']}`",
         f"- Moved screenshot: `{result.screenshots['moved']}`",
