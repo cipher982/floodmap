@@ -183,14 +183,14 @@
     <header class="topbar">
       <div class="brand">
         <h1>FloodMap 3D</h1>
-        <p>Real streets and terrain, raised into a playable flood view.</p>
+        <p>Real streets and terrain, raised into an interactive flood view.</p>
       </div>
-      <div id="terrain-status" class="status">Booting</div>
+      <div id="terrain-status" class="status">Loading</div>
     </header>
     <section class="controls" aria-label="3D terrain controls">
       <label for="water-level">
         <span>Water</span>
-        <span id="water-readout">20m</span>
+        <span id="water-readout">22.0m</span>
       </label>
       <input id="water-level" type="range" min="0" max="1000" step="1" value="22">
       <div class="readout"><span>low</span><span>high</span></div>
@@ -203,7 +203,7 @@
       <div class="button-row">
         <button type="button" data-water-preset="8">Creeks</button>
         <button type="button" data-water-preset="35">Flood</button>
-        <button type="button" id="reset-camera">Reset</button>
+        <button type="button" id="reset-camera">Reset view</button>
       </div>
     </section>
     <section class="debug-panel" aria-label="3D debug stats">

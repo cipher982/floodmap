@@ -86,6 +86,11 @@ def build_url(base_url: str, path: str) -> str:
     return urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
 
 
+def add_query_param(url: str, param: str) -> str:
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}{param}"
+
+
 async def wait_for_terrain_ready(page, timeout_ms: int) -> None:
     await page.wait_for_function(
         """
@@ -221,10 +226,27 @@ async def run_terrain_3d_qa(
         await page.wait_for_timeout(900)
         await canvas.screenshot(path=str(second))
         stats = await page.evaluate("() => window.floodTerrain3d.stats")
+        await page.goto(
+            add_query_param(url, "debug=1"),
+            wait_until="domcontentloaded",
+            timeout=args.timeout_ms,
+        )
+        debug_panel_visible_when_enabled = await page.evaluate(
+            """
+            () => {
+              const debug = document.querySelector('.debug-panel');
+              const rect = debug?.getBoundingClientRect();
+              return Boolean(rect && rect.width > 0 && rect.height > 0);
+            }
+            """
+        )
         await browser.close()
 
     visual_metrics = visual_richness_metrics(first)
     visual_metrics.update(ui_metrics)
+    visual_metrics["debug_panel_visible_when_enabled"] = (
+        debug_panel_visible_when_enabled
+    )
     visual_metrics.update(
         {f"animation_{k}": v for k, v in image_change_metrics(first, second).items()}
     )
@@ -234,6 +256,10 @@ async def run_terrain_3d_qa(
         failures.append("Unexpected or missing 3D visual model marker")
     if not stats.get("terrainLoaded"):
         failures.append("Terrain/elevation tile did not load")
+    if stats.get("elevationSource") != "terrain-v2-elevation":
+        failures.append("3D terrain did not use ORNL terrain-v2 elevation")
+    if stats.get("meshSize", 0) < 192:
+        failures.append("3D terrain mesh resolution is below the polished baseline")
     if not stats.get("handLoaded"):
         failures.append("HAND tile did not load")
     if not stats.get("basemapCaptured"):
@@ -254,6 +280,8 @@ async def run_terrain_3d_qa(
         failures.append("3D canvas does not fill the viewport height")
     if visual_metrics["debug_panel_visible"] or visual_metrics["exposed_debug_text"]:
         failures.append("Default 3D page exposes debug UI")
+    if not visual_metrics["debug_panel_visible_when_enabled"]:
+        failures.append("Debug panel did not appear with debug=1")
     if visual_metrics["aside_count"] != 0:
         failures.append("Default 3D page still uses a lab-style sidebar")
     if not visual_metrics["controls_visible"] or not visual_metrics["topbar_visible"]:
