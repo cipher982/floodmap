@@ -11,6 +11,7 @@ tiles (elevation/HAND) and colors them client-side.
 - "Shipped" means live in production. Do not describe local-only commits or unpushed changes as shipped; if it is not deployed, say so plainly.
 - Any user-visible JS/CSS/worker change, or global tile-cache reset, must bump `ASSET_VERSION` in `src/api/page_renderer.py` before shipping. `src/web/index.html` contains the placeholder, not the source of truth.
 - Preserve the custom Umami events in `src/web/js/map-client.js` (`location_click`, `viewport_view`) when touching analytics or map event code.
+- Terrain 3D uses a map camera, not a free model-viewer orbit: do not reintroduce unbounded yaw, pitch, or roll that can invert north/up orientation.
 
 ## Fast Checks
 - Python unit tests: `uv run pytest tests/unit -q`
