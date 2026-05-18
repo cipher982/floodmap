@@ -88,6 +88,24 @@ test("terrain world planner builds a centered tile grid", () => {
   assert.equal(Terrain3dWorld.tileKey(centerTile), "12/1060/1642");
 });
 
+test("terrain mesh keeps north at the top texture row", () => {
+  const renderer = { decodeElevation: (value) => value };
+  const terrainData = new Uint16Array(256 * 256);
+  terrainData.fill(100);
+  const mesh = Terrain3dMeshBuilder.buildTerrain({
+    renderer,
+    terrainData,
+    meshSize: 2,
+    exaggeration: 1,
+    tileScale: 2
+  });
+
+  assert.equal(mesh.vertices[4], 0);
+  assert.equal(mesh.vertices[20], 1);
+  assert.ok(mesh.vertices[2] > 0);
+  assert.ok(mesh.vertices[18] < 0);
+});
+
 test("terrain flood player animates water level through a smooth loop", () => {
   const values = [];
   let currentValue = 0;

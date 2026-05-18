@@ -12,6 +12,7 @@ tiles (elevation/HAND) and colors them client-side.
 - Any user-visible JS/CSS/worker change, or global tile-cache reset, must bump `ASSET_VERSION` in `src/api/page_renderer.py` before shipping. `src/web/index.html` contains the placeholder, not the source of truth.
 - Preserve the custom Umami events in `src/web/js/map-client.js` (`location_click`, `viewport_view`) when touching analytics or map event code.
 - Terrain 3D uses a map camera, not a free model-viewer orbit: do not reintroduce unbounded yaw, pitch, or roll that can invert north/up orientation.
+- Terrain 3D basemap textures must keep MapLibre canvas row order (`UNPACK_FLIP_Y_WEBGL=false`); mesh `v=0` is already the north/top edge.
 
 ## Fast Checks
 - Python unit tests: `uv run pytest tests/unit -q`
