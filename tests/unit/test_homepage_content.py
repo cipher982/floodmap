@@ -33,6 +33,8 @@ def test_homepage_contains_social_metadata_and_explanatory_copy(monkeypatch):
     assert 'twitter:card" content="summary_large_image"' in html
     assert "Real-world flood toy for any U.S. city or ZIP" in html
     assert "Push the slider from puddles to ridiculous max-chaos levels." in html
+    assert 'id="open-3d-view"' in html
+    assert "Open 3D Map" in html
     assert "What you can do" in html
     assert "How to use it" in html
     assert "Model notes" in html

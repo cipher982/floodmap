@@ -991,6 +991,7 @@ class FloodMapClient {
         this.map.on('moveend', () => {
             if (this.suppressViewportSync) return;
             this.schedulePermalinkUpdate();
+            this.syncTerrain3dLink();
             this.trackViewportView();
         });
 
@@ -1001,6 +1002,7 @@ class FloodMapClient {
             if (this.initialViewState.hasExplicitState) {
                 this.syncPermalinkWithMap();
             }
+            this.syncTerrain3dLink();
             this.trackViewportView();
         });
     }
@@ -1076,6 +1078,7 @@ class FloodMapClient {
                 this.updateViewMode();
                 this.updateModelNote(this.modelNoteState);
                 this.schedulePermalinkUpdate();
+                this.syncTerrain3dLink();
             });
         });
 
@@ -1098,6 +1101,7 @@ class FloodMapClient {
                 if (oldWaterLevel !== this.currentWaterLevel) {
                     this.updateFloodLayer();
                     this.schedulePermalinkUpdate();
+                    this.syncTerrain3dLink();
                 }
             });
         }
@@ -1123,6 +1127,7 @@ class FloodMapClient {
                 if (oldWaterLevel !== this.currentWaterLevel) {
                     this.updateFloodLayer();
                     this.schedulePermalinkUpdate();
+                    this.syncTerrain3dLink();
                 }
             });
         });
@@ -1133,6 +1138,7 @@ class FloodMapClient {
                 void this.copyShareLink();
             });
         }
+        this.syncTerrain3dLink();
 
         // Find location button
         document.getElementById('find-location').addEventListener('click', () => {
@@ -1379,6 +1385,23 @@ class FloodMapClient {
         );
     }
 
+    buildTerrain3dUrl() {
+        const currentViewState = this.getCurrentViewState();
+        const url = new URL(window.floodmapPublicUrl('/terrain-3d'), window.location.origin);
+        url.searchParams.set('lat', currentViewState.lat.toFixed(5));
+        url.searchParams.set('lng', currentViewState.lng.toFixed(5));
+        url.searchParams.set('zoom', String(Math.round(currentViewState.zoom)));
+        url.searchParams.set('water', String(currentViewState.water));
+        url.searchParams.set('exaggeration', '2.0');
+        return `${url.pathname}${url.search}`;
+    }
+
+    syncTerrain3dLink() {
+        const link = document.getElementById('open-3d-view');
+        if (!link) return;
+        link.href = this.buildTerrain3dUrl();
+    }
+
     schedulePermalinkUpdate() {
         if (this.pendingPermalinkFrame) return;
 
@@ -1407,6 +1430,7 @@ class FloodMapClient {
         this.syncViewModeControls();
         this.syncWaterLevelControls();
         this.updateViewMode();
+        this.syncTerrain3dLink();
 
         if (this.map) {
             this.map.jumpTo({
