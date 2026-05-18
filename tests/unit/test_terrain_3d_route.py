@@ -30,3 +30,5 @@ def test_terrain_3d_routes_are_served(monkeypatch):
     assert f"static/js/terrain-3d-flood-player.js?v={asset_version}" in response.text
     assert f"static/js/terrain-3d-basemap.js?v={asset_version}" in response.text
     assert f"static/js/terrain-3d.js?v={asset_version}" in response.text
+    assert 'id="exaggeration"' not in response.text
+    assert "exaggeration-readout" not in response.text

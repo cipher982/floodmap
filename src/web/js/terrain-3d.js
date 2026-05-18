@@ -15,8 +15,6 @@ class FloodTerrain3dApp {
     this.statsEl = document.getElementById("terrain-stats");
     this.waterInput = document.getElementById("water-level");
     this.waterReadout = document.getElementById("water-readout");
-    this.exaggerationInput = document.getElementById("exaggeration");
-    this.exaggerationReadout = document.getElementById("exaggeration-readout");
     this.resetCameraButton = document.getElementById("reset-camera");
     this.playFloodButton = document.getElementById("play-flood");
     this.placeSearchForm = document.getElementById("terrain-place-search");
@@ -30,11 +28,7 @@ class FloodTerrain3dApp {
     this.lng = Number.parseFloat(this.params.get("lng") || "-86.8104");
     this.waterMeters = Number.parseFloat(this.params.get("water") || this.waterInput.value || "22");
     this.maxWaterMeters = Number(this.waterInput.max || 1000);
-    this.exaggeration = Terrain3dMath.clamp(
-      Number.parseFloat(this.params.get("exaggeration") || this.exaggerationInput.value || "2"),
-      0.4,
-      5
-    );
+    this.exaggeration = 1;
     this.meshSize = Terrain3dMath.clamp(Number.parseInt(this.params.get("mesh") || "192", 10), 64, 224);
     this.worldRadius = Terrain3dMath.clamp(Number.parseInt(this.params.get("radius") || "1", 10), 0, 1);
     this.tileScale = 1.38;
@@ -291,16 +285,9 @@ class FloodTerrain3dApp {
 
   installEvents() {
     this.waterInput.value = String(this.waterMeters);
-    this.exaggerationInput.value = String(this.exaggeration);
     this.waterInput.addEventListener("input", () => {
       this.stopFloodPlayback();
       this.setWaterMeters(Number.parseFloat(this.waterInput.value));
-    });
-    this.exaggerationInput.addEventListener("input", () => {
-      this.exaggeration = Terrain3dMath.clamp(Number.parseFloat(this.exaggerationInput.value), 0.4, 5);
-      this.updateAllTerrainGeometry();
-      this.updateAllWaterMeshes();
-      this.updateControls();
     });
     this.canvas.addEventListener("pointerdown", (event) => {
       this.dragging = true;
@@ -428,7 +415,7 @@ class FloodTerrain3dApp {
     url.searchParams.set("lng", this.lng.toFixed(5));
     url.searchParams.set("zoom", String(this.zoom));
     url.searchParams.set("water", String(this.waterMeters));
-    url.searchParams.set("exaggeration", String(this.exaggeration));
+    url.searchParams.delete("exaggeration");
     window.history.replaceState(window.history.state, "", url);
     this.syncLocationLinks();
   }
@@ -457,7 +444,6 @@ class FloodTerrain3dApp {
 
   updateControls() {
     this.waterReadout.textContent = `${this.waterMeters.toFixed(this.waterMeters >= 100 ? 0 : 1)}m`;
-    this.exaggerationReadout.textContent = `${this.exaggeration.toFixed(1)}x`;
     this.stats.waterMeters = this.waterMeters;
     this.stats.floodPlaybackActive = this.floodPlayer.playing;
     this.syncLocationLinks();
@@ -543,14 +529,6 @@ class FloodTerrain3dApp {
     };
     this.updateTerrainGeometry(sceneTile, globalStats);
     return sceneTile;
-  }
-
-  updateAllTerrainGeometry() {
-    const globalStats = {
-      minElevationM: this.stats.minElevationM,
-      maxElevationM: this.stats.maxElevationM
-    };
-    for (const tile of this.tiles) this.updateTerrainGeometry(tile, globalStats);
   }
 
   updateTerrainGeometry(tile, globalStats) {
