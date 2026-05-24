@@ -265,8 +265,8 @@ class TestRuntimeElevationCache:
 class TestFrontendBackendConsistency:
     """Test that frontend and backend configuration stay in sync."""
 
-    # Precompressed tiles only exist for zoom 0-11
-    PRECOMPRESSED_MAX_ZOOM = 11
+    # The production basemap MBTiles currently contains vector tiles through z12.
+    BASEMAP_MAX_ZOOM = 12
 
     def test_frontend_zoom_caps_match_tile_sources(self):
         """Frontend zoom caps must match each tile source.
@@ -283,7 +283,7 @@ class TestFrontendBackendConsistency:
 
         vector_match = re.search(r"vectorMaxZoom:\s*(\d+)", content)
         assert vector_match, "Could not find vectorMaxZoom setting in map-client.js"
-        assert int(vector_match.group(1)) <= self.PRECOMPRESSED_MAX_ZOOM
+        assert int(vector_match.group(1)) <= self.BASEMAP_MAX_ZOOM
 
         raster_match = re.search(r"rasterMaxZoom:\s*(\d+)", content)
         assert raster_match, "Could not find rasterMaxZoom setting in map-client.js"

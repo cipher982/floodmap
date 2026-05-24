@@ -630,7 +630,7 @@ class FloodMapClient {
             minZoom: 0,
             maxZoom: this.maxZoomForViewMode(this.viewMode),
             rasterMaxZoom: 14,
-            vectorMaxZoom: 11
+            vectorMaxZoom: 12
         };
 
         // Determine tile URL based on mode
