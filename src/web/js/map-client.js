@@ -1094,6 +1094,7 @@ class FloodMapClient {
         presetChips.forEach(chip => {
             chip.addEventListener('click', (e) => {
                 const targetLevel = parseFloat(e.target.dataset.level);
+                const chipLabel = (e.target.dataset.label || e.target.textContent || '').trim().slice(0, 50);
 
                 // Update slider position
                 const sliderValue = this.waterLevelToSlider(targetLevel);
@@ -1110,6 +1111,11 @@ class FloodMapClient {
                     this.updateFloodLayer();
                     this.schedulePermalinkUpdate();
                     this.syncTerrain3dLink();
+                    this.trackEvent('hazard_layer_toggled', {
+                        method: 'preset_chip',
+                        level_m: targetLevel,
+                        label: chipLabel,
+                    });
                 }
             });
         });
@@ -1375,12 +1381,14 @@ class FloodMapClient {
                 this.copyTextFallback(shareUrl);
             }
             this.updateShareStatus('Share link copied.', 'success');
+            this.trackEvent('share_or_save_click', { method: 'copy_link', success: true });
         } catch (error) {
             console.warn('Share link copy failed:', error);
             this.updateShareStatus(
                 'Copy failed. Use the address bar URL instead.',
                 'error'
             );
+            this.trackEvent('share_or_save_click', { method: 'copy_link', success: false });
         }
     }
 
@@ -2188,6 +2196,13 @@ class FloodMapClient {
         this.updateLocationInfoForSearch(result);
         this.showSearchMarker(result);
 
+        this.trackEvent('location_searched', {
+            name: (result.name || result.label || '').slice(0, 100),
+            lat: result.lat != null ? Number(result.lat).toFixed(4) : undefined,
+            lng: result.lon != null ? Number(result.lon).toFixed(4) : undefined,
+            type: result.type || undefined,
+        });
+
         const bounds = this.getSearchBounds(result);
         const targetCamera = this.getSearchTargetCamera(result, bounds);
         void this.transitionToSearchTarget(targetCamera);
@@ -2501,11 +2516,15 @@ class FloodMapClient {
 
     /**
      * Track viewport view event in Umami analytics.
-     * Fires on initial load and when user stops panning/zooming.
+     * Throttled: fires at most once per 2 minutes to avoid flooding on every pan.
      */
     trackViewportView() {
         if (!this.map) return;
         if (typeof umami !== 'undefined' && typeof umami.track === 'function') {
+            const now = Date.now();
+            const THROTTLE_MS = 2 * 60 * 1000;
+            if (this._lastViewportTrackAt && now - this._lastViewportTrackAt < THROTTLE_MS) return;
+            this._lastViewportTrackAt = now;
             try {
                 const center = this.map.getCenter();
                 const zoom = this.map.getZoom();
@@ -2519,6 +2538,16 @@ class FloodMapClient {
                     sw_lat: bounds.getSouth().toFixed(4),
                     sw_lng: bounds.getWest().toFixed(4)
                 });
+            } catch (e) {
+                // Silently ignore tracking errors
+            }
+        }
+    }
+
+    trackEvent(eventName, payload) {
+        if (typeof umami !== 'undefined' && typeof umami.track === 'function') {
+            try {
+                umami.track(eventName, payload || {});
             } catch (e) {
                 // Silently ignore tracking errors
             }
