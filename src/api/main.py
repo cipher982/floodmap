@@ -20,8 +20,6 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 logger = logging.getLogger(__name__)
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 FAVICON_SVG_PATH = WEB_DIR / "favicon.svg"
-DRAINAGE_LAB_HTML_PATH = WEB_DIR / "drainage-lab.html"
-SIM_LAB_HTML_PATH = WEB_DIR / "sim-lab.html"
 TERRAIN_3D_HTML_PATH = WEB_DIR / "terrain-3d.html"
 DRAINAGE_LAB_TILES_DIR = WEB_DIR / "prototypes" / "birmingham-drainage" / "tiles"
 DRAINAGE_LAB_SAMPLE_ZOOM = 12
@@ -387,38 +385,6 @@ async def serve_frontend():
 async def serve_frontend_floodmap():
     """Serve the frontend when hosted under the /floodmap subpath."""
     return await serve_frontend()
-
-
-@app.api_route("/drainage-lab", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def serve_drainage_lab():
-    """Serve the one-off Birmingham drainage-height prototype."""
-    if not DRAINAGE_LAB_HTML_PATH.exists():
-        raise HTTPException(status_code=404, detail="Drainage lab not found")
-    return HTMLResponse(content=DRAINAGE_LAB_HTML_PATH.read_text(encoding="utf-8"))
-
-
-@app.api_route(
-    "/floodmap/drainage-lab", methods=["GET", "HEAD"], response_class=HTMLResponse
-)
-async def serve_drainage_lab_floodmap():
-    return await serve_drainage_lab()
-
-
-@app.api_route("/sim-lab", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def serve_sim_lab():
-    """Serve the dev-only Flood Sandbox simulation lab."""
-    if not (IS_DEVELOPMENT or ENABLE_DIAGNOSTICS):
-        raise HTTPException(status_code=404, detail="Simulation lab is disabled")
-    if not SIM_LAB_HTML_PATH.exists():
-        raise HTTPException(status_code=404, detail="Simulation lab not found")
-    return HTMLResponse(content=SIM_LAB_HTML_PATH.read_text(encoding="utf-8"))
-
-
-@app.api_route(
-    "/floodmap/sim-lab", methods=["GET", "HEAD"], response_class=HTMLResponse
-)
-async def serve_sim_lab_floodmap():
-    return await serve_sim_lab()
 
 
 @app.api_route("/terrain-3d", methods=["GET", "HEAD"], response_class=HTMLResponse)

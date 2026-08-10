@@ -91,7 +91,7 @@ class FloodMapClient {
 
         // Always use client-side rendering for flood tiles
         this.setupCustomProtocol();
-        console.log('🚀 Client-side rendering initialized');
+        if (window.DEBUG_TILES) console.log('🚀 Client-side rendering initialized');
 
         this.init();
     }
@@ -270,7 +270,7 @@ class FloodMapClient {
 
                     if (type === 'ready') {
                         this.workerReady = true;
-                        console.log('✅ WebWorker ready for tile rendering');
+                        if (window.DEBUG_TILES) console.log('✅ WebWorker ready for tile rendering');
                         try {
                             // Sync debug flag into worker (used for stats messages).
                             this.renderWorker.postMessage({
@@ -375,7 +375,7 @@ class FloodMapClient {
             }
         });
 
-        console.log('✅ Client protocol registered successfully');
+        if (window.DEBUG_TILES) console.log('✅ Client protocol registered successfully');
     }
 
     async generateTile(z, x, y, mode, waterLevel = null, signal = null) {
