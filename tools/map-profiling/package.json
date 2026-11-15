@@ -11,7 +11,7 @@
     "slider": "node slider-profile.mjs $URL",
     "city-jumps": "node city-jump-profile.mjs $URL",
     "suite": "node profile-suite.mjs $URL --selector=\"$SELECTOR\"",
-    "install:playwright": "npx playwright install chromium --with-deps"
+    "install:playwright": "bunx --bun playwright install chromium --with-deps"
   },
   "dependencies": {
     "playwright": "^1.46.0",
