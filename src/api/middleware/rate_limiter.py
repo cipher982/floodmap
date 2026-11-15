@@ -3,12 +3,14 @@ Secure rate limiting middleware with circuit breaker pattern.
 Extracted from the legacy FastHTML implementation.
 """
 
+import ipaddress
 import logging
 import os
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
 
 from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 try:
@@ -36,9 +38,22 @@ class RateLimitError(HTTPException):
 class RateLimiter:
     """Secure rate limiter with Redis backend and local fallback."""
 
-    def __init__(self):
+    DEFAULT_MAX_LOCAL_WINDOWS = 10_000
+    _TRUSTED_PROXY_NETWORKS = (
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("169.254.0.0/16"),
+        ipaddress.ip_network("::1/128"),
+        ipaddress.ip_network("fc00::/7"),
+        ipaddress.ip_network("fe80::/10"),
+    )
+
+    def __init__(self, max_local_windows: int = DEFAULT_MAX_LOCAL_WINDOWS):
         self.redis_client: aioredis.Redis | None = None
-        self.local_windows: dict[str, deque] = defaultdict(lambda: deque())
+        self.max_local_windows = max(1, max_local_windows)
+        self.local_windows: OrderedDict[str, deque[float]] = OrderedDict()
         self.redis_failures = 0
         self.last_redis_failure = 0
         self.circuit_breaker_threshold = 5
@@ -53,25 +68,63 @@ class RateLimiter:
             except Exception as e:
                 logger.warning(f"Failed to initialize Redis rate limiter: {e}")
 
+    @staticmethod
+    def _parse_ip(
+        raw: str | None,
+    ) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+        if not raw:
+            return None
+        candidate = raw.strip()
+        if not candidate or candidate.lower() == "unknown":
+            return None
+        try:
+            ip = ipaddress.ip_address(candidate)
+        except ValueError:
+            return None
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            return ip.ipv4_mapped
+        return ip
+
+    @classmethod
+    def _is_trusted_proxy_ip(cls, host: str) -> bool:
+        ip = cls._parse_ip(host)
+        if ip is None:
+            return False
+        return any(ip in net for net in cls._TRUSTED_PROXY_NETWORKS)
+
     def _get_client_ip(self, request: Request) -> str:
-        """Extract client IP with proper proxy support."""
-        # Check for forwarded headers (in order of preference)
-        forwarded_headers = [
-            "cf-connecting-ip",  # Cloudflare
-            "x-forwarded-for",  # Standard proxy header
-            "x-real-ip",  # Nginx
-            "x-client-ip",  # Alternative
-        ]
+        """Extract client IP, trusting forwarding headers only from private/loopback proxies."""
+        peer_host = (
+            str(request.client.host) if request.client and request.client.host else ""
+        )
+        if not peer_host:
+            return "unknown"
 
-        for header in forwarded_headers:
-            if header in request.headers:
-                # Handle comma-separated IPs (take first one)
-                ip = request.headers[header].split(",")[0].strip()
-                if ip and ip != "unknown":
-                    return ip
+        if self._is_trusted_proxy_ip(peer_host):
+            cf_ip = self._parse_ip(request.headers.get("cf-connecting-ip"))
+            if cf_ip is not None:
+                return str(cf_ip)
 
-        # Fallback to direct connection
-        return str(request.client.host) if request.client else "unknown"
+            real_ip = self._parse_ip(request.headers.get("x-real-ip"))
+            if real_ip is not None:
+                return str(real_ip)
+
+            xff = request.headers.get("x-forwarded-for", "")
+            if xff:
+                candidates = [p.strip() for p in xff.split(",") if p.strip()]
+                fallback_ip = None
+                for candidate in reversed(candidates):
+                    parsed = self._parse_ip(candidate)
+                    if parsed is None:
+                        continue
+                    if fallback_ip is None:
+                        fallback_ip = str(parsed)
+                    if not any(parsed in net for net in self._TRUSTED_PROXY_NETWORKS):
+                        return str(parsed)
+                if fallback_ip is not None:
+                    return fallback_ip
+
+        return peer_host
 
     def _is_redis_available(self) -> bool:
         """Check if Redis is available using circuit breaker pattern."""
@@ -120,68 +173,75 @@ class RateLimiter:
             logger.warning(f"Redis rate limit failed: {e}")
             raise
 
+    def _prune_expired_windows(self, window_start: float) -> None:
+        """Drop expired local windows to keep in-memory state bounded."""
+        stale_keys = [
+            k for k, dq in self.local_windows.items() if not dq or dq[-1] < window_start
+        ]
+        for k in stale_keys:
+            self.local_windows.pop(k, None)
+
     async def _local_rate_limit(self, key: str, limit: int, window: int = 1) -> bool:
-        """Local in-memory rate limiting fallback."""
+        """Local in-memory sliding-window rate limiting with bounded key table."""
+        if limit <= 0:
+            return False
+
         now = time.time()
         window_start = now - window
 
-        # Clean old entries
-        requests = self.local_windows[key]
-        while requests and requests[0] < window_start:
-            requests.popleft()
+        requests = self.local_windows.get(key)
+        if requests is not None:
+            while requests and requests[0] < window_start:
+                requests.popleft()
+            self.local_windows.move_to_end(key)
+        else:
+            if len(self.local_windows) >= self.max_local_windows:
+                self._prune_expired_windows(window_start)
+            while len(self.local_windows) >= self.max_local_windows:
+                self.local_windows.popitem(last=False)
+            requests = deque()
+            self.local_windows[key] = requests
 
-        # Check limit
         if len(requests) >= limit:
             return False
 
-        # Add current request
         requests.append(now)
         return True
 
     async def check_rate_limit(
-        self, request: Request, endpoint: str = "api", limit: int = 60
+        self, request: Request, endpoint: str = "api", limit: int = 30
     ) -> None:
         """
         Check rate limit for a request.
 
         Args:
             request: FastAPI request object
-            endpoint: Endpoint identifier for separate limits
+            endpoint: Endpoint category identifier for separate buckets
             limit: Requests per second limit
         """
         client_ip = self._get_client_ip(request)
         key = f"rate_limit:{endpoint}:{client_ip}"
 
-        try:
-            # Try Redis first if available
-            if self._is_redis_available():
+        allowed = True
+        if self._is_redis_available():
+            try:
                 allowed = await self._redis_rate_limit(key, limit)
-                if not allowed:
-                    raise RateLimitError(
-                        f"Rate limit exceeded for {endpoint}: {limit}/second",
-                        suggestions=[
-                            "Wait 1 second before retrying",
-                            f"Reduce request frequency to max {limit}/second",
-                        ],
-                    )
-                return
+            except RateLimitError:
+                raise
+            except Exception as e:
+                logger.warning(f"Redis rate limiting failed, using local fallback: {e}")
+                allowed = await self._local_rate_limit(key, limit)
+        else:
+            allowed = await self._local_rate_limit(key, limit)
 
-        except Exception as e:
-            # Fall back to local rate limiting
-            logger.warning(f"Redis rate limiting failed, using local fallback: {e}")
-
-            # Apply stricter limits when Redis is failing
-            fallback_limit = min(limit, 10)
-            allowed = await self._local_rate_limit(key, fallback_limit)
-
-            if not allowed:
-                raise RateLimitError(
-                    f"Rate limit exceeded (local fallback) for {endpoint}: {fallback_limit}/second",
-                    suggestions=[
-                        "Wait 1 second before retrying",
-                        f"Reduce request frequency to max {fallback_limit}/second",
-                    ],
-                )
+        if not allowed:
+            raise RateLimitError(
+                f"Rate limit exceeded for {endpoint}: {limit}/second",
+                suggestions=[
+                    "Wait 1 second before retrying",
+                    f"Reduce request frequency to max {limit}/second",
+                ],
+            )
 
 
 # Global rate limiter instance
@@ -189,38 +249,55 @@ rate_limiter = RateLimiter()
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """FastAPI middleware for automatic rate limiting."""
+    """FastAPI middleware for automatic rate limiting by route category."""
 
-    def __init__(self, app, default_limit: int = 60):
+    def __init__(
+        self,
+        app,
+        default_limit: int = 30,
+        tiles_limit: int = 200,
+        places_limit: int = 5,
+    ):
         super().__init__(app)
         self.default_limit = default_limit
-        self.endpoint_limits = {
-            "/api/v1/tiles/flood": 30,  # Flood tiles are expensive
-            "/api/v1/tiles/elevation": 100,  # Elevation tiles are cached
-            "/api/v1/tiles/vector": 100,  # Vector tiles are proxied
-        }
+        self.tiles_limit = tiles_limit
+        self.places_limit = places_limit
+
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        if path == "/floodmap":
+            return "/"
+        if path.startswith("/floodmap/"):
+            return path[len("/floodmap") :]
+        return path
+
+    def _classify_request(self, path: str) -> tuple[str, int]:
+        norm_path = self._normalize_path(path)
+        if norm_path == "/api/places" or norm_path.startswith("/api/places/"):
+            return "places", self.places_limit
+        if norm_path.startswith("/api/v1/tiles/") or (
+            norm_path.startswith("/api/v2/terrain/")
+            and not norm_path.endswith("/sample")
+        ):
+            return "tiles", self.tiles_limit
+        if norm_path.startswith("/static/"):
+            return "static", max(self.default_limit, 60)
+        return "api", self.default_limit
 
     async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for health checks
-        if request.url.path in ["/api/health", "/health"]:
+        norm_path = self._normalize_path(request.url.path)
+        if norm_path in {"/api/health", "/health", "/api/v1/tiles/health"}:
             return await call_next(request)
 
-        # Determine rate limit for this endpoint
-        limit = self.default_limit
-        for pattern, endpoint_limit in self.endpoint_limits.items():
-            if request.url.path.startswith(pattern):
-                limit = endpoint_limit
-                break
+        bucket, limit = self._classify_request(request.url.path)
 
-        # Apply rate limiting
         try:
-            endpoint = (
-                request.url.path.split("/")[1]
-                if len(request.url.path.split("/")) > 1
-                else "api"
+            await rate_limiter.check_rate_limit(request, bucket, limit)
+        except RateLimitError as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers={"Retry-After": "1"},
             )
-            await rate_limiter.check_rate_limit(request, endpoint, limit)
-        except RateLimitError:
-            raise
 
         return await call_next(request)

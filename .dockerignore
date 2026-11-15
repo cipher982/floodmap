@@ -5,12 +5,19 @@ output/*.mbtiles
 
 # Development files
 .git/
+.github/
+.cursor/
 .env
+.env.*
+.coverage
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .venv/
 *.pyc
 __pycache__/
 .DS_Store
+.pre-commit-config.yaml
 
 # Debug and temporary files
 debug/
@@ -18,6 +25,8 @@ debug_*.py
 temp_*/
 *.tmp
 *.log
+cache/
+data/
 
 # IDE files
 .vscode/
@@ -29,9 +38,19 @@ temp_*/
 *.md
 docs/
 
-# Test files
+# Test and QA files
 tests/
 pytest.ini
+**/*.test.mjs
+**/*.test.js
+**/test_*.py
+**/*_test.py
+**/*_qa.py
+**/qa-report.md
+tools/map-profiling/
+tools/sim_lab/
+tools/**/results/
+**/node_modules/
 
 # Scripts not needed in container
 scripts/

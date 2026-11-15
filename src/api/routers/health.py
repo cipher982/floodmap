@@ -5,14 +5,16 @@ from datetime import datetime
 
 from config import (
     ELEVATION_DATA_DIR,
+    ENABLE_DIAGNOSTICS,
     ENVIRONMENT,
     HEALTH_CHECK_DIRS,
+    IS_DEVELOPMENT,
     MAP_DATA_DIR,
     TERRAIN_MANIFEST_PATH,
     TERRAIN_REMOTE_BASE_URL,
     TERRAIN_V2_ENABLED,
 )
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 # Import health monitor if available
 try:
@@ -40,34 +42,21 @@ except ImportError:
     MULTICORE_STATS = False
 
 router = APIRouter()
+ops_router = APIRouter()
 
 
 @router.get("/health")
 async def health_check():
-    """Comprehensive health check endpoint."""
-    health_data = {
+    """Health check endpoint without internal filesystem or telemetry details."""
+    health_data: dict = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "service": "flood-map-api",
         "version": "2.0.0",
     }
 
-    # Add monitoring data if available
-    if HEALTH_MONITORING:
-        stats = health_monitor.get_stats()
-        health_data.update(
-            {
-                "uptime_seconds": stats["uptime_seconds"],
-                "tile_requests": stats["tile_requests"],
-                "error_rate": stats["error_rate"],
-                "cache_hit_rate": stats["cache_hit_rate"],
-                "requests_per_second": stats["requests_per_second"],
-            }
-        )
-
-        # Update status based on health
-        if not health_monitor.is_healthy():
-            health_data["status"] = "unhealthy"
+    if HEALTH_MONITORING and not health_monitor.is_healthy():
+        health_data["status"] = "unhealthy"
 
     terrain_remote_enabled = bool(TERRAIN_REMOTE_BASE_URL)
     terrain_manifest_available = (
@@ -78,84 +67,62 @@ async def health_check():
     if terrain_remote_enabled:
         health_data["terrain_remote_enabled"] = True
 
-    # Check legacy elevation source availability. Terrain v2 deployments can run
-    # from precomputed manifests/COGs without the old source-tile inventory.
+    # Check legacy elevation source availability without exposing filesystem paths.
     if ELEVATION_DATA_DIR.exists():
         elevation_files = list(ELEVATION_DATA_DIR.glob("*.zst"))
-        health_data["elevation_files_available"] = len(elevation_files)
-
         if len(elevation_files) < 1000:
             if terrain_manifest_available:
-                health_data["warnings"] = health_data.get("warnings", [])
-                health_data["warnings"].append(
+                health_data.setdefault("warnings", []).append(
                     "Legacy elevation source inventory is missing; terrain v2 manifest is available."
                 )
             else:
                 health_data["status"] = "critical"
-                health_data["errors"] = health_data.get("errors", [])
-                health_data["errors"].append(
-                    f"Critical: Only {len(elevation_files)} elevation files (expected 2000+)"
+                health_data.setdefault("errors", []).append(
+                    "Critical: Insufficient legacy elevation source tiles."
                 )
         elif len(elevation_files) < 2000:
             if health_data["status"] == "healthy":
                 health_data["status"] = "degraded"
-            health_data["warnings"] = health_data.get("warnings", [])
-            health_data["warnings"].append(
-                f"Warning: Low elevation file count: {len(elevation_files)}"
+            health_data.setdefault("warnings", []).append(
+                "Warning: Low legacy elevation source count."
             )
     else:
-        health_data["elevation_files_available"] = 0
         if terrain_manifest_available:
-            health_data["warnings"] = health_data.get("warnings", [])
-            health_data["warnings"].append(
+            health_data.setdefault("warnings", []).append(
                 "Legacy elevation source directory is missing; terrain v2 manifest is available."
             )
         else:
             health_data["status"] = "critical"
-            health_data["errors"] = health_data.get("errors", [])
-            health_data["errors"].append(
-                f"Critical: Elevation data directory missing: {ELEVATION_DATA_DIR}"
+            health_data.setdefault("errors", []).append(
+                "Critical: Elevation data directory missing."
             )
 
-    # Check map data availability with validation
+    # Check map data availability without exposing filesystem paths or file sizes.
     mbtiles_file = MAP_DATA_DIR / "usa-complete.mbtiles"
-
     if mbtiles_file.exists():
         size_gb = mbtiles_file.stat().st_size / (1024**3)
-        health_data["map_tiles_available"] = 1
-        health_data["mbtiles_size_gb"] = round(size_gb, 2)
-
         if size_gb < 1.0:
             health_data["status"] = "critical"
-            health_data["errors"] = health_data.get("errors", [])
-            health_data["errors"].append(
-                f"Critical: MBTiles file too small: {size_gb:.1f}GB (expected ~1.6GB)"
+            health_data.setdefault("errors", []).append(
+                "Critical: Base map dataset is incomplete."
             )
     else:
-        health_data["map_tiles_available"] = 0
-        health_data["mbtiles_size_gb"] = 0
         health_data["status"] = "critical"
-        health_data["errors"] = health_data.get("errors", [])
-        health_data["errors"].append(f"Critical: MBTiles file missing: {mbtiles_file}")
-
-    # Add deployment context
-    health_data["deployment_context"] = {
-        "elevation_data_dir": str(ELEVATION_DATA_DIR),
-        "map_data_dir": str(MAP_DATA_DIR),
-        "environment": ENVIRONMENT,
-        "terrain_manifest_path": str(TERRAIN_MANIFEST_PATH),
-    }
-    if terrain_remote_enabled:
-        health_data["deployment_context"]["terrain_remote_base_url"] = (
-            TERRAIN_REMOTE_BASE_URL
+        health_data.setdefault("errors", []).append(
+            "Critical: Base map dataset missing."
         )
+
+    if IS_DEVELOPMENT:
+        health_data["deployment_context"] = {"environment": ENVIRONMENT}
 
     return health_data
 
 
-@router.get("/metrics")
+@ops_router.get("/metrics")
 async def get_metrics():
-    """Get detailed system metrics."""
+    """Get detailed system metrics (development/diagnostics only)."""
+    if not (IS_DEVELOPMENT or ENABLE_DIAGNOSTICS):
+        raise HTTPException(status_code=404, detail="Not found")
     stats = {}
 
     if HEALTH_MONITORING:
@@ -182,9 +149,11 @@ async def get_metrics():
     return stats
 
 
-@router.get("/cache")
+@ops_router.get("/cache")
 async def get_cache_stats():
-    """Get tile cache statistics."""
+    """Get tile cache statistics (development/diagnostics only)."""
+    if not (IS_DEVELOPMENT or ENABLE_DIAGNOSTICS):
+        raise HTTPException(status_code=404, detail="Not found")
     if not CACHE_STATS:
         return {"error": "Cache statistics not available"}
 

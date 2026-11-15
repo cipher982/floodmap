@@ -60,8 +60,15 @@ def proxy_remote_terrain(path: str, request: Request) -> Response:
         "accept-encoding": "identity",
     }
     url = remote_terrain_url(path, request.scope.get("query_string", b""))
-    with httpx.Client(timeout=REMOTE_TIMEOUT_SECONDS, follow_redirects=True) as client:
-        remote = client.get(url, headers=headers)
+    try:
+        with httpx.Client(
+            timeout=REMOTE_TIMEOUT_SECONDS, follow_redirects=True
+        ) as client:
+            remote = client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=503, detail="Remote terrain service unavailable"
+        ) from exc
 
     passthrough_headers = {
         key: value
@@ -131,7 +138,7 @@ def require_region_source_path(
     if not path.exists():
         raise HTTPException(
             status_code=503,
-            detail=f"Terrain source is not built for {region.id}: {path}",
+            detail=f"Terrain source is not built for {region.id}",
             headers=terrain_tile_headers(
                 dataset_version=manifest.dataset_version,
                 layer=layer,
@@ -224,9 +231,12 @@ def render_regions_tile(
 def renderer_unavailable(
     layer: str, dataset_version: str, detail: str
 ) -> HTTPException:
+    safe_detail = (
+        "Terrain renderer unavailable" if ("/" in detail or "\\" in detail) else detail
+    )
     return HTTPException(
         status_code=503,
-        detail=detail,
+        detail=safe_detail,
         headers=terrain_tile_headers(
             dataset_version=dataset_version,
             layer=layer,
@@ -399,7 +409,9 @@ def get_terrain_metadata(layer: str, request: Request):
         "layer": layer,
         "encoding": terrain_layer.encoding,
         "nodata": terrain_layer.nodata,
-        "regions": [region.model_dump() for region in terrain_layer.regions],
+        "regions": [
+            region.model_dump(exclude={"url"}) for region in terrain_layer.regions
+        ],
         "tile_template": f"/api/v2/terrain/{layer}/{manifest.dataset_version}/{{z}}/{{x}}/{{y}}.u16",
         "batch_template": f"/api/v2/terrain/{layer}/{manifest.dataset_version}/batch.u16",
     }

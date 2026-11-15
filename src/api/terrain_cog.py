@@ -83,7 +83,7 @@ def render_cog_tile(
 
     with rasterio.open(cog_path) as src:
         if src.crs is None:
-            raise RuntimeError(f"Terrain source has no CRS: {cog_path}")
+            raise RuntimeError("Terrain source has no CRS")
         web_x, web_y = tile_center_points_mercator(z, x, y)
         source_x, source_y = transform(
             WEBMERCATOR_CRS,

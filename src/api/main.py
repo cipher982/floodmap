@@ -186,11 +186,15 @@ from sitemaps import (
     build_sitemap_index_xml,
 )
 
-# Create FastAPI app
+# Create FastAPI app (disable schema/docs in production by default)
+ENABLE_API_DOCS = IS_DEVELOPMENT or ENABLE_DIAGNOSTICS
 app = FastAPI(
     title="Flood Risk Map API",
     description="Clean flood risk mapping service",
     version="2.0.0",
+    docs_url="/docs" if ENABLE_API_DOCS else None,
+    redoc_url="/redoc" if ENABLE_API_DOCS else None,
+    openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
 )
 
 
@@ -220,7 +224,7 @@ async def shutdown_event():
 
 
 # Add middleware
-app.add_middleware(RateLimitMiddleware, default_limit=60)
+app.add_middleware(RateLimitMiddleware, default_limit=30)
 
 # Trusted hosts (mitigates Host header attacks)
 if ALLOWED_HOSTS:
@@ -252,8 +256,9 @@ if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
 # Include API routers
 app.include_router(health.router, prefix="/api", tags=["health"])
 
-# Diagnostics and performance routes are disabled in production by default
+# Diagnostics, metrics, and cache stats are disabled in production by default
 if IS_DEVELOPMENT or ENABLE_DIAGNOSTICS:
+    app.include_router(health.ops_router, prefix="/api", tags=["health"])
     app.include_router(diagnostics_router.router)  # /api/diagnostics
 
 app.include_router(

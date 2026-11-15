@@ -22,9 +22,9 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.20.0",
     "opentelemetry-instrumentation-fastapi>=0.41b0",
     "opentelemetry-instrumentation-requests>=0.41b0",
-    "requests>=2.32.4",
+    "requests>=2.34.2",
     "tqdm>=4.67.1",
-    "brotli>=1.1.0",
+    "brotli>=1.2.1",
     "cachetools>=5.3.0",
     "mapbox-vector-tile>=2.2.0",
 ]
